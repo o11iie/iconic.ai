@@ -8,14 +8,14 @@
     <meta name="author" content="Iconic.ai">
     <meta property="og:title" content="Iconic.ai - AI Automation Agency">
     <meta property="og:description" content="Revolutionizing E-commerce with AI Automation. Explore our cutting-edge AI solutions and transform your business today.">
-    <meta property="og:image" content="https://example.com/iconic-ai.jpg">
+    <meta property="og:image" content="https://example.com/iconic-ai.jpg"> <!-- Ensure this is the correct image URL -->
     <meta property="og:url" content="https://example.com">
     <title>Iconic.ai - AI Automation Agency</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="icon" href="favicon.ico" type="image/x-icon"> <!-- Ensure favicon path is correct -->
     <style>
         /* Global Styles */
         :root {
@@ -24,7 +24,8 @@
             --accent-color: #ff6f61;
             --text-color: #333;
             --background-color: #f4f4f4;
-            --font-family: 'Poppins', sans-serif;
+            --primary-color-light: #fff;
+            --secondary-color-light: #000;
         }
 
         * {
@@ -43,8 +44,8 @@
 
         /* Dark Mode */
         body.light-mode {
-            --primary-color: #fff;
-            --secondary-color: #000;
+            --primary-color: var(--primary-color-light);
+            --secondary-color: var(--secondary-color-light);
             --text-color: #333;
             --background-color: #f4f4f4;
         }
@@ -337,57 +338,44 @@
 </head>
 <body>
     <header>
-        <div class="logo">Iconic.AI</div>
+        <div class="logo">Iconic.ai</div>
         <nav class="nav-links">
+            <a href="#home">Home</a>
+            <a href="#about-us">About Us</a>
             <a href="#services">Services</a>
             <a href="#testimonials">Testimonials</a>
             <a href="#contact">Contact</a>
-            <button class="theme-toggle" id="theme-toggle">
-                <i class="fas fa-moon"></i>
-            </button>
         </nav>
-        <button class="hamburger" id="hamburger">
-            <i class="fas fa-bars"></i>
+        <button class="hamburger" aria-label="Toggle Menu">
+            <i class="fa fa-bars"></i>
         </button>
     </header>
 
-    <section class="hero">
-        <h1>Breathe Life Into Your Systems</h1>
-        <p>With Cutting-Edge AI Solutions</p>
+    <section class="hero visible" id="home">
+        <h1>Revolutionizing E-commerce with AI Automation</h1>
+        <p>Transform your business with the power of AI-driven automation.</p>
         <a href="#contact" class="cta-button">Let's Talk</a>
     </section>
 
-    <section class="about-us">
-        <h2>About Iconic.AI</h2>
-        <p>Iconic.AI is an automation agency specializing in AI-powered chatbots designed to save businesses time and enhance customer experiences. Our chatbots integrate seamlessly with platforms like WhatsApp, providing 24/7 support and handling up to 90% of frequently asked questions. Whether you're an e-commerce brand, law firm, Airbnb host, or construction company, our solutions are tailored to streamline your operations, improve efficiency, and deliver exceptional value. Let us help you reclaim your time and focus on what truly matters—growing your business.</p>
+    <section class="about-us" id="about-us">
+        <h2>About Us</h2>
+        <p>At Iconic.ai, we specialize in bringing AI-powered automation to businesses, revolutionizing the way they operate. Our solutions empower your business to become more efficient, responsive, and scalable.</p>
     </section>
 
     <section class="services" id="services">
         <h2>Our Services</h2>
         <div class="service-grid">
             <div class="service-card">
-                <h3>AI Chatbots for WhatsApp</h3>
-                <p>Our AI chatbots integrate with WhatsApp to handle customer inquiries 24/7. They answer FAQs, process orders, and provide instant support, ensuring your clients always feel heard.</p>
+                <h3>AI Chatbots</h3>
+                <p>Implement intelligent chatbots that provide customer service 24/7, boosting customer satisfaction and sales.</p>
             </div>
             <div class="service-card">
-                <h3>E-commerce Automation</h3>
-                <p>Boost your online store with AI chatbots that handle customer queries, recommend products, and process orders. Increase sales and improve customer satisfaction effortlessly.</p>
+                <h3>AI Automation</h3>
+                <p>Streamline your operations with AI automation that reduces errors and increases efficiency.</p>
             </div>
             <div class="service-card">
-                <h3>Law Firm Efficiency</h3>
-                <p>Automate client communication with AI chatbots that handle FAQs, schedule consultations, and provide case updates. Focus on delivering exceptional legal services.</p>
-            </div>
-            <div class="service-card">
-                <h3>Airbnb Guest Support</h3>
-                <p>Enhance your guests' experience with AI chatbots that handle bookings, provide local recommendations, and answer questions 24/7.</p>
-            </div>
-            <div class="service-card">
-                <h3>Construction Project Management</h3>
-                <p>Streamline client communication and project updates with AI chatbots. Keep your clients informed and your team focused on delivering quality results.</p>
-            </div>
-            <div class="service-card">
-                <h3>Website Developer Integration</h3>
-                <p>Add AI chatbots to the websites you develop for clients. Enhance user experience and provide 24/7 support, making their websites stand out.</p>
+                <h3>Data Analytics</h3>
+                <p>Leverage data-driven insights to make smarter business decisions that drive growth.</p>
             </div>
         </div>
     </section>
@@ -395,43 +383,49 @@
     <section class="testimonials" id="testimonials">
         <h2>What Our Clients Say</h2>
         <div class="testimonial-grid">
-            <!-- Testimonials go here (see previous response for full list) -->
+            <div class="testimonial-card">
+                <p>"Iconic.ai's AI-powered automation transformed our business. Our efficiency improved dramatically!"</p>
+                <h3>John Doe, CEO of TechCorp</h3>
+            </div>
+            <div class="testimonial-card">
+                <p>"The best decision we made was partnering with Iconic.ai. Their AI solutions helped us scale effortlessly."</p>
+                <h3>Jane Smith, Founder of InnovateX</h3>
+            </div>
         </div>
     </section>
 
     <section class="contact-form" id="contact">
         <h2>Contact Us</h2>
+        <p>If you're ready to transform your business with AI-powered solutions, reach out to us today.</p>
         <div class="contact-info">
             <p>Email: <a href="mailto:iiconicaii13@gmail.com">iiconicaii13@gmail.com</a></p>
-            <p>Phone: <a href="tel:+27682618315">068 261 8315</a></p>
+            <p>Phone: +123 456 7890</p>
         </div>
     </section>
 
     <footer>
-        <p>&copy; 2025 Iconic.AI. All Rights Reserved.</p>
+        <p>&copy; 2025 Iconic.ai. All rights reserved.</p>
     </footer>
 
     <script>
-        // Dark Mode Toggle
-        const themeToggle = document.getElementById("theme-toggle");
+        // Toggle light/dark mode
         const body = document.body;
-
-        themeToggle.addEventListener("click", () => {
-            body.classList.toggle("light-mode");
+        const toggleButton = document.querySelector('.hamburger');
+        toggleButton.addEventListener('click', () => {
+            body.classList.toggle('light-mode');
         });
 
-        // Hamburger Menu Toggle
-        const hamburger = document.getElementById("hamburger");
-        const navLinks = document.querySelector(".nav-links");
-
-        hamburger.addEventListener("click", () => {
-            navLinks.classList.toggle("active");
+        // Toggle hamburger menu
+        const menuButton = document.querySelector('.hamburger');
+        const navLinks = document.querySelector('.nav-links');
+        menuButton.addEventListener('click', () => {
+            navLinks.classList.toggle('active');
         });
 
-        // Hero Section Animation
-        window.addEventListener("load", () => {
-            const hero = document.querySelector(".hero");
-            hero.classList.add("visible");
+        // Reveal hero section with animation
+        window.addEventListener('load', () => {
+            const hero = document.querySelector('.hero');
+            hero.classList.add('visible');
         });
     </script>
 </body>
