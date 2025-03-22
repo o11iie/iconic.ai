@@ -1,197 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Iconic.AI - Revolutionizing Business Automation with AI Chatbots">
-    <meta name="keywords" content="AI, Automation, Chatbots, Business Efficiency, AI Financial Automation, AI Law Automation, AI Real Estate Automation">
-    <meta name="author" content="Iconic.AI">
-    <title>Iconic.AI - AI Automation Agency</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
-    <style>
-        :root {
-            --primary-color: #000;
-            --secondary-color: #fff;
-            --accent-color: #ff6f61;
-            --text-color: #333;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: var(--primary-color);
-            color: var(--secondary-color);
-            transition: background 0.5s ease, color 0.5s ease;
-        }
-        body.light-mode {
-            --primary-color: #fff;
-            --secondary-color: #000;
-            --text-color: #333;
-        }
-        a { text-decoration: none; color: inherit; }
-        header {
-            background: var(--primary-color);
-            padding: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-        }
-        .logo { font-size: 32px; font-weight: 700; }
-        nav { display: flex; gap: 20px; align-items: center; }
-        .hero {
-            padding: 100px 20px;
-            text-align: center;
-            opacity: 0;
-            transform: translateY(50px);
-            transition: opacity 1s ease, transform 1s ease;
-        }
-        .hero.visible { opacity: 1; transform: translateY(0); }
-        .hero h1 { font-size: 50px; }
-        .cta-button {
-            background: var(--secondary-color);
-            color: var(--primary-color);
-            padding: 12px 30px;
-            font-size: 18px;
-            border-radius: 25px;
-            transition: transform 0.3s ease;
-        }
-        .cta-button:hover { transform: translateY(-5px); }
-        .section { padding: 70px 20px; text-align: center; }
-        .service-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            justify-content: center;
-        }
-        .service-card {
-            background: var(--primary-color);
-            color: var(--secondary-color);
-            padding: 30px;
-            width: 30%;
-            border-radius: 15px;
-            transition: transform 0.3s ease;
-        }
-        .testimonial-grid {
-            display: flex;
-            overflow: hidden;
-            width: 100%;
-        }
-        .testimonial-card { width: 50%; padding: 20px; text-align: center; }
-        .testimonial-card p { font-style: italic; }
-        .contact-form input, .contact-form textarea {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 5px;
-            border: 1px solid var(--primary-color);
-        }
-        .contact-form button {
-            background: var(--accent-color);
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        footer { padding: 30px 20px; text-align: center; }
-        @media (max-width: 768px) {
-            .service-card { width: 100%; }
-            .testimonial-card { width: 100%; }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Iconic.AI is an automation agency specializing in AI-powered chatbots for various industries like law, finance, real estate, and more.">
+  <meta name="author" content="Iconic.AI">
+  <link rel="stylesheet" href="styles.css">
+  <title>Iconic.AI | AI Automation Agency</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
+
 <body>
-    <header>
-        <div class="logo">Iconic.AI</div>
-        <nav>
-            <a href="#about">About Us</a>
-            <a href="#services">Services</a>
-            <a href="#testimonials">Testimonials</a>
-            <a href="#contact">Contact</a>
-            <button id="theme-toggle"><i class="fas fa-moon"></i></button>
-        </nav>
-    </header>
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1>Welcome to Iconic.AI</h1>
+      <p>Your trusted partner for AI-powered automation solutions</p>
+      <a href="#contact" class="cta-button">Get Started</a>
+    </div>
+  </section>
 
-    <section class="hero">
-        <h1>AI Automation for Smarter Business</h1>
-        <p>Revolutionizing industries with intelligent AI solutions</p>
-        <a href="#contact" class="cta-button">Get Started</a>
-    </section>
+  <!-- About Us Section -->
+  <section id="about" class="about-us">
+    <div class="container">
+      <h2>About Us</h2>
+      <p>Iconic.AI is an automation agency specializing in AI-powered chatbots designed to save businesses time and enhance customer experiences. Our chatbots integrate seamlessly with platforms providing 24/7 support and handling up to 90% of FAQ's. Whether you're a law firm, construction company, SaaS, or more, our solutions are tailored to streamline your operations, improve efficiency, and deliver exceptional value. Let us help you reclaim your time and focus on what truly matters.</p>
+    </div>
+  </section>
 
-    <section class="section" id="about">
-        <h2>About Us</h2>
-        <p>
-            Iconic.AI is an automation agency specializing in AI-powered chatbots designed to save businesses time and enhance customer experiences.  
-            Our chatbots integrate seamlessly with platforms, providing 24/7 support and handling up to 90% of FAQs.  
-            Whether you're a law firm, construction company, or SaaS business, our solutions streamline operations, improve efficiency,  
-            and deliver exceptional value. Let us help you reclaim your time and focus on what truly matters.
-        </p>
-    </section>
+  <!-- Services Section -->
+  <section id="services" class="services">
+    <div class="container">
+      <h2>Our Services</h2>
+      <p>We offer AI-powered automation solutions across a variety of industries to help you boost efficiency and streamline your operations.</p>
+      
+      <div class="service-item">
+        <h3>AI Financial Automation</h3>
+        <p>Streamline your accounting and financial operations. We specialize in automating processes for accounting firms, financial advisors, and more.</p>
+      </div>
 
-    <section class="section" id="services">
-        <h2>Our Services</h2>
-        <div class="service-grid">
-            <div class="service-card">
-                <h3>AI Financial Automation</h3>
-                <p>Automate accounting tasks and financial advisory processes for improved efficiency.</p>
-            </div>
-            <div class="service-card">
-                <h3>AI Law Automation</h3>
-                <p>Enhance client interactions and case management with AI-powered legal automation.</p>
-            </div>
-            <div class="service-card">
-                <h3>AI SaaS Automation</h3>
-                <p>Optimize workflows and customer engagement with intelligent automation for SaaS businesses.</p>
-            </div>
-            <div class="service-card">
-                <h3>AI Real Estate Automation</h3>
-                <p>Streamline property management, lead generation, and client communication.</p>
-            </div>
-            <div class="service-card">
-                <h3>AI Sales Automation</h3>
-                <p>Boost conversions with AI-driven sales automation for coaches and B2B agencies.</p>
-            </div>
-        </div>
-    </section>
+      <div class="service-item">
+        <h3>AI Law Automation</h3>
+        <p>Revolutionize the way your law firm operates with AI chatbots. Handle inquiries, schedule appointments, and deliver seamless client experiences, all powered by AI.</p>
+      </div>
 
-    <section class="section" id="testimonials">
-        <h2>What Our Clients Say</h2>
-        <div class="testimonial-grid">
-            <div class="testimonial-card">
-                <p>"Iconic.AI transformed our real estate business by automating lead management and follow-ups,  
-                saving us countless hours. Our conversions have skyrocketed!"</p>
-                <h3>Michael Thompson, Real Estate Broker</h3>
-            </div>
-            <div class="testimonial-card">
-                <p>"Since integrating Iconic.AI’s automation, our e-commerce store has seen a 40% boost in sales  
-                thanks to AI-powered customer interactions and automated order processing."</p>
-                <h3>Jessica Lee, E-Commerce Founder</h3>
-            </div>
-        </div>
-    </section>
+      <div class="service-item">
+        <h3>AI SaaS Automation</h3>
+        <p>Maximize the potential of your SaaS business with AI-driven automation, ensuring customer support, onboarding, and operational tasks are handled 24/7.</p>
+      </div>
 
-    <section class="section contact-form" id="contact">
-        <h2>Contact Us</h2>
-        <form action="mailto:iiconicaii13@gmail.com" method="POST" enctype="text/plain">
-            <input type="text" name="name" placeholder="Your Name" required>
-            <input type="email" name="email" placeholder="Your Email" required>
-            <textarea name="message" placeholder="Your Message" rows="5" required></textarea>
-            <button type="submit">Send Message</button>
-        </form>
-    </section>
+      <div class="service-item">
+        <h3>AI Real Estate Automation</h3>
+        <p>Enhance your real estate business by automating client communication, property inquiries, and appointment scheduling using our AI-powered solutions.</p>
+      </div>
 
-    <footer><p>&copy; 2025 Iconic.AI. All Rights Reserved.</p></footer>
+      <div class="service-item">
+        <h3>AI Sales Automation</h3>
+        <p>Whether you're a B2B agency or a sales coach, our AI solutions can streamline lead generation, customer outreach, and conversion processes.</p>
+      </div>
 
-    <script>
-        document.getElementById("theme-toggle").addEventListener("click", () => {
-            document.body.classList.toggle("light-mode");
-        });
-    </script>
+      <div class="service-item">
+        <h3>AI for Construction Companies</h3>
+        <p>Optimize construction project management and client interaction with AI solutions that automate tasks, saving you time and increasing efficiency.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Testimonials Section -->
+  <section id="testimonials" class="testimonials">
+    <div class="container">
+      <h2>What Our Clients Say</h2>
+      
+      <div class="testimonial">
+        <p>"Iconic.AI revolutionized our financial operations. Their AI solution has automated accounting tasks, saving us countless hours each month. It’s been a game changer!"</p>
+        <p><strong>John D., Financial Advisor</strong></p>
+      </div>
+      
+      <div class="testimonial">
+        <p>"The AI-powered automation solution for our law firm has been a huge success. Our clients can book consultations at any time, and the bot handles simple queries effectively, freeing up our time to focus on complex cases."</p>
+        <p><strong>Sarah L., Managing Partner at LawCo</strong></p>
+      </div>
+
+      <div class="testimonial">
+        <p>"As a SaaS company, providing round-the-clock support is essential. With Iconic.AI’s solution, we have drastically reduced response times and improved client satisfaction." </p>
+        <p><strong>Mike P., CEO of CloudSaaS</strong></p>
+      </div>
+
+      <div class="testimonial">
+        <p>"We’ve seen a noticeable improvement in client engagement and satisfaction thanks to the AI automation tools for our real estate firm. It’s helped us stay organized and efficient in managing leads."</p>
+        <p><strong>Rebecca T., Real Estate Agent</strong></p>
+      </div>
+
+      <div class="testimonial">
+        <p>"The AI-powered sales automation tool has transformed our B2B sales process. We now have a much more efficient way of tracking leads and following up automatically. It’s reduced our workload significantly!"</p>
+        <p><strong>James B., Sales Manager at B2B Solutions</strong></p>
+      </div>
+
+      <div class="testimonial">
+        <p>"We’ve been using Iconic.AI’s solutions for our construction company, and it’s been a total game-changer. Project management has never been easier, and we’ve improved communication with our clients tenfold."</p>
+        <p><strong>David M., Owner of BuildRight Construction</strong></p>
+      </div>
+
+      <div class="testimonial">
+        <p>"The automation system for our e-commerce store has significantly improved the efficiency of our customer support, increasing overall customer satisfaction. Highly recommend!"</p>
+        <p><strong>Emma W., Founder of ShopSmart</strong></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact Section -->
+  <section id="contact" class="contact">
+    <div class="container">
+      <h2>Contact Us</h2>
+      <form action="mailto:iiconicaii13@gmail.com" method="post" enctype="text/plain">
+        <input type="text" name="name" placeholder="Your Name" required>
+        <input type="email" name="email" placeholder="Your Email" required>
+        <textarea name="message" placeholder="Your Message" required></textarea>
+        <button type="submit">Send Message</button>
+      </form>
+    </div>
+  </section>
+
+  <script src="script.js"></script>
 </body>
 </html>
