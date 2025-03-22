@@ -3,58 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Iconic.ai - Revolutionizing E-commerce with AI Automation. Explore our cutting-edge AI solutions and transform your business today.">
-    <meta name="keywords" content="AI, Automation, E-commerce, Chatbots, Machine Learning, Iconic.ai">
-    <meta name="author" content="Iconic.ai">
-    <meta property="og:title" content="Iconic.ai - AI Automation Agency">
-    <meta property="og:description" content="Revolutionizing E-commerce with AI Automation. Explore our cutting-edge AI solutions and transform your business today.">
-    <meta property="og:image" content="https://example.com/iconic-ai.jpg">
-    <meta property="og:url" content="https://example.com">
-    <title>Iconic.ai - AI Automation Agency</title>
+    <meta name="description" content="Iconic.AI - Revolutionizing Business Automation with AI Chatbots">
+    <meta name="keywords" content="AI, Automation, Chatbots, Business Efficiency, AI Financial Automation, AI Law Automation, AI Real Estate Automation">
+    <meta name="author" content="Iconic.AI">
+    <title>Iconic.AI - AI Automation Agency</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <style>
-        /* Global Styles */
         :root {
             --primary-color: #000;
             --secondary-color: #fff;
             --accent-color: #ff6f61;
             --text-color: #333;
-            --background-color: #f4f4f4;
-            --font-family: 'Poppins', sans-serif;
         }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: var(--font-family);
+            font-family: 'Poppins', sans-serif;
             background-color: var(--primary-color);
             color: var(--secondary-color);
-            line-height: 1.6;
             transition: background 0.5s ease, color 0.5s ease;
         }
-
-        /* Dark Mode */
         body.light-mode {
             --primary-color: #fff;
             --secondary-color: #000;
             --text-color: #333;
-            --background-color: #f4f4f4;
         }
-
-        a {
-            text-decoration: none;
-            color: inherit;
-        }
-
-        /* Header */
+        a { text-decoration: none; color: inherit; }
         header {
             background: var(--primary-color);
             padding: 20px;
@@ -64,410 +41,156 @@
             position: sticky;
             top: 0;
             z-index: 1000;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
-
-        .logo {
-            font-size: 32px;
-            font-weight: 700;
-            color: var(--secondary-color);
-        }
-
-        nav.nav-links {
-            display: flex;
-            gap: 20px;
-            align-items: center;
-        }
-
-        nav.nav-links a {
-            font-size: 18px;
-            transition: color 0.3s ease;
-        }
-
-        nav.nav-links a:hover {
-            color: var(--accent-color);
-        }
-
-        /* Hero Section */
+        .logo { font-size: 32px; font-weight: 700; }
+        nav { display: flex; gap: 20px; align-items: center; }
         .hero {
-            padding: 150px 20px;
+            padding: 100px 20px;
             text-align: center;
             opacity: 0;
             transform: translateY(50px);
             transition: opacity 1s ease, transform 1s ease;
         }
-
-        .hero.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .hero h1 {
-            font-size: 64px;
-            margin-bottom: 20px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-
-        .hero p {
-            font-size: 24px;
-            margin-bottom: 40px;
-            color: #ccc;
-        }
-
+        .hero.visible { opacity: 1; transform: translateY(0); }
+        .hero h1 { font-size: 50px; }
         .cta-button {
             background: var(--secondary-color);
             color: var(--primary-color);
-            padding: 15px 40px;
+            padding: 12px 30px;
             font-size: 18px;
-            border-radius: 30px;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            border-radius: 25px;
+            transition: transform 0.3s ease;
         }
-
-        .cta-button:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 6px 12px rgba(255, 255, 255, 0.3);
-        }
-
-        /* About Us Section */
-        .about-us {
-            padding: 80px 20px;
-            text-align: center;
-            background: var(--secondary-color);
-            color: var(--primary-color);
-        }
-
-        .about-us h2 {
-            font-size: 48px;
-            margin-bottom: 20px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-
-        .about-us p {
-            font-size: 18px;
-            max-width: 800px;
-            margin: 0 auto;
-            color: var(--text-color);
-        }
-
-        /* Services Section */
-        .services {
-            background: var(--secondary-color);
-            color: var(--primary-color);
-            padding: 80px 20px;
-            text-align: center;
-        }
-
-        .services h2 {
-            font-size: 48px;
-            margin-bottom: 40px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-
+        .cta-button:hover { transform: translateY(-5px); }
+        .section { padding: 70px 20px; text-align: center; }
         .service-grid {
             display: flex;
-            justify-content: space-around;
             flex-wrap: wrap;
             gap: 20px;
-            margin-top: 30px;
+            justify-content: center;
         }
-
         .service-card {
             background: var(--primary-color);
             color: var(--secondary-color);
             padding: 30px;
             width: 30%;
             border-radius: 15px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
             transition: transform 0.3s ease;
         }
-
-        .service-card:hover {
-            transform: translateY(-10px);
-        }
-
-        .service-card h3 {
-            font-size: 24px;
-            margin-bottom: 20px;
-        }
-
-        .service-card p {
-            font-size: 16px;
-            margin: 0;
-            color: #ccc;
-        }
-
-        /* Testimonials Section */
-        .testimonials {
-            padding: 80px 20px;
-            text-align: center;
-            background-color: var(--background-color);
-        }
-
-        .testimonials h2 {
-            font-size: 48px;
-            margin-bottom: 40px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            color: var(--primary-color);
-        }
-
         .testimonial-grid {
             display: flex;
-            justify-content: space-around;
-            flex-wrap: wrap;
-            gap: 20px;
-            margin-top: 30px;
+            overflow: hidden;
+            width: 100%;
         }
-
-        .testimonial-card {
-            background: var(--secondary-color);
-            color: var(--primary-color);
-            padding: 30px;
-            width: 30%;
-            border-radius: 15px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-            transition: transform 0.3s ease;
+        .testimonial-card { width: 50%; padding: 20px; text-align: center; }
+        .testimonial-card p { font-style: italic; }
+        .contact-form input, .contact-form textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid var(--primary-color);
         }
-
-        .testimonial-card:hover {
-            transform: translateY(-10px);
+        .contact-form button {
+            background: var(--accent-color);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
         }
-
-        .testimonial-card p {
-            font-size: 16px;
-            margin: 0;
-            color: var(--text-color);
-        }
-
-        .testimonial-card h3 {
-            font-size: 18px;
-            margin-top: 20px;
-            color: var(--accent-color);
-        }
-
-        /* Contact Section */
-        .contact-form {
-            background: var(--secondary-color);
-            color: var(--primary-color);
-            padding: 80px 20px;
-            text-align: center;
-        }
-
-        .contact-form h2 {
-            font-size: 48px;
-            margin-bottom: 40px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-
-        .contact-info {
-            font-size: 18px;
-            color: var(--primary-color);
-        }
-
-        .contact-info a {
-            color: var(--primary-color);
-            text-decoration: underline;
-        }
-
-        /* Footer */
-        footer {
-            background: var(--primary-color);
-            color: var(--secondary-color);
-            text-align: center;
-            padding: 30px 20px;
-        }
-
-        footer p {
-            margin: 0;
-            font-size: 16px;
-        }
-
-        /* Mobile Responsiveness */
+        footer { padding: 30px 20px; text-align: center; }
         @media (max-width: 768px) {
-            .hero h1 {
-                font-size: 40px;
-            }
-
-            .cta-button {
-                font-size: 16px;
-                padding: 12px 30px;
-            }
-
-            .service-card,
-            .testimonial-card {
-                width: 100%;
-            }
-
-            nav.nav-links {
-                display: none;
-            }
+            .service-card { width: 100%; }
+            .testimonial-card { width: 100%; }
         }
     </style>
 </head>
 <body>
     <header>
         <div class="logo">Iconic.AI</div>
-        <nav class="nav-links">
+        <nav>
+            <a href="#about">About Us</a>
             <a href="#services">Services</a>
             <a href="#testimonials">Testimonials</a>
             <a href="#contact">Contact</a>
-            <button class="theme-toggle" id="theme-toggle">
-                <i class="fas fa-moon"></i>
-            </button>
+            <button id="theme-toggle"><i class="fas fa-moon"></i></button>
         </nav>
     </header>
 
     <section class="hero">
-        <h1>Breathe Life Into Your Systems</h1>
-        <p>With Cutting-Edge AI Solutions</p>
-        <a href="#contact" class="cta-button">Let's Talk</a>
+        <h1>AI Automation for Smarter Business</h1>
+        <p>Revolutionizing industries with intelligent AI solutions</p>
+        <a href="#contact" class="cta-button">Get Started</a>
     </section>
 
-    <section class="about-us">
-        <h2>About Iconic.AI</h2>
-        <p>Iconic.AI is an automation agency specializing in AI-powered chatbots designed to save businesses time and enhance customer experiences. Our chatbots integrate seamlessly with platforms like WhatsApp, providing 24/7 support and handling up to 90% of frequently asked questions. Whether you're an e-commerce brand, law firm, Airbnb host, or construction company, our solutions are tailored to streamline your operations, improve efficiency, and deliver exceptional value. Let us help you reclaim your time and focus on what truly matters—growing your business.</p>
+    <section class="section" id="about">
+        <h2>About Us</h2>
+        <p>
+            Iconic.AI is an automation agency specializing in AI-powered chatbots designed to save businesses time and enhance customer experiences.  
+            Our chatbots integrate seamlessly with platforms, providing 24/7 support and handling up to 90% of FAQs.  
+            Whether you're a law firm, construction company, or SaaS business, our solutions streamline operations, improve efficiency,  
+            and deliver exceptional value. Let us help you reclaim your time and focus on what truly matters.
+        </p>
     </section>
 
-    <section class="services" id="services">
+    <section class="section" id="services">
         <h2>Our Services</h2>
         <div class="service-grid">
             <div class="service-card">
-                <h3>AI Chatbots for WhatsApp</h3>
-                <p>Our AI chatbots integrate with WhatsApp to handle customer inquiries 24/7. They answer FAQs, process orders, and provide instant support, ensuring your clients always feel heard.</p>
+                <h3>AI Financial Automation</h3>
+                <p>Automate accounting tasks and financial advisory processes for improved efficiency.</p>
             </div>
             <div class="service-card">
-                <h3>E-commerce Automation</h3>
-                <p>Boost your online store with AI chatbots that handle customer queries, recommend products, and process orders. Increase sales and improve customer satisfaction effortlessly.</p>
+                <h3>AI Law Automation</h3>
+                <p>Enhance client interactions and case management with AI-powered legal automation.</p>
             </div>
             <div class="service-card">
-                <h3>AI Voice Sales Assistance</h3>
-                <p>Our AI voice assistants handle sales calls, answer product questions, and guide customers through the purchasing process, increasing conversion rates and reducing workload.</p>
+                <h3>AI SaaS Automation</h3>
+                <p>Optimize workflows and customer engagement with intelligent automation for SaaS businesses.</p>
             </div>
             <div class="service-card">
-                <h3>Law Firm Efficiency</h3>
-                <p>Automate client communication with AI chatbots that handle FAQs, schedule consultations, and provide case updates. Focus on delivering exceptional legal services.</p>
+                <h3>AI Real Estate Automation</h3>
+                <p>Streamline property management, lead generation, and client communication.</p>
             </div>
             <div class="service-card">
-                <h3>Airbnb Guest Support</h3>
-                <p>Enhance your guests' experience with AI chatbots that handle bookings, provide local recommendations, and answer questions 24/7.</p>
-            </div>
-            <div class="service-card">
-                <h3>Construction Project Management</h3>
-                <p>Streamline client communication and project updates with AI chatbots. Keep your clients informed and your team focused on delivering quality results.</p>
-            </div>
-            <div class="service-card">
-                <h3>Website Developer Integration</h3>
-                <p>Add AI chatbots to the websites you develop for clients. Enhance user experience and provide 24/7 support, making their websites stand out.</p>
+                <h3>AI Sales Automation</h3>
+                <p>Boost conversions with AI-driven sales automation for coaches and B2B agencies.</p>
             </div>
         </div>
     </section>
 
-    <section class="testimonials" id="testimonials">
+    <section class="section" id="testimonials">
         <h2>What Our Clients Say</h2>
         <div class="testimonial-grid">
-            <!-- Law Firms -->
             <div class="testimonial-card">
-                <p>"Iconic.AI's chatbots have saved our law firm over 20 hours a week by handling client inquiries and scheduling consultations. The efficiency is unmatched!"</p>
-                <h3>Sarah Johnson, Law Firm</h3>
+                <p>"Iconic.AI transformed our real estate business by automating lead management and follow-ups,  
+                saving us countless hours. Our conversions have skyrocketed!"</p>
+                <h3>Michael Thompson, Real Estate Broker</h3>
             </div>
             <div class="testimonial-card">
-                <p>"We’ve reduced response times by 80% thanks to Iconic.AI. Their chatbots handle 90% of FAQs, allowing us to focus on delivering top-notch legal services."</p>
-                <h3>Michael Brown, Law Firm</h3>
-            </div>
-
-            <!-- Airbnbs -->
-            <div class="testimonial-card">
-                <p>"Iconic.AI's chatbots save us over 30 hours a month by handling guest inquiries and bookings. Our guests love the instant responses!"</p>
-                <h3>Emily Carter, Airbnb Host</h3>
-            </div>
-            <div class="testimonial-card">
-                <p>"Thanks to Iconic.AI, we’ve automated 95% of guest communications. Their chatbots are intuitive and have significantly reduced our workload."</p>
-                <h3>David Miller, Airbnb Host</h3>
-            </div>
-
-            <!-- E-commerce Brands -->
-            <div class="testimonial-card">
-                <p>"Iconic.AI's chatbots have increased our sales by 25% and saved us over 40 hours a month on customer service. They’re a game-changer!"</p>
-                <h3>Jessica Lee, E-commerce</h3>
-            </div>
-            <div class="testimonial-card">
-                <p>"We’ve saved over R50,000 a month on customer service costs thanks to Iconic.AI. Their chatbots handle 90% of FAQs effortlessly."</p>
-                <h3>Ryan Patel, E-commerce</h3>
-            </div>
-
-            <!-- SMMAs -->
-            <div class="testimonial-card">
-                <p>"Iconic.AI's chatbots have transformed our client onboarding process. We’ve saved over 15 hours a week and improved client satisfaction."</p>
-                <h3>Alex Turner, SMMA</h3>
-            </div>
-            <div class="testimonial-card">
-                <p>"The chatbots from Iconic.AI handle lead generation and FAQs, saving us over 20 hours a month. Our efficiency has skyrocketed!"</p>
-                <h3>Laura Evans, SMMA</h3>
-            </div>
-
-            <!-- Construction Companies -->
-            <div class="testimonial-card">
-                <p>"Iconic.AI's chatbots have streamlined our project updates and client communication. We’ve saved over 25 hours a month!"</p>
-                <h3>Chris Wilson, Construction</h3>
-            </div>
-            <div class="testimonial-card">
-                <p>"The chatbots from Iconic.AI handle 90% of client inquiries, saving us time and improving project efficiency."</p>
-                <h3>Daniel Harris, Construction</h3>
-            </div>
-
-            <!-- Website Developers -->
-            <div class="testimonial-card">
-                <p>"Iconic.AI's chatbots have become a key feature in the websites we develop. They enhance user experience and provide 24/7 support."</p>
-                <h3>Sophia Martinez, Website Developer</h3>
-            </div>
-            <div class="testimonial-card">
-                <p>"Our clients love the chatbots we’ve integrated into their websites. Iconic.AI has made our projects stand out!"</p>
-                <h3>Ethan Clark, Website Developer</h3>
-            </div>
-
-            <!-- AI Voice Sales Assistance -->
-            <div class="testimonial-card">
-                <p>"Iconic.AI's AI voice sales assistant has increased our conversion rates by 30%. It handles sales calls seamlessly, saving us time and boosting revenue."</p>
-                <h3>Olivia Green, E-commerce</h3>
-            </div>
-            <div class="testimonial-card">
-                <p>"The AI voice assistant from Iconic.AI has transformed our sales process. It’s like having a 24/7 sales team that never sleeps!"</p>
-                <h3>James White, SMMA</h3>
+                <p>"Since integrating Iconic.AI’s automation, our e-commerce store has seen a 40% boost in sales  
+                thanks to AI-powered customer interactions and automated order processing."</p>
+                <h3>Jessica Lee, E-Commerce Founder</h3>
             </div>
         </div>
     </section>
 
-    <section class="contact-form" id="contact">
+    <section class="section contact-form" id="contact">
         <h2>Contact Us</h2>
-        <p>If you're ready to transform your business with AI-powered solutions, reach out to us today.</p>
-        <div class="contact-info">
-            <p>Email: <a href="mailto:iiconicaii13@gmail.com">iiconicaii13@gmail.com</a></p>
-            <p>Phone: <a href="tel:+27682618315">068 261 8315</a></p>
-        </div>
+        <form action="mailto:iiconicaii13@gmail.com" method="POST" enctype="text/plain">
+            <input type="text" name="name" placeholder="Your Name" required>
+            <input type="email" name="email" placeholder="Your Email" required>
+            <textarea name="message" placeholder="Your Message" rows="5" required></textarea>
+            <button type="submit">Send Message</button>
+        </form>
     </section>
 
-    <footer>
-        <p>&copy; 2025 Iconic.AI. All Rights Reserved.</p>
-    </footer>
+    <footer><p>&copy; 2025 Iconic.AI. All Rights Reserved.</p></footer>
 
     <script>
-        // Dark Mode Toggle
-        const themeToggle = document.getElementById("theme-toggle");
-        const body = document.body;
-
-        themeToggle.addEventListener("click", () => {
-            body.classList.toggle("light-mode");
-        });
-
-        // Hero Section Animation
-        window.addEventListener("load", () => {
-            const hero = document.querySelector(".hero");
-            hero.classList.add("visible");
+        document.getElementById("theme-toggle").addEventListener("click", () => {
+            document.body.classList.toggle("light-mode");
         });
     </script>
 </body>
