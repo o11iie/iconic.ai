@@ -12,9 +12,30 @@
         header { background: #000; color: #fff; padding: 20px; text-align: center; }
         header h1 { margin: 0; font-size: 36px; }
         header p { font-size: 18px; }
+        
+        /* Hamburger menu styles */
+        .hamburger-menu { display: none; cursor: pointer; }
+        .hamburger-menu div { width: 30px; height: 4px; background-color: #fff; margin: 6px 0; transition: 0.4s; }
         nav { background: #333; padding: 10px; text-align: center; }
         nav a { color: #fff; text-decoration: none; padding: 10px 20px; display: inline-block; }
         nav a:hover { background: #555; }
+        .menu-links { display: flex; justify-content: center; }
+        .menu-links a { display: inline-block; }
+
+        /* Mobile menu styles */
+        .mobile-nav { display: none; background-color: #333; position: absolute; top: 60px; width: 100%; text-align: center; }
+        .mobile-nav a { display: block; padding: 10px 20px; color: #fff; text-decoration: none; }
+        .mobile-nav a:hover { background: #555; }
+
+        /* Show mobile menu when clicked */
+        .mobile-nav.show { display: block; }
+
+        @media (max-width: 768px) {
+            .menu-links { display: none; }
+            .hamburger-menu { display: block; }
+            .menu-links a { display: block; }
+        }
+
         .container { width: 80%; margin: auto; padding: 20px; }
         .service-grid { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
         .service-card { background: #222; padding: 20px; width: 30%; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.3); }
@@ -31,12 +52,27 @@
         <p>Revolutionizing Business Automation with AI Solutions</p>
     </header>
     
+    <div class="hamburger-menu" onclick="toggleMenu()">
+        <div></div>
+        <div></div>
+        <div></div>
+    </div>
+    
     <nav>
+        <div class="menu-links">
+            <a href="#about">About Us</a>
+            <a href="#services">Services</a>
+            <a href="#testimonials">Testimonials</a>
+            <a href="#contact">Contact Us</a>
+        </div>
+    </nav>
+
+    <div class="mobile-nav" id="mobileMenu">
         <a href="#about">About Us</a>
         <a href="#services">Services</a>
         <a href="#testimonials">Testimonials</a>
-        <a href="#contact">Contact</a>
-    </nav>
+        <a href="#contact">Contact Us</a>
+    </div>
     
     <div class="container">
         <h2 id="about">About Us</h2>
@@ -90,27 +126,7 @@
             <p>"Grading and student progress tracking have become seamless. AI has freed up so much time for our teachers!"</p>
             <h4>Linda Brown, School Administrator</h4>
         </div>
-        <div class="testimonial-card">
-            <p>"Iconic.AI’s AI solutions have allowed us to automate key business functions, saving time and boosting overall productivity across departments."</p>
-            <h4>Jack Harris, Operations Manager</h4>
-        </div>
-        <div class="testimonial-card">
-            <p>"Our marketing and outreach have been transformed. The automation tools helped us target the right customers and close more deals."</p>
-            <h4>Clara Lee, Marketing Head</h4>
-        </div>
-        <div class="testimonial-card">
-            <p>"Thanks to Iconic.AI, we’ve been able to scale our customer support with chatbots and AI-powered responses, improving response time by 50%."</p>
-            <h4>James Walker, Customer Support Lead</h4>
-        </div>
-        <div class="testimonial-card">
-            <p>"The AI financial tools helped us streamline budgeting and forecasting, cutting down the workload of our finance team significantly."</p>
-            <h4>David Thompson, Finance Director</h4>
-        </div>
-        <div class="testimonial-card">
-            <p>"AI-powered automation helped us reduce our administrative tasks and focus more on our core business functions. We saw an immediate increase in efficiency."</p>
-            <h4>Emily Griffin, HR Manager</h4>
-        </div>
-        
+
         <h2 id="contact">Contact Us</h2>
         <form action="mailto:iiconicai13@gmail.com" method="post" enctype="text/plain">
             <label for="name">Name:</label>
@@ -129,5 +145,12 @@
     <footer>
         <p>&copy; 2025 Iconic.AI. All Rights Reserved.</p>
     </footer>
+
+    <script>
+        function toggleMenu() {
+            const mobileMenu = document.getElementById('mobileMenu');
+            mobileMenu.classList.toggle('show');
+        }
+    </script>
 </body>
 </html>
