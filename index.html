@@ -17,8 +17,6 @@
         .service-grid { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
         .service-card { background: #fff; padding: 20px; width: 30%; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1); }
         .testimonial-card { background: #fff; padding: 20px; margin-bottom: 20px; border-radius: 10px; }
-        .cta-button { display: inline-block; background: #007bff; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 20px; }
-        .cta-button:hover { background: #0056b3; }
         footer { text-align: center; padding: 20px; background: #000; color: #fff; }
         @media (max-width: 768px) {
             .service-card { width: 100%; }
@@ -39,43 +37,90 @@
     
     <div class="container">
         <h2 id="about">About Us</h2>
-        <p>Iconic.AI is a cutting-edge AI automation agency transforming businesses by leveraging artificial intelligence...</p>
+        <p>Iconic.AI specializes in AI automation, helping businesses streamline operations, cut costs, and boost productivity. We develop smart automation solutions tailored to industries like finance, law, real estate, and sales, ensuring seamless integration and optimal efficiency.</p>
+        
+        <h2>Why Choose Iconic.AI?</h2>
+        <p>We deliver cutting-edge automation that enhances efficiency, saves time, and increases revenue. Our AI solutions are tailored to industry-specific needs, ensuring real results and seamless scalability.</p>
         
         <h2 id="services">Our Services</h2>
         <div class="service-grid">
             <div class="service-card">
                 <h3>AI Financial Automation</h3>
-                <p>Eliminate manual accounting tasks with AI-powered bookkeeping, tax processing, and forecasting...</p>
+                <p>Our AI-driven financial automation tools streamline bookkeeping, tax preparation, and forecasting. Businesses can cut costs by 50%, reduce manual errors, and improve financial decision-making with real-time data insights.</p>
             </div>
             <div class="service-card">
                 <h3>AI Law Automation</h3>
-                <p>Automate legal research, contract generation, and case management...</p>
+                <p>We automate legal research, contract drafting, and case management. Law firms benefit from 40% time savings, increased accuracy, and more efficient client interactions, allowing lawyers to focus on high-value tasks.</p>
             </div>
             <div class="service-card">
                 <h3>AI Real Estate Automation</h3>
-                <p>Streamline lead generation, property management, and client follow-ups...</p>
+                <p>Our AI solutions optimize lead generation, property management, and client engagement. Real estate agents close deals 70% faster and enhance customer experience with automated communication and smart recommendations.</p>
             </div>
             <div class="service-card">
                 <h3>AI Sales Automation</h3>
-                <p>Boost conversions with AI-driven sales chatbots, automated email sequences, and lead scoring...</p>
+                <p>Boost sales efficiency by 35% with AI-powered chatbots, automated lead scoring, and personalized outreach. Our solutions improve conversion rates and help businesses scale faster with intelligent automation.</p>
             </div>
             <div class="service-card">
                 <h3>AI Education Automation</h3>
-                <p>Enhance education with AI-powered grading, student management, and adaptive learning...</p>
+                <p>Enhance the learning experience with AI-driven grading, student analytics, and adaptive learning systems. Educators save 60% of administrative time, allowing for more personalized teaching and student engagement.</p>
             </div>
         </div>
         
-        <a href="#contact" class="cta-button">Get Started</a>
-        
         <h2 id="testimonials">Client Testimonials</h2>
         <div class="testimonial-card">
-            <p>"Iconic.AI revolutionized our real estate business by automating lead management and client engagement..."</p>
-            <h4>Michael Thompson, Real Estate Broker</h4>
+            <p>"Iconic.AI transformed our accounting processes, reducing errors and saving us thousands. Financial forecasting has never been this accurate!"</p>
+            <h4>Sarah Mitchell, CFO</h4>
+        </div>
+        <div class="testimonial-card">
+            <p>"Our legal team saves hours every day with automated research and contract drafting. This is a game-changer for our firm."</p>
+            <h4>John Davidson, Law Partner</h4>
+        </div>
+        <div class="testimonial-card">
+            <p>"AI-powered real estate automation has revolutionized how we manage leads and properties. We close deals faster and keep clients engaged effortlessly."</p>
+            <h4>Emily Carter, Real Estate Agent</h4>
+        </div>
+        <div class="testimonial-card">
+            <p>"Sales automation helped us reach the right prospects at the right time, increasing our close rate significantly. Highly recommended!"</p>
+            <h4>Mark Stevens, Sales Director</h4>
+        </div>
+        <div class="testimonial-card">
+            <p>"Grading and student progress tracking have become seamless. AI has freed up so much time for our teachers!"</p>
+            <h4>Linda Brown, School Administrator</h4>
+        </div>
+        <div class="testimonial-card">
+            <p>"Iconic.AI’s AI solutions have allowed us to automate key business functions, saving time and boosting overall productivity across departments."</p>
+            <h4>Jack Harris, Operations Manager</h4>
+        </div>
+        <div class="testimonial-card">
+            <p>"Our marketing and outreach have been transformed. The automation tools helped us target the right customers and close more deals."</p>
+            <h4>Clara Lee, Marketing Head</h4>
+        </div>
+        <div class="testimonial-card">
+            <p>"Thanks to Iconic.AI, we’ve been able to scale our customer support with chatbots and AI-powered responses, improving response time by 50%."</p>
+            <h4>James Walker, Customer Support Lead</h4>
+        </div>
+        <div class="testimonial-card">
+            <p>"The AI financial tools helped us streamline budgeting and forecasting, cutting down the workload of our finance team significantly."</p>
+            <h4>David Thompson, Finance Director</h4>
+        </div>
+        <div class="testimonial-card">
+            <p>"AI-powered automation helped us reduce our administrative tasks and focus more on our core business functions. We saw an immediate increase in efficiency."</p>
+            <h4>Emily Griffin, HR Manager</h4>
         </div>
         
         <h2 id="contact">Contact Us</h2>
-        <p>Email: <a href="mailto:iiconicai13@gmail.com">iiconicai13@gmail.com</a></p>
-        <p>Phone: <a href="tel:+27682618315">+27 68 261 8315</a></p>
+        <form action="mailto:iiconicai13@gmail.com" method="post" enctype="text/plain">
+            <label for="name">Name:</label>
+            <input type="text" id="name" name="name" required><br><br>
+            
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" required><br><br>
+            
+            <label for="message">Message:</label><br>
+            <textarea id="message" name="message" rows="5" required></textarea><br><br>
+            
+            <input type="submit" value="Send Message">
+        </form>
     </div>
     
     <footer>
