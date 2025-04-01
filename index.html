@@ -14,8 +14,20 @@
         header p { font-size: 18px; }
         
         /* Hamburger menu styles */
-        .hamburger-menu { display: none; cursor: pointer; }
-        .hamburger-menu div { width: 30px; height: 4px; background-color: #fff; margin: 6px 0; transition: 0.4s; }
+        .hamburger-menu { 
+            display: none; 
+            cursor: pointer; 
+            position: absolute; 
+            top: 20px; 
+            right: 20px; 
+        }
+        .hamburger-menu div { 
+            width: 30px; 
+            height: 4px; 
+            background-color: #fff; 
+            margin: 6px 0; 
+            transition: 0.4s; 
+        }
         nav { background: #333; padding: 10px; text-align: center; }
         nav a { color: #fff; text-decoration: none; padding: 10px 20px; display: inline-block; }
         nav a:hover { background: #555; }
@@ -68,10 +80,10 @@
     </nav>
 
     <div class="mobile-nav" id="mobileMenu">
-        <a href="#about">About Us</a>
-        <a href="#services">Services</a>
-        <a href="#testimonials">Testimonials</a>
-        <a href="#contact">Contact Us</a>
+        <a href="#about" onclick="closeMenu()">About Us</a>
+        <a href="#services" onclick="closeMenu()">Services</a>
+        <a href="#testimonials" onclick="closeMenu()">Testimonials</a>
+        <a href="#contact" onclick="closeMenu()">Contact Us</a>
     </div>
     
     <div class="container">
@@ -150,6 +162,11 @@
         function toggleMenu() {
             const mobileMenu = document.getElementById('mobileMenu');
             mobileMenu.classList.toggle('show');
+        }
+
+        function closeMenu() {
+            const mobileMenu = document.getElementById('mobileMenu');
+            mobileMenu.classList.remove('show');
         }
     </script>
 </body>
