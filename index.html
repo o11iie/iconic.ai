@@ -23,6 +23,14 @@
         @media (max-width: 768px) {
             .service-card { width: 100%; }
         }
+
+        /* Hamburger Menu */
+        .menu { display: none; }
+        .hamburger { font-size: 30px; cursor: pointer; }
+        .nav-links { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; background-color: #333; padding: 20px; position: absolute; right: 0; top: 60px; width: 250px; display: none; }
+        .nav-links a { color: #fff; text-decoration: none; padding: 10px; text-align: right; }
+        .nav-links a:hover { background-color: #555; }
+        .active { display: block; }
     </style>
 </head>
 <body>
@@ -32,10 +40,13 @@
     </header>
     
     <nav>
-        <a href="#about">About Us</a>
-        <a href="#services">Services</a>
-        <a href="#testimonials">Testimonials</a>
-        <a href="#contact">Contact</a>
+        <div class="hamburger" onclick="toggleMenu()">&#9776;</div>
+        <div class="nav-links">
+            <a href="#about">About Us</a>
+            <a href="#services">Services</a>
+            <a href="#testimonials">Testimonials</a>
+            <a href="#contact">Contact</a>
+        </div>
     </nav>
     
     <div class="container">
@@ -121,5 +132,12 @@
     <footer>
         <p>&copy; 2025 Iconic.AI. All Rights Reserved.</p>
     </footer>
+
+    <script>
+        function toggleMenu() {
+            const navLinks = document.querySelector('.nav-links');
+            navLinks.classList.toggle('active');
+        }
+    </script>
 </body>
 </html>
