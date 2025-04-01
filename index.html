@@ -8,51 +8,16 @@
     <title>Iconic.AI - AI Automation Agency</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha384-TyYqzjIj2h6d5X5v1Uv3lZ3uAq5A1o5pGxGzZ5U5Kp5p5fFfXx5z5" crossorigin="anonymous">
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #000; color: #fff; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; color: #333; }
         header { background: #000; color: #fff; padding: 20px; text-align: center; }
-        header h1 { margin: 0; font-size: 36px; }
-        header p { font-size: 18px; }
-        
-        /* Hamburger menu styles */
-        .hamburger-menu { 
-            display: none; 
-            cursor: pointer; 
-            position: absolute; 
-            top: 20px; 
-            right: 20px; 
-        }
-        .hamburger-menu div { 
-            width: 30px; 
-            height: 4px; 
-            background-color: #fff; 
-            margin: 6px 0; 
-            transition: 0.4s; 
-        }
         nav { background: #333; padding: 10px; text-align: center; }
         nav a { color: #fff; text-decoration: none; padding: 10px 20px; display: inline-block; }
         nav a:hover { background: #555; }
-        .menu-links { display: flex; justify-content: center; }
-        .menu-links a { display: inline-block; }
-
-        /* Mobile menu styles */
-        .mobile-nav { display: none; background-color: #333; position: absolute; top: 60px; width: 100%; text-align: center; }
-        .mobile-nav a { display: block; padding: 10px 20px; color: #fff; text-decoration: none; }
-        .mobile-nav a:hover { background: #555; }
-
-        /* Show mobile menu when clicked */
-        .mobile-nav.show { display: block; }
-
-        @media (max-width: 768px) {
-            .menu-links { display: none; }
-            .hamburger-menu { display: block; }
-            .menu-links a { display: block; }
-        }
-
         .container { width: 80%; margin: auto; padding: 20px; }
         .service-grid { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
-        .service-card { background: #222; padding: 20px; width: 30%; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.3); }
-        .testimonial-card { background: #222; padding: 20px; margin-bottom: 20px; border-radius: 10px; }
-        footer { text-align: center; padding: 20px; background: #333; color: #fff; }
+        .service-card { background: #fff; padding: 20px; width: 30%; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1); }
+        .testimonial-card { background: #fff; padding: 20px; margin-bottom: 20px; border-radius: 10px; }
+        footer { text-align: center; padding: 20px; background: #000; color: #fff; }
         @media (max-width: 768px) {
             .service-card { width: 100%; }
         }
@@ -61,30 +26,15 @@
 <body>
     <header>
         <h1>Iconic.AI</h1>
-        <p>Revolutionizing Business Automation with AI Solutions</p>
+        <p>Your Partner in Business Automation</p>
     </header>
     
-    <div class="hamburger-menu" onclick="toggleMenu()">
-        <div></div>
-        <div></div>
-        <div></div>
-    </div>
-    
     <nav>
-        <div class="menu-links">
-            <a href="#about">About Us</a>
-            <a href="#services">Services</a>
-            <a href="#testimonials">Testimonials</a>
-            <a href="#contact">Contact Us</a>
-        </div>
+        <a href="#about">About Us</a>
+        <a href="#services">Services</a>
+        <a href="#testimonials">Testimonials</a>
+        <a href="#contact">Contact</a>
     </nav>
-
-    <div class="mobile-nav" id="mobileMenu">
-        <a href="#about" onclick="closeMenu()">About Us</a>
-        <a href="#services" onclick="closeMenu()">Services</a>
-        <a href="#testimonials" onclick="closeMenu()">Testimonials</a>
-        <a href="#contact" onclick="closeMenu()">Contact Us</a>
-    </div>
     
     <div class="container">
         <h2 id="about">About Us</h2>
@@ -115,6 +65,10 @@
                 <h3>AI Education Automation</h3>
                 <p>Enhance the learning experience with AI-driven grading, student analytics, and adaptive learning systems. Educators save 60% of administrative time, allowing for more personalized teaching and student engagement.</p>
             </div>
+            <div class="service-card">
+                <h3>SaaS Automation</h3>
+                <p>Optimize software-as-a-service (SaaS) platforms with AI-driven automation, reducing manual intervention and improving user experience. Businesses can automate customer onboarding, support, and subscription management, ensuring scalability and cost efficiency.</p>
+            </div>
         </div>
         
         <h2 id="testimonials">Client Testimonials</h2>
@@ -138,7 +92,15 @@
             <p>"Grading and student progress tracking have become seamless. AI has freed up so much time for our teachers!"</p>
             <h4>Linda Brown, School Administrator</h4>
         </div>
-
+        <div class="testimonial-card">
+            <p>"SaaS automation from Iconic.AI has streamlined our subscription processes, cutting costs and improving customer retention. The transition was smooth and effortless!"</p>
+            <h4>James Harris, SaaS Company CEO</h4>
+        </div>
+        <div class="testimonial-card">
+            <p>"Thanks to SaaS automation, our platform is now more efficient, providing seamless onboarding and support. Iconic.AI's solution is top-notch!"</p>
+            <h4>Maria Gonzalez, SaaS Operations Manager</h4>
+        </div>
+        
         <h2 id="contact">Contact Us</h2>
         <form action="mailto:iiconicai13@gmail.com" method="post" enctype="text/plain">
             <label for="name">Name:</label>
@@ -157,17 +119,5 @@
     <footer>
         <p>&copy; 2025 Iconic.AI. All Rights Reserved.</p>
     </footer>
-
-    <script>
-        function toggleMenu() {
-            const mobileMenu = document.getElementById('mobileMenu');
-            mobileMenu.classList.toggle('show');
-        }
-
-        function closeMenu() {
-            const mobileMenu = document.getElementById('mobileMenu');
-            mobileMenu.classList.remove('show');
-        }
-    </script>
 </body>
 </html>
