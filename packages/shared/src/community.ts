@@ -1,10 +1,14 @@
-export type ReactionKind = "hype" | "love" | "mindblown" | "laugh" | "skeptical";
+// These match the backend's Prisma enums exactly (see
+// apps/backend/prisma/schema.prisma) — kept in sync manually since
+// Prisma's generated client type isn't importable from the mobile app.
+export type ReactionKind = "HYPE" | "LOVE" | "MINDBLOWN" | "LAUGH" | "SKEPTICAL";
 
-export type PostKind = "discussion" | "prediction" | "theory" | "review";
+export type PostKind = "DISCUSSION" | "PREDICTION" | "THEORY" | "REVIEW";
 
 export interface CommunityPost {
   id: string;
   authorId: string;
+  authorHandle: string;
   titleId: string; // the TitleSummary.id this post is about
   kind: PostKind;
   body: string;
@@ -18,13 +22,14 @@ export interface CommunityComment {
   id: string;
   postId: string;
   authorId: string;
+  authorHandle: string;
   body: string;
   containsSpoilers: boolean;
   createdAt: string;
   parentCommentId?: string;
 }
 
-export type ReportReason = "spam" | "harassment" | "unmarked_spoiler" | "misinformation" | "other";
+export type ReportReason = "SPAM" | "HARASSMENT" | "UNMARKED_SPOILER" | "MISINFORMATION" | "OTHER";
 
 export interface Report {
   id: string;
@@ -34,5 +39,5 @@ export interface Report {
   reason: ReportReason;
   details?: string;
   createdAt: string;
-  status: "open" | "actioned" | "dismissed";
+  status: "OPEN" | "ACTIONED" | "DISMISSED";
 }

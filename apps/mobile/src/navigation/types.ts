@@ -8,16 +8,26 @@ export type HomeStackParamList = {
   TitleDetail: { titleId: string };
   AskSlate: { titleId?: string } | undefined;
   ProUpgrade: undefined;
+  NewPost: { titleId: string };
+  PostDetail: { postId: string };
 };
 
 export type SearchStackParamList = {
   Search: undefined;
   TitleDetail: { titleId: string };
+  NewPost: { titleId: string };
+  PostDetail: { postId: string };
+  AskSlate: { titleId?: string } | undefined;
+  ProUpgrade: undefined;
 };
 
 export type WatchlistStackParamList = {
   Watchlist: undefined;
   TitleDetail: { titleId: string };
+  NewPost: { titleId: string };
+  PostDetail: { postId: string };
+  AskSlate: { titleId?: string } | undefined;
+  ProUpgrade: undefined;
 };
 
 export type ProfileStackParamList = {

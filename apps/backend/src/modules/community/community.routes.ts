@@ -46,6 +46,30 @@ export async function communityRoutes(app: FastifyInstance) {
     return reply.send({ posts: withCounts, nextCursor: posts.length === query.limit ? posts[posts.length - 1].id : null });
   });
 
+  app.get("/community/posts/:id", async (req, reply) => {
+    const params = z.object({ id: z.string() }).parse(req.params);
+    const post = await prisma.communityPost.findUnique({
+      where: { id: params.id },
+      include: { author: true, _count: { select: { comments: true } } },
+    });
+    if (!post || post.deletedAt) return reply.code(404).send({ error: "Post not found." });
+
+    return reply.send({
+      post: {
+        id: post.id,
+        authorId: post.authorId,
+        authorHandle: post.author.handle,
+        titleId: post.titleId,
+        kind: post.kind,
+        body: post.body,
+        containsSpoilers: post.containsSpoilers,
+        createdAt: post.createdAt.toISOString(),
+        commentCount: post._count.comments,
+        reactionCounts: await reactionCounts(post.id),
+      },
+    });
+  });
+
   app.post("/community/posts", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = z
       .object({

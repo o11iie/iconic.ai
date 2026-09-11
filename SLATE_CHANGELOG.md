@@ -2,6 +2,28 @@
 
 This tracks implementation decisions as Slate is built, in the order they were made. See `SLATE_RISKS.md` for open risks and missing credentials, and `SLATE_RELEASE_READINESS.md` (added before release) for ship/no-ship status.
 
+## Day 3 — Slate Pro, AI, Community
+
+### Verification before building anything new
+Before writing code, exercised the existing Day 1 backend (community, billing, AI) against a **real** Postgres instance with a real server process — not just typecheck/unit tests. Result: zero bugs found in any of it. Specifically verified live:
+- Full community CRUD (create post → list → react → comment → list comments → report) round-trips correctly through real DB writes.
+- The Pro entitlement gate is genuinely authoritative: manually flipped a user's `Entitlement` row to `ACTIVE` in the database (simulating a verified Play purchase, since no real purchase can be made in this sandbox) and confirmed `/ai/usage`'s limit changed from 5→100 and `/billing/entitlement` reported `isActive: true`; reverted and confirmed it dropped back. The mobile client never influences this — it only ever reads it.
+- `/ai/ask` correctly 503s with `AI_NOT_CONFIGURED` without crashing or fabricating a response, and does NOT consume a user's daily quota when it fails before calling the provider.
+
+### The real gap: no mobile Community UI existed
+Community's backend (posts/comments/reactions/reports) was fully built and now-verified on Day 1, but there was **zero mobile UI for it** — a core, explicitly-required V1 feature with no way to reach it from the app. Built:
+- `CommunityPostCard` (reactions row, spoiler-gated body preview, comment count) embedded as a "Community" section on `TitleDetailScreen`.
+- `SpoilerGate`: a tap-to-reveal wrapper for any spoiler-flagged content. Documented scope limitation: this is a binary gate (hidden vs. revealed) for V1, not yet differentiated by a user's `hide_recent` vs `hide_all` preference, since that requires correlating post age against episode air dates — a real follow-up, not a silently-dropped requirement.
+- `NewPostScreen` (kind picker, spoiler toggle, body input) and `PostDetailScreen` (full post, reactions, comments list, inline comment composer, report flow with the 5 real report reasons the backend defines).
+- Added `GET /api/community/posts/:id` — a single-post detail endpoint the mobile detail screen needed that didn't exist; the list endpoint alone couldn't reliably serve it without either fetching an unbounded number of posts or adding real pagination-by-id, so this was the correct fix rather than a mobile-side workaround.
+
+### Bugs found and fixed while wiring this up
+- `packages/shared`'s `community.ts` had the exact same lowercase-vs-uppercase enum bug as `SpoilerSensitivity` (fixed Day 2): `ReactionKind`, `PostKind`, `ReportReason`, and `Report.status` were all typed lowercase while the real Prisma enums and every actual API response are uppercase. Also added the `authorHandle` field both `CommunityPost` and `CommunityComment` actually return but the shared type didn't declare. Fixed to match reality exactly.
+- **Found a real, previously-shipped navigation bug**: `AskSlate` and `ProUpgrade` were never registered as screens in `SearchStack` or `WatchlistStack` — only in `HomeStack`. Since `TitleDetailScreen` (reachable from all three tabs) navigates to both on a PRO_REQUIRED error or an "Ask Slate" tap, reaching a title's detail page via Search or Watchlist and triggering either would have thrown a React Navigation runtime error ("action not handled"). Fixed by registering the full screen set consistently across all three stacks.
+
+### Verification
+Backend typecheck/lint clean, 19/19 tests pass (unchanged — no new pure logic to unit test this round, verification was live/integration). Mobile + shared typecheck clean. Live-tested the new `GET /community/posts/:id` endpoint end-to-end (found post + 404 for a bogus id) against the real database.
+
 ## Day 2 — Games, Anticipation Engine, Personalization
 
 ### Games / anticipation engine

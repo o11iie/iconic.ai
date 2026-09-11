@@ -1,9 +1,65 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Linking } from "react-native";
-import type { RouteProp } from "@react-navigation/native";
-import type { SeasonDetail, TitleDetail } from "@slate/shared";
+import { useFocusEffect, type RouteProp } from "@react-navigation/native";
+import type { CommunityPost, ReactionKind, SeasonDetail, TitleDetail } from "@slate/shared";
 import { api, ApiError } from "../../api/client";
 import { colors } from "../../theme";
+import { CommunityPostCard } from "../../components/CommunityPostCard";
+
+function CommunitySection({
+  titleId,
+  navigation,
+}: {
+  titleId: string;
+  navigation: { navigate: (screen: string, params?: object) => void };
+}) {
+  const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      api
+        .get<{ posts: CommunityPost[] }>(`/community/posts?titleId=${encodeURIComponent(titleId)}`)
+        .then((res) => setPosts(res.posts))
+        .catch(() => setPosts([]))
+        .finally(() => setIsLoading(false));
+    }, [titleId]),
+  );
+
+  async function react(postId: string, kind: ReactionKind) {
+    try {
+      const res = await api.post<{ counts: Record<ReactionKind, number> }>(`/community/posts/${postId}/reactions`, { kind });
+      setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, reactionCounts: res.counts } : p)));
+    } catch {
+      // reaction is best-effort; leave counts as-is on failure
+    }
+  }
+
+  return (
+    <View style={styles.communitySection}>
+      <View style={styles.communityHeaderRow}>
+        <Text style={styles.sectionTitle}>Community</Text>
+        <TouchableOpacity onPress={() => navigation.navigate("NewPost", { titleId })}>
+          <Text style={styles.newPostLink}>+ New post</Text>
+        </TouchableOpacity>
+      </View>
+      {isLoading ? (
+        <ActivityIndicator color={colors.accent} style={{ marginVertical: 12 }} />
+      ) : posts.length === 0 ? (
+        <Text style={styles.castText}>No posts yet — be the first to start the conversation.</Text>
+      ) : (
+        posts.map((post) => (
+          <CommunityPostCard
+            key={post.id}
+            post={post}
+            onPress={() => navigation.navigate("PostDetail", { postId: post.id })}
+            onReact={(kind) => react(post.id, kind)}
+          />
+        ))
+      )}
+    </View>
+  );
+}
 
 function SeasonList({ tvId, seasons }: { tvId: string; seasons: NonNullable<TitleDetail["seasons"]> }) {
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
@@ -191,6 +247,8 @@ export function TitleDetailScreen({ route, navigation }: Props) {
           <SeasonList tvId={titleId.split(":")[1]} seasons={detail.seasons} />
         )}
 
+        <CommunitySection titleId={titleId} navigation={navigation} />
+
         <Text style={styles.attribution}>{detail.attribution.notice}</Text>
       </View>
     </ScrollView>
@@ -227,4 +285,7 @@ const styles = StyleSheet.create({
   episodeTitle: { color: colors.text, fontSize: 14, fontWeight: "600" },
   episodeMeta: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   episodeOverview: { color: colors.textMuted, fontSize: 12, marginTop: 4, lineHeight: 17 },
+  communitySection: { marginTop: 12 },
+  communityHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  newPostLink: { color: colors.accent, fontWeight: "600", fontSize: 13 },
 });
