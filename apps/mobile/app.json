@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Slate",
+    "slug": "slate",
+    "scheme": "slate",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0B0F"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "ai.iconic.slate",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B0B0F"
+      },
+      "permissions": ["com.android.vending.BILLING", "RECEIVE_BOOT_COMPLETED"]
+    },
+    "extra": {
+      "apiBaseUrl": "http://10.0.2.2:4000/api"
+    }
+  }
+}

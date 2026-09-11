@@ -1,0 +1,21 @@
+{
+  "name": "slate",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Slate — The Home of Entertainment Hype",
+  "packageManager": "pnpm@9.15.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "backend:dev": "pnpm --filter @slate/backend dev",
+    "backend:build": "pnpm --filter @slate/backend build",
+    "backend:test": "pnpm --filter @slate/backend test",
+    "backend:typecheck": "pnpm --filter @slate/backend typecheck",
+    "backend:lint": "pnpm --filter @slate/backend lint",
+    "mobile:start": "pnpm --filter @slate/mobile start",
+    "mobile:typecheck": "pnpm --filter @slate/mobile typecheck",
+    "shared:build": "pnpm --filter @slate/shared build"
+  }
+}

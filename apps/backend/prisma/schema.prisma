@@ -1,0 +1,348 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Users & Auth ----------
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  passwordHash      String
+  handle            String   @unique
+  displayName       String
+  avatarUrl         String?
+  spoilerSensitivity SpoilerSensitivity @default(HIDE_RECENT)
+  favoriteGenres    String[] @default([])
+  notificationsEnabled Boolean @default(true)
+  role              UserRole @default(USER)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  refreshTokens     RefreshToken[]
+  watchlistItems    WatchlistItem[]
+  follows           Follow[]
+  posts             CommunityPost[]
+  comments          CommunityComment[]
+  reactions         Reaction[]
+  reportsFiled      Report[] @relation("ReportsFiled")
+  entitlement       Entitlement?
+  aiConversations   AiConversation[]
+  aiUsageEvents     AiUsageEvent[]
+  notifications     Notification[]
+  analyticsEvents   AnalyticsEvent[]
+}
+
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum SpoilerSensitivity {
+  HIDE_ALL
+  HIDE_RECENT
+  SHOW_ALL
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ---------- Titles (movies/tv/games) ----------
+// Slate does not duplicate TMDB/IGDB catalogs locally. `Title` is a thin,
+// cached pointer + Slate-specific state (hype score, follow/watchlist
+// relations); full metadata is fetched live from the provider and cached
+// short-term at the HTTP layer, per each provider's ToS on redistribution.
+
+enum MediaType {
+  MOVIE
+  TV
+  GAME
+}
+
+model Title {
+  id              String    @id // `${mediaType}:${externalId}` e.g. "movie:27205"
+  mediaType       MediaType
+  externalId      String
+  name            String
+  releaseDate     DateTime?
+  releaseDatePrecision String @default("unknown")
+  hypeScore       Float     @default(0)
+  lastSyncedAt    DateTime  @default(now())
+
+  watchlistItems  WatchlistItem[]
+  follows         Follow[]
+  posts           CommunityPost[]
+
+  @@unique([mediaType, externalId])
+  @@index([releaseDate])
+}
+
+// ---------- Watchlist & Follows ----------
+
+enum WatchlistStatus {
+  WANT_TO_WATCH
+  WATCHING
+  COMPLETED
+  DROPPED
+}
+
+model WatchlistItem {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  titleId   String
+  title     Title           @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  status    WatchlistStatus @default(WANT_TO_WATCH)
+  addedAt   DateTime        @default(now())
+
+  @@unique([userId, titleId])
+  @@index([userId])
+}
+
+model Follow {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  titleId   String
+  title     Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, titleId])
+  @@index([userId])
+  @@index([titleId])
+}
+
+// ---------- Community ----------
+
+enum PostKind {
+  DISCUSSION
+  PREDICTION
+  THEORY
+  REVIEW
+}
+
+model CommunityPost {
+  id               String   @id @default(cuid())
+  authorId         String
+  author           User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  titleId          String
+  title            Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  kind             PostKind @default(DISCUSSION)
+  body             String
+  containsSpoilers Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  deletedAt        DateTime?
+
+  comments  CommunityComment[]
+  reactions Reaction[]
+  reports   Report[]
+
+  @@index([titleId])
+  @@index([authorId])
+}
+
+model CommunityComment {
+  id               String   @id @default(cuid())
+  postId           String
+  post             CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId         String
+  author           User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parentCommentId  String?
+  body             String
+  containsSpoilers Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  deletedAt        DateTime?
+
+  reports Report[]
+
+  @@index([postId])
+}
+
+enum ReactionKind {
+  HYPE
+  LOVE
+  MINDBLOWN
+  LAUGH
+  SKEPTICAL
+}
+
+model Reaction {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  kind      ReactionKind
+  createdAt DateTime     @default(now())
+
+  @@unique([userId, postId, kind])
+  @@index([postId])
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  UNMARKED_SPOILER
+  MISINFORMATION
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  ACTIONED
+  DISMISSED
+}
+
+model Report {
+  id         String       @id @default(cuid())
+  reporterId String
+  reporter   User         @relation("ReportsFiled", fields: [reporterId], references: [id], onDelete: Cascade)
+  postId     String?
+  post       CommunityPost? @relation(fields: [postId], references: [id], onDelete: Cascade)
+  commentId  String?
+  comment    CommunityComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  reason     ReportReason
+  details    String?
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+
+  @@index([status])
+}
+
+// ---------- Billing / Entitlements ----------
+// Source of truth for Pro access. The mobile client's local purchase state
+// is never trusted on its own — see apps/backend/src/modules/billing.
+
+enum SlateProProduct {
+  SLATE_PRO_MONTHLY
+  SLATE_PRO_YEARLY
+}
+
+enum EntitlementStatus {
+  NONE
+  PENDING
+  ACTIVE
+  GRACE_PERIOD
+  ON_HOLD
+  CANCELLED
+  EXPIRED
+  REVOKED
+}
+
+model Entitlement {
+  id                  String            @id @default(cuid())
+  userId              String            @unique
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId           SlateProProduct?
+  status              EntitlementStatus @default(NONE)
+  expiresAt           DateTime?
+  autoRenewing        Boolean           @default(false)
+  startedAt           DateTime?
+  latestPurchaseToken String?
+  updatedAt           DateTime          @updatedAt
+
+  purchaseEvents PurchaseEvent[]
+}
+
+// Immutable audit log of every purchase/notification received from Google
+// Play, keyed by purchase token, so webhook/RTDN processing is idempotent.
+model PurchaseEvent {
+  id              String   @id @default(cuid())
+  entitlementId   String
+  entitlement     Entitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+  purchaseToken   String
+  productId       SlateProProduct
+  rawStatus       String   // raw Play Developer API / RTDN status for audit
+  processedAt     DateTime @default(now())
+
+  @@unique([purchaseToken, rawStatus])
+  @@index([entitlementId])
+}
+
+// ---------- AI / Ask Slate ----------
+
+model AiConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  titleId   String?
+  createdAt DateTime @default(now())
+
+  messages AiMessage[]
+
+  @@index([userId])
+}
+
+model AiMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String   // "user" | "assistant"
+  content        String
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId])
+}
+
+// Per-user, per-day usage counter used to enforce free/Pro AI limits without
+// scanning message history on every request.
+model AiUsageEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime // truncated to day (UTC)
+  count     Int      @default(0)
+
+  @@unique([userId, date])
+}
+
+// ---------- Notifications ----------
+
+enum NotificationType {
+  RELEASE_REMINDER
+  FOLLOWED_TITLE_UPDATE
+  COMMUNITY_REPLY
+  COMMUNITY_MENTION
+  SUBSCRIPTION_STATUS
+}
+
+model Notification {
+  id        String            @id @default(cuid())
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime          @default(now())
+
+  @@index([userId, readAt])
+}
+
+// ---------- Analytics (minimal, first-party) ----------
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name      String
+  properties Json?
+  createdAt DateTime @default(now())
+
+  @@index([name, createdAt])
+}

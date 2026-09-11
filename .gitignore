@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+.expo/
+.expo-shared/
+*.log
+.env
+.env.local
+.env.*.local
+.DS_Store
+coverage/
+.turbo/
+android/app/build/
+android/.gradle/
+*.keystore
+!debug.keystore
+.pnpm-store/

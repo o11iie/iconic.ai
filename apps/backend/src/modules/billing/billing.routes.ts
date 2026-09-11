@@ -1,0 +1,99 @@
+import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { getProductCatalog, isValidProductId } from "../../config/products";
+import { verifySubscriptionPurchase, acknowledgeSubscriptionPurchase, PlayBillingNotConfiguredError } from "./play-verification";
+import { applyVerifiedPurchase, getEntitlement, isEntitlementActive, InvalidPurchaseError } from "./entitlement.service";
+import { prisma } from "../../prisma";
+
+export async function billingRoutes(app: FastifyInstance) {
+  app.get("/billing/products", async (_req, reply) => {
+    return reply.send({ products: getProductCatalog() });
+  });
+
+  app.get("/billing/entitlement", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const entitlement = await getEntitlement(req.userId);
+    if (!entitlement) return reply.send({ status: "NONE", isActive: false });
+    return reply.send({
+      status: entitlement.status,
+      productId: entitlement.productId,
+      expiresAt: entitlement.expiresAt?.toISOString() ?? null,
+      autoRenewing: entitlement.autoRenewing,
+      isActive: isEntitlementActive(entitlement.status, entitlement.expiresAt),
+    });
+  });
+
+  // Called by the mobile client immediately after Google Play Billing
+  // returns a purchase, AND used for "Restore purchases" (client re-sends
+  // whatever active purchase tokens Play Billing's queryPurchases returns).
+  app.post("/billing/verify-purchase", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const body = z.object({ productId: z.string(), purchaseToken: z.string().min(1) }).parse(req.body);
+    if (!isValidProductId(body.productId)) {
+      return reply.code(400).send({ error: "Unknown product id." });
+    }
+
+    try {
+      const purchase = await verifySubscriptionPurchase(body.purchaseToken);
+      await applyVerifiedPurchase(req.userId, purchase, body.purchaseToken);
+
+      if (purchase.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING") {
+        await acknowledgeSubscriptionPurchase(body.productId, body.purchaseToken).catch((err) =>
+          app.log.warn({ err }, "Failed to acknowledge Play purchase"),
+        );
+      }
+
+      const entitlement = await getEntitlement(req.userId);
+      return reply.send({
+        status: entitlement?.status,
+        expiresAt: entitlement?.expiresAt?.toISOString() ?? null,
+        isActive: entitlement ? isEntitlementActive(entitlement.status, entitlement.expiresAt) : false,
+      });
+    } catch (err) {
+      if (err instanceof PlayBillingNotConfiguredError) {
+        return reply.code(503).send({ error: err.message, code: "BILLING_NOT_CONFIGURED" });
+      }
+      if (err instanceof InvalidPurchaseError) {
+        return reply.code(400).send({ error: err.message });
+      }
+      app.log.error(err);
+      return reply.code(502).send({ error: "Could not verify purchase with Google Play. Please try again." });
+    }
+  });
+
+  /**
+   * Real-Time Developer Notifications webhook (Google Pub/Sub push
+   * subscription). Google delivers a base64-encoded JSON payload containing
+   * a purchaseToken + subscriptionId; Slate re-verifies via the Developer
+   * API rather than trusting the notification body directly, and every
+   * notification includes a userId lookup via the stored purchase token
+   * since RTDN itself carries no Slate user identity.
+   * https://developer.android.com/google/play/billing/rtdn-reference
+   */
+  app.post("/billing/rtdn", async (req, reply) => {
+    const body = z
+      .object({ message: z.object({ data: z.string(), messageId: z.string() }) })
+      .safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Malformed Pub/Sub push payload." });
+
+    const decoded = JSON.parse(Buffer.from(body.data.message.data, "base64").toString("utf8")) as {
+      subscriptionNotification?: { purchaseToken: string; subscriptionId: string };
+    };
+    const purchaseToken = decoded.subscriptionNotification?.purchaseToken;
+    if (!purchaseToken) return reply.code(200).send({ ok: true }); // not a subscription event we handle; ack to stop redelivery
+
+    const entitlement = await prisma.entitlement.findFirst({ where: { latestPurchaseToken: purchaseToken } });
+    if (!entitlement) {
+      app.log.warn({ purchaseToken }, "RTDN for unknown purchase token — user has not yet linked this purchase.");
+      return reply.code(200).send({ ok: true });
+    }
+
+    try {
+      const purchase = await verifySubscriptionPurchase(purchaseToken);
+      await applyVerifiedPurchase(entitlement.userId, purchase, purchaseToken);
+    } catch (err) {
+      app.log.error({ err }, "Failed to process RTDN");
+      return reply.code(500).send({ error: "Processing failed, please redeliver." });
+    }
+
+    return reply.code(200).send({ ok: true });
+  });
+}
