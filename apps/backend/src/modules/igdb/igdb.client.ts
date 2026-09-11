@@ -17,6 +17,18 @@ export class IgdbApiError extends Error {
   }
 }
 
+// IGDB's genre taxonomy (id -> name) is small and stable — statically
+// sourced from https://api-docs.igdb.com/#genre rather than fetched, same
+// rationale as TMDB's genre lists.
+export const IGDB_GENRES: Record<number, string> = {
+  2: "Point-and-click", 4: "Fighting", 5: "Shooter", 7: "Music", 8: "Platform",
+  9: "Puzzle", 10: "Racing", 11: "Real Time Strategy (RTS)", 12: "Role-playing (RPG)",
+  13: "Simulator", 14: "Sport", 15: "Strategy", 16: "Turn-based strategy (TBS)",
+  24: "Tactical", 25: "Hack and slash/Beat 'em up", 26: "Quiz/Trivia", 30: "Pinball",
+  31: "Adventure", 32: "Indie", 33: "Arcade", 34: "Visual Novel", 35: "Card & Board Game",
+  36: "MOBA",
+};
+
 // IGDB auth is Twitch's app-access-token client-credentials flow. Tokens are
 // long-lived (~60 days) so we cache in-process and refresh lazily on 401.
 let cachedToken: { value: string; expiresAt: number } | null = null;
@@ -69,6 +81,7 @@ interface IgdbGame {
   involved_companies?: { company: { name: string }; developer: boolean }[];
   videos?: { video_id: string; name: string }[];
   release_dates?: { date: number; human: string; region: number }[];
+  hypes?: number;
 }
 
 function coverUrl(imageId: string | undefined, size: "cover_big" | "screenshot_big" = "cover_big"): string | undefined {
@@ -92,10 +105,12 @@ function toSummary(game: IgdbGame): TitleSummary {
     releaseWindow: releaseWindowFrom(game.first_release_date),
     genres: (game.genres ?? []).map((g) => ({ id: String(g.id), name: g.name })),
     voteAverage: game.rating ? game.rating / 10 : undefined,
+    anticipationCount: game.hypes,
   };
 }
 
 function toDetail(game: IgdbGame): TitleDetail {
+  const developer = game.involved_companies?.find((c) => c.developer)?.company.name;
   return {
     ...toSummary(game),
     overview: game.summary ?? "",
@@ -109,6 +124,7 @@ function toDetail(game: IgdbGame): TitleDetail {
       official: true,
     })),
     platforms: (game.platforms ?? []).map((p) => p.name),
+    developer,
     attribution: {
       source: "igdb",
       notice: "Game data provided by IGDB.",
@@ -117,7 +133,7 @@ function toDetail(game: IgdbGame): TitleDetail {
 }
 
 const GAME_FIELDS =
-  "id,name,summary,cover.image_id,screenshots.image_id,first_release_date,genres.id,genres.name,platforms.name,rating,videos.video_id,videos.name";
+  "id,name,summary,cover.image_id,screenshots.image_id,first_release_date,genres.id,genres.name,platforms.name,rating,hypes,videos.video_id,videos.name,involved_companies.company.name,involved_companies.developer";
 
 export async function upcomingGames(page = 1, limit = 20): Promise<TitleSummary[]> {
   const nowUnix = Math.floor(Date.now() / 1000);

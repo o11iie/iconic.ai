@@ -165,6 +165,28 @@ export function TitleDetailScreen({ route, navigation }: Props) {
           </>
         )}
 
+        {detail.mediaType === "game" && (
+          <>
+            {detail.developer && (
+              <>
+                <Text style={styles.sectionTitle}>Developer</Text>
+                <Text style={styles.castText}>{detail.developer}</Text>
+              </>
+            )}
+            {detail.platforms && detail.platforms.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Platforms</Text>
+                <Text style={styles.castText}>{detail.platforms.join(", ")}</Text>
+              </>
+            )}
+            {typeof detail.anticipationCount === "number" && detail.anticipationCount > 0 && (
+              <Text style={styles.anticipationText}>
+                🔥 {detail.anticipationCount.toLocaleString()} {detail.anticipationCount === 1 ? "person is" : "people are"} anticipating this on IGDB
+              </Text>
+            )}
+          </>
+        )}
+
         {detail.mediaType === "tv" && detail.seasons && detail.seasons.length > 0 && (
           <SeasonList tvId={titleId.split(":")[1]} seasons={detail.seasons} />
         )}
@@ -190,6 +212,7 @@ const styles = StyleSheet.create({
   trailerLink: { color: colors.accent, fontWeight: "700", marginBottom: 16 },
   sectionTitle: { color: colors.text, fontSize: 16, fontWeight: "700", marginTop: 8, marginBottom: 4 },
   castText: { color: colors.textMuted, lineHeight: 20 },
+  anticipationText: { color: colors.pro, fontSize: 13, fontWeight: "600", marginTop: 12 },
   attribution: { color: colors.textMuted, fontSize: 11, marginTop: 24 },
   error: { color: colors.accent, textAlign: "center", marginTop: 60 },
   seasonRow: {

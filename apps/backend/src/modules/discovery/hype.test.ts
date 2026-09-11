@@ -30,4 +30,22 @@ describe("computeHypeScore", () => {
     expect(score).toBeGreaterThanOrEqual(0);
     expect(score).toBeLessThanOrEqual(1);
   });
+
+  it("scores an unrated but highly-anticipated game above an unrated, un-anticipated one", () => {
+    const releaseWindow = { precision: "date_only" as const, date: new Date(Date.now() + 10 * 86400000).toISOString() };
+    const hyped = makeTitle({ mediaType: "game", releaseWindow, anticipationCount: 4000 });
+    const quiet = makeTitle({ mediaType: "game", releaseWindow, anticipationCount: 2 });
+    expect(computeHypeScore(hyped)).toBeGreaterThan(computeHypeScore(quiet));
+  });
+
+  it("keeps the anticipation-derived score bounded between 0 and 1 even for huge counts", () => {
+    const title = makeTitle({
+      mediaType: "game",
+      anticipationCount: 500_000,
+      releaseWindow: { precision: "date_only", date: new Date().toISOString() },
+    });
+    const score = computeHypeScore(title);
+    expect(score).toBeGreaterThanOrEqual(0);
+    expect(score).toBeLessThanOrEqual(1);
+  });
 });

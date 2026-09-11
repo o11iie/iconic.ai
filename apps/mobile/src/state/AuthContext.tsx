@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import type { AuthenticatedUser } from "@slate/shared";
+import type { AuthenticatedUser, UserPreferences } from "@slate/shared";
 import { api, clearTokens, getTokens, setTokens } from "../api/client";
 
 interface AuthContextValue {
@@ -8,6 +8,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, handle: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
+  updatePreferences: (patch: Partial<UserPreferences>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -56,8 +57,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const updatePreferences = useCallback(async (patch: Partial<UserPreferences>) => {
+    const res = await api.patch<{ preferences: UserPreferences }>("/users/me/preferences", patch);
+    setUser((prev) => (prev ? { ...prev, preferences: res.preferences } : prev));
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, signup, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, isLoading, login, signup, logout, updatePreferences }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 

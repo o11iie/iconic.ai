@@ -5,6 +5,8 @@ import { ZodError } from "zod";
 import { getEnv } from "./env";
 import authenticatePlugin from "./plugins/authenticate";
 import { authRoutes } from "./modules/auth/auth.routes";
+import { userRoutes } from "./modules/users/users.routes";
+import { genresRoutes } from "./modules/genres/genres.routes";
 import { moviesTvRoutes } from "./modules/tmdb/movies.routes";
 import { gamesRoutes } from "./modules/igdb/games.routes";
 import { discoveryRoutes } from "./modules/discovery/discovery.routes";
@@ -42,6 +44,8 @@ export function buildApp() {
   app.get("/health", async () => ({ status: "ok", timestamp: new Date().toISOString() }));
 
   app.register(authRoutes, { prefix: "/api" });
+  app.register(userRoutes, { prefix: "/api" });
+  app.register(genresRoutes, { prefix: "/api" });
   app.register(moviesTvRoutes, { prefix: "/api" });
   app.register(gamesRoutes, { prefix: "/api" });
   app.register(discoveryRoutes, { prefix: "/api" });

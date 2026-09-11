@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import type { SpoilerSensitivity } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../prisma";
 import {
@@ -23,7 +24,7 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-function toPublicUser(user: { id: string; handle: string; displayName: string; avatarUrl: string | null; email: string; spoilerSensitivity: string; notificationsEnabled: boolean; favoriteGenres: string[]; createdAt: Date }) {
+function toPublicUser(user: { id: string; handle: string; displayName: string; avatarUrl: string | null; email: string; spoilerSensitivity: SpoilerSensitivity; notificationsEnabled: boolean; favoriteGenres: string[]; createdAt: Date }) {
   return {
     id: user.id,
     handle: user.handle,

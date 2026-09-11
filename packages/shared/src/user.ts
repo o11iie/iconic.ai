@@ -6,7 +6,10 @@ export interface PublicUser {
   createdAt: string;
 }
 
-export type SpoilerSensitivity = "hide_all" | "hide_recent" | "show_all";
+// Matches the backend's Prisma SpoilerSensitivity enum values exactly — see
+// apps/backend/prisma/schema.prisma. Kept in sync manually since Prisma's
+// generated client type isn't importable from the mobile app.
+export type SpoilerSensitivity = "HIDE_ALL" | "HIDE_RECENT" | "SHOW_ALL";
 
 export interface UserPreferences {
   spoilerSensitivity: SpoilerSensitivity;

@@ -6,6 +6,8 @@ import * as igdb from "../igdb/igdb.client";
 import { isIgdbConfigured, isTmdbConfigured } from "../../env";
 import { sortByHype } from "./hype";
 import { computeCountdown } from "./countdown";
+import { dedupeById, sortByPersonalizedScore } from "./personalization";
+import { prisma } from "../../prisma";
 
 /** TMDB and IGDB both default to 20 results per page; a fetcher returning a full page means there's likely a next one. */
 const PROVIDER_PAGE_SIZE = 20;
@@ -89,6 +91,34 @@ export async function discoveryRoutes(app: FastifyInstance) {
 
     const { results, hasMore } = await settleAll(fetchers);
     return reply.send({ results, page: query.page, hasMore });
+  });
+
+  /**
+   * "For You" — trending + upcoming across every configured provider,
+   * re-ranked by the user's favorite genres on top of Hype Score. With no
+   * favorite genres set, this is equivalent to a hype-sorted merge of both
+   * feeds (still useful, just not yet personalized) — `personalized: false`
+   * tells the client that honestly rather than pretending to personalize
+   * with no signal to personalize from.
+   */
+  app.get("/discover/for-you", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId }, select: { favoriteGenres: true } });
+
+    const fetchers: Array<() => Promise<TitleSummary[]>> = [];
+    if (isTmdbConfigured()) {
+      fetchers.push(() => tmdb.trending("movie", "week"));
+      fetchers.push(() => tmdb.trending("tv", "week"));
+      fetchers.push(() => tmdb.upcomingMovies());
+      fetchers.push(() => tmdb.onTheAirTv());
+    }
+    if (isIgdbConfigured()) {
+      fetchers.push(() => igdb.anticipatedGames());
+    }
+
+    const { results } = await settleAll(fetchers);
+    const ranked = sortByPersonalizedScore(dedupeById(results), user.favoriteGenres);
+
+    return reply.send({ results: ranked, personalized: user.favoriteGenres.length > 0 });
   });
 
   app.get("/titles/:mediaType/:externalId", async (req, reply) => {

@@ -2,6 +2,23 @@
 
 This tracks implementation decisions as Slate is built, in the order they were made. See `SLATE_RISKS.md` for open risks and missing credentials, and `SLATE_RELEASE_READINESS.md` (added before release) for ship/no-ship status.
 
+## Day 2 — Games, Anticipation Engine, Personalization
+
+### Games / anticipation engine
+- Surfaced IGDB's real `hypes` count as `anticipationCount` on game titles — genuine third-party signal (how many IGDB users marked a game anticipated), kept visually and semantically separate from Slate's own `hypeScore` heuristic so the UI never conflates "a number we made up" with "a number IGDB actually reports."
+- Blended `anticipationCount` into `computeHypeScore` for games specifically (log-normalized against a documented heuristic ceiling, since pre-release games usually have no rating yet to rank by otherwise).
+- Added `developer` (from IGDB's `involved_companies`) and confirmed `platforms` are both fetched and now actually rendered in `TitleDetailScreen` — previously fetched but unused.
+
+### Personalization
+- `User.favoriteGenres`/`spoilerSensitivity`/`notificationsEnabled` existed in the schema since Day 1 but had no endpoint to read or write them and nothing consumed them — dead columns. Added `PATCH /api/users/me/preferences`.
+- Added `GET /api/genres`: a deduped, cross-provider genre name list (TMDB movie + TV genres, IGDB's documented genre taxonomy) for the mobile genre picker. Personalization matches on genre **name**, not provider-specific numeric ids, since TMDB and IGDB each use their own id space.
+- Added `GET /api/discover/for-you` (authenticated): merges trending + upcoming across every configured provider, dedupes, and re-ranks by a genre-affinity boost layered on top of Hype Score — a genre match nudges a title up, it never overrides raw popularity/proximity for a title with no affinity data. Returns `personalized: false` honestly when the user hasn't set any favorite genres yet, rather than pretending to personalize with no signal.
+- Mobile: genre picker (chip multi-select) in Profile wired to the preferences endpoint; a "For You" section on Home wired to the new endpoint.
+- Fixed a real, previously-unnoticed type mismatch: `packages/shared`'s `SpoilerSensitivity` was typed as a lowercase union (`"hide_recent"`) while the Prisma enum and every actual API response use uppercase (`"HIDE_RECENT"`) — the backend's loose `string` typing on that field had been hiding it since Day 1. Corrected the shared type to match Prisma exactly and gave `auth.routes.ts` a precise type instead of `string`. Also wired Ask Slate's spoiler-sensitivity request field to the user's actual stored preference (it was previously hardcoded to `"hide_recent"` regardless of what the user had set — moot until preferences existed to read from).
+
+### Verification
+First time the app has run against a **real** Postgres instance rather than being smoke-tested with an empty/unreachable database: started the local Postgres cluster available in this sandbox, ran `prisma migrate deploy` for real, and exercised the full path live — signup, `PATCH /users/me/preferences`, `GET /discover/for-you` flipping from `personalized: false` to `true` after genres were set, and confirmed the route correctly 401s without auth. Backend typecheck/lint clean, 19/19 tests pass (8 new: anticipation-blended hype scoring, personalization ranking/dedup), mobile + shared typecheck clean.
+
 ## Day 1 — Foundation + Movie/TV Data
 
 ### Starting state

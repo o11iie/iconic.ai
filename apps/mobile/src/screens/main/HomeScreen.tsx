@@ -58,6 +58,8 @@ function Section({
 }
 
 export function HomeScreen({ navigation }: Props) {
+  const [forYou, setForYou] = useState<SectionState>(EMPTY_SECTION);
+  const [isPersonalized, setIsPersonalized] = useState(false);
   const [trending, setTrending] = useState<SectionState>(EMPTY_SECTION);
   const [upcoming, setUpcoming] = useState<SectionState>(EMPTY_SECTION);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,10 +68,13 @@ export function HomeScreen({ navigation }: Props) {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [trendingRes, upcomingRes] = await Promise.all([
+      const [forYouRes, trendingRes, upcomingRes] = await Promise.all([
+        api.get<{ results: TitleSummary[]; personalized: boolean }>("/discover/for-you"),
         api.get<DiscoverResponse>("/discover/trending"),
         api.get<DiscoverResponse>("/discover/upcoming"),
       ]);
+      setForYou({ items: forYouRes.results.slice(0, 20), page: 1, hasMore: false, isLoadingMore: false });
+      setIsPersonalized(forYouRes.personalized);
       setTrending({ items: trendingRes.results, page: trendingRes.page, hasMore: trendingRes.hasMore, isLoadingMore: false });
       setUpcoming({ items: upcomingRes.results, page: upcomingRes.page, hasMore: upcomingRes.hasMore, isLoadingMore: false });
     } catch {
@@ -119,6 +124,14 @@ export function HomeScreen({ navigation }: Props) {
         <Text style={styles.error}>{error}</Text>
       ) : (
         <>
+          {forYou.items.length > 0 && (
+            <>
+              <Section title="For You" state={forYou} onPressTitle={goToDetail} onLoadMore={() => {}} />
+              {!isPersonalized && (
+                <Text style={styles.personalizeHint}>Pick favorite genres in Profile to personalize this feed.</Text>
+              )}
+            </>
+          )}
           <Section title="Trending now" state={trending} onPressTitle={goToDetail} onLoadMore={loadMoreTrending} />
           <Section title="Coming up" state={upcoming} onPressTitle={goToDetail} onLoadMore={loadMoreUpcoming} />
           {trending.items.length === 0 && upcoming.items.length === 0 && (
@@ -140,6 +153,7 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 10 },
   error: { color: colors.accent, marginTop: 20 },
   empty: { color: colors.textMuted, marginTop: 20, lineHeight: 20 },
+  personalizeHint: { color: colors.textMuted, fontSize: 12, marginTop: -14, marginBottom: 24 },
   moreCard: { width: 100, height: 190, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 10 },
   moreCardText: { color: colors.accent, fontWeight: "600", fontSize: 13, textAlign: "center" },
 });

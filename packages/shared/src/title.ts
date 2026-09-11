@@ -44,6 +44,14 @@ export interface TitleSummary {
   genres: Genre[];
   hypeScore?: number;
   voteAverage?: number;
+  /**
+   * Games only: IGDB's real "hypes" count — the number of IGDB users who
+   * marked this game as anticipated. This is genuine third-party signal,
+   * not a Slate-invented number, and is surfaced separately from
+   * `hypeScore` (which IS Slate's own heuristic) so the UI can label each
+   * honestly rather than conflating them.
+   */
+  anticipationCount?: number;
 }
 
 export interface CastMember {
@@ -106,6 +114,7 @@ export interface TitleDetail extends TitleSummary {
   /** TV only: one entry per season, for a season-picker UI. Fetch full episodes via the season detail endpoint. */
   seasons?: SeasonSummary[];
   platforms?: string[]; // games only
+  developer?: string; // games only
   attribution: DataAttribution;
 }
 

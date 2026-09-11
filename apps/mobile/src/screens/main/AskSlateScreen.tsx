@@ -3,6 +3,19 @@ import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Activity
 import type { RouteProp } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { colors } from "../../theme";
+import { useAuth } from "../../state/AuthContext";
+
+/** Ask Slate's request contract uses its own lowercase enum, independent of the stored SpoilerSensitivity enum. */
+function toAskSlateSpoilerSensitivity(pref: string): "hide_all" | "hide_recent" | "show_all" {
+  switch (pref) {
+    case "HIDE_ALL":
+      return "hide_all";
+    case "SHOW_ALL":
+      return "show_all";
+    default:
+      return "hide_recent";
+  }
+}
 
 type RouteParams = Record<string, object | undefined> & {
   AskSlate: { titleId?: string } | undefined;
@@ -20,6 +33,8 @@ interface ChatMessage {
 
 export function AskSlateScreen({ route }: Props) {
   const titleId = route.params?.titleId;
+  const { user } = useAuth();
+  const spoilerSensitivity = toAskSlateSpoilerSensitivity(user?.preferences.spoilerSensitivity ?? "HIDE_RECENT");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState<string | undefined>();
@@ -36,7 +51,7 @@ export function AskSlateScreen({ route }: Props) {
     try {
       const res = await api.post<{ conversationId: string; message: string; usage: { requestsRemainingToday: number | "unlimited" } }>(
         "/ai/ask",
-        { message: text, titleId, conversationId, spoilerSensitivity: "hide_recent" },
+        { message: text, titleId, conversationId, spoilerSensitivity },
       );
       setConversationId(res.conversationId);
       setMessages((prev) => [...prev, { id: `${Date.now()}-a`, role: "assistant", content: res.message }]);
