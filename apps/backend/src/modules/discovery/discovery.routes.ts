@@ -7,70 +7,88 @@ import { isIgdbConfigured, isTmdbConfigured } from "../../env";
 import { sortByHype } from "./hype";
 import { computeCountdown } from "./countdown";
 
-/** Runs each provider call independently so one down/unconfigured provider never blanks the whole feed. */
-async function settleAll(fns: Array<() => Promise<TitleSummary[]>>): Promise<TitleSummary[]> {
-  const results = await Promise.allSettled(fns.map((fn) => fn()));
-  return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+/** TMDB and IGDB both default to 20 results per page; a fetcher returning a full page means there's likely a next one. */
+const PROVIDER_PAGE_SIZE = 20;
+
+/**
+ * Runs each provider call independently so one down/unconfigured provider
+ * never blanks the whole feed, and reports whether ANY of them returned a
+ * full page — the honest signal that more results may exist, rather than
+ * guessing from the merged total (which depends on how many providers ran).
+ */
+async function settleAll(fns: Array<() => Promise<TitleSummary[]>>): Promise<{ results: TitleSummary[]; hasMore: boolean }> {
+  const settled = await Promise.allSettled(fns.map((fn) => fn()));
+  const fulfilled = settled.filter((r): r is PromiseFulfilledResult<TitleSummary[]> => r.status === "fulfilled");
+  return {
+    results: fulfilled.flatMap((r) => r.value),
+    hasMore: fulfilled.some((r) => r.value.length >= PROVIDER_PAGE_SIZE),
+  };
 }
+
+const pageSchema = z.coerce.number().int().min(1).max(50).default(1);
 
 export async function discoveryRoutes(app: FastifyInstance) {
   app.get("/discover/trending", async (req, reply) => {
-    const query = z.object({ mediaType: z.enum(["movie", "tv", "game", "all"]).default("all") }).parse(req.query);
-
-    const fetchers: Array<() => Promise<TitleSummary[]>> = [];
-    if ((query.mediaType === "movie" || query.mediaType === "all") && isTmdbConfigured()) {
-      fetchers.push(() => tmdb.trending("movie", "week"));
-    }
-    if ((query.mediaType === "tv" || query.mediaType === "all") && isTmdbConfigured()) {
-      fetchers.push(() => tmdb.trending("tv", "week"));
-    }
-    if ((query.mediaType === "game" || query.mediaType === "all") && isIgdbConfigured()) {
-      fetchers.push(() => igdb.anticipatedGames());
-    }
-
-    const combined = await settleAll(fetchers);
-    return reply.send({ results: sortByHype(combined) });
-  });
-
-  app.get("/discover/upcoming", async (req, reply) => {
-    const query = z.object({ mediaType: z.enum(["movie", "tv", "game", "all"]).default("all") }).parse(req.query);
-
-    const fetchers: Array<() => Promise<TitleSummary[]>> = [];
-    if ((query.mediaType === "movie" || query.mediaType === "all") && isTmdbConfigured()) {
-      fetchers.push(() => tmdb.upcomingMovies());
-    }
-    if ((query.mediaType === "tv" || query.mediaType === "all") && isTmdbConfigured()) {
-      fetchers.push(() => tmdb.onTheAirTv());
-    }
-    if ((query.mediaType === "game" || query.mediaType === "all") && isIgdbConfigured()) {
-      fetchers.push(() => igdb.upcomingGames());
-    }
-
-    const combined = await settleAll(fetchers);
-    const withCountdowns = combined
-      .map((t) => ({ ...t, countdown: computeCountdown(t.releaseWindow) }))
-      .sort((a, b) => (a.countdown.msRemaining ?? Infinity) - (b.countdown.msRemaining ?? Infinity));
-    return reply.send({ results: withCountdowns });
-  });
-
-  app.get("/search", async (req, reply) => {
     const query = z
-      .object({ q: z.string().min(1), mediaType: z.enum(["movie", "tv", "game", "all"]).default("all") })
+      .object({ mediaType: z.enum(["movie", "tv", "game", "all"]).default("all"), page: pageSchema })
       .parse(req.query);
 
     const fetchers: Array<() => Promise<TitleSummary[]>> = [];
     if ((query.mediaType === "movie" || query.mediaType === "all") && isTmdbConfigured()) {
-      fetchers.push(() => tmdb.search("movie", query.q));
+      fetchers.push(() => tmdb.trending("movie", "week", query.page));
     }
     if ((query.mediaType === "tv" || query.mediaType === "all") && isTmdbConfigured()) {
-      fetchers.push(() => tmdb.search("tv", query.q));
+      fetchers.push(() => tmdb.trending("tv", "week", query.page));
     }
     if ((query.mediaType === "game" || query.mediaType === "all") && isIgdbConfigured()) {
-      fetchers.push(() => igdb.searchGames(query.q));
+      fetchers.push(() => igdb.anticipatedGames(query.page));
     }
 
-    const combined = await settleAll(fetchers);
-    return reply.send({ results: combined });
+    const { results, hasMore } = await settleAll(fetchers);
+    return reply.send({ results: sortByHype(results), page: query.page, hasMore });
+  });
+
+  app.get("/discover/upcoming", async (req, reply) => {
+    const query = z
+      .object({ mediaType: z.enum(["movie", "tv", "game", "all"]).default("all"), page: pageSchema })
+      .parse(req.query);
+
+    const fetchers: Array<() => Promise<TitleSummary[]>> = [];
+    if ((query.mediaType === "movie" || query.mediaType === "all") && isTmdbConfigured()) {
+      fetchers.push(() => tmdb.upcomingMovies(query.page));
+    }
+    if ((query.mediaType === "tv" || query.mediaType === "all") && isTmdbConfigured()) {
+      fetchers.push(() => tmdb.onTheAirTv(query.page));
+    }
+    if ((query.mediaType === "game" || query.mediaType === "all") && isIgdbConfigured()) {
+      fetchers.push(() => igdb.upcomingGames(query.page));
+    }
+
+    const { results, hasMore } = await settleAll(fetchers);
+    const withCountdowns = results
+      .map((t) => ({ ...t, countdown: computeCountdown(t.releaseWindow) }))
+      .sort((a, b) => (a.countdown.msRemaining ?? Infinity) - (b.countdown.msRemaining ?? Infinity));
+    return reply.send({ results: withCountdowns, page: query.page, hasMore });
+  });
+
+  app.get("/search", async (req, reply) => {
+    const query = z
+      .object({ q: z.string().min(1), mediaType: z.enum(["movie", "tv", "game", "all"]).default("all"), page: pageSchema })
+      .parse(req.query);
+
+    const fetchers: Array<() => Promise<TitleSummary[]>> = [];
+    if ((query.mediaType === "movie" || query.mediaType === "all") && isTmdbConfigured()) {
+      fetchers.push(() => tmdb.search("movie", query.q, query.page));
+    }
+    if ((query.mediaType === "tv" || query.mediaType === "all") && isTmdbConfigured()) {
+      fetchers.push(() => tmdb.search("tv", query.q, query.page));
+    }
+    if ((query.mediaType === "game" || query.mediaType === "all") && isIgdbConfigured()) {
+      fetchers.push(() => igdb.searchGames(query.q, query.page));
+    }
+
+    const { results, hasMore } = await settleAll(fetchers);
+    return reply.send({ results, page: query.page, hasMore });
   });
 
   app.get("/titles/:mediaType/:externalId", async (req, reply) => {

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl } from "react-native";
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { TitleSummary } from "@slate/shared";
 import { api } from "../../api/client";
@@ -9,23 +9,57 @@ import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "Home">;
 
-function Section({ title, data, onPressTitle }: { title: string; data: TitleSummary[]; onPressTitle: (id: string) => void }) {
-  if (data.length === 0) return null;
+interface DiscoverResponse {
+  results: TitleSummary[];
+  page: number;
+  hasMore: boolean;
+}
+
+interface SectionState {
+  items: TitleSummary[];
+  page: number;
+  hasMore: boolean;
+  isLoadingMore: boolean;
+}
+
+const EMPTY_SECTION: SectionState = { items: [], page: 1, hasMore: false, isLoadingMore: false };
+
+function Section({
+  title,
+  state,
+  onPressTitle,
+  onLoadMore,
+}: {
+  title: string;
+  state: SectionState;
+  onPressTitle: (id: string) => void;
+  onLoadMore: () => void;
+}) {
+  if (state.items.length === 0) return null;
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        {data.map((t) => (
+        {state.items.map((t) => (
           <TitleCard key={t.id} title={t} onPress={() => onPressTitle(t.id)} />
         ))}
+        {state.hasMore && (
+          <TouchableOpacity style={styles.moreCard} onPress={onLoadMore} disabled={state.isLoadingMore}>
+            {state.isLoadingMore ? (
+              <ActivityIndicator color={colors.accent} />
+            ) : (
+              <Text style={styles.moreCardText}>Load more →</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );
 }
 
 export function HomeScreen({ navigation }: Props) {
-  const [trending, setTrending] = useState<TitleSummary[]>([]);
-  const [upcoming, setUpcoming] = useState<TitleSummary[]>([]);
+  const [trending, setTrending] = useState<SectionState>(EMPTY_SECTION);
+  const [upcoming, setUpcoming] = useState<SectionState>(EMPTY_SECTION);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,11 +67,11 @@ export function HomeScreen({ navigation }: Props) {
     setError(null);
     try {
       const [trendingRes, upcomingRes] = await Promise.all([
-        api.get<{ results: TitleSummary[] }>("/discover/trending"),
-        api.get<{ results: TitleSummary[] }>("/discover/upcoming"),
+        api.get<DiscoverResponse>("/discover/trending"),
+        api.get<DiscoverResponse>("/discover/upcoming"),
       ]);
-      setTrending(trendingRes.results);
-      setUpcoming(upcomingRes.results);
+      setTrending({ items: trendingRes.results, page: trendingRes.page, hasMore: trendingRes.hasMore, isLoadingMore: false });
+      setUpcoming({ items: upcomingRes.results, page: upcomingRes.page, hasMore: upcomingRes.hasMore, isLoadingMore: false });
     } catch {
       setError("Couldn't load Slate right now. Pull to refresh to try again.");
     } finally {
@@ -49,6 +83,26 @@ export function HomeScreen({ navigation }: Props) {
     load();
   }, [load]);
 
+  async function loadMoreTrending() {
+    setTrending((prev) => ({ ...prev, isLoadingMore: true }));
+    try {
+      const res = await api.get<DiscoverResponse>(`/discover/trending?page=${trending.page + 1}`);
+      setTrending((prev) => ({ items: [...prev.items, ...res.results], page: res.page, hasMore: res.hasMore, isLoadingMore: false }));
+    } catch {
+      setTrending((prev) => ({ ...prev, isLoadingMore: false }));
+    }
+  }
+
+  async function loadMoreUpcoming() {
+    setUpcoming((prev) => ({ ...prev, isLoadingMore: true }));
+    try {
+      const res = await api.get<DiscoverResponse>(`/discover/upcoming?page=${upcoming.page + 1}`);
+      setUpcoming((prev) => ({ items: [...prev.items, ...res.results], page: res.page, hasMore: res.hasMore, isLoadingMore: false }));
+    } catch {
+      setUpcoming((prev) => ({ ...prev, isLoadingMore: false }));
+    }
+  }
+
   const goToDetail = (titleId: string) => navigation.navigate("TitleDetail", { titleId });
 
   return (
@@ -59,15 +113,15 @@ export function HomeScreen({ navigation }: Props) {
       <Text style={styles.header}>Slate</Text>
       <Text style={styles.tagline}>The home of entertainment hype.</Text>
 
-      {isLoading && trending.length === 0 && upcoming.length === 0 ? (
+      {isLoading && trending.items.length === 0 && upcoming.items.length === 0 ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={colors.accent} />
       ) : error ? (
         <Text style={styles.error}>{error}</Text>
       ) : (
         <>
-          <Section title="Trending now" data={trending} onPressTitle={goToDetail} />
-          <Section title="Coming up" data={upcoming} onPressTitle={goToDetail} />
-          {trending.length === 0 && upcoming.length === 0 && (
+          <Section title="Trending now" state={trending} onPressTitle={goToDetail} onLoadMore={loadMoreTrending} />
+          <Section title="Coming up" state={upcoming} onPressTitle={goToDetail} onLoadMore={loadMoreUpcoming} />
+          {trending.items.length === 0 && upcoming.items.length === 0 && (
             <Text style={styles.empty}>
               No data configured yet. Add TMDB_API_KEY / TWITCH_CLIENT_ID+SECRET to the backend .env to populate Slate.
             </Text>
@@ -86,4 +140,6 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 10 },
   error: { color: colors.accent, marginTop: 20 },
   empty: { color: colors.textMuted, marginTop: 20, lineHeight: 20 },
+  moreCard: { width: 100, height: 190, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 10 },
+  moreCardText: { color: colors.accent, fontWeight: "600", fontSize: 13, textAlign: "center" },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { View, Text, TextInput, FlatList, StyleSheet, ActivityIndicator } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { TitleSummary } from "@slate/shared";
@@ -9,30 +9,62 @@ import { TitleCard } from "../../components/TitleCard";
 
 type Props = NativeStackScreenProps<SearchStackParamList, "Search">;
 
+interface SearchResponse {
+  results: TitleSummary[];
+  page: number;
+  hasMore: boolean;
+}
+
 export function SearchScreen({ navigation }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TitleSummary[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  let debounceHandle: ReturnType<typeof setTimeout>;
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const debounceHandle = useRef<ReturnType<typeof setTimeout>>();
+  const activeQuery = useRef("");
 
   function onChangeQuery(text: string) {
     setQuery(text);
-    clearTimeout(debounceHandle);
+    clearTimeout(debounceHandle.current);
     if (text.trim().length < 2) {
       setResults([]);
+      setHasMore(false);
       return;
     }
-    debounceHandle = setTimeout(async () => {
+    debounceHandle.current = setTimeout(async () => {
+      const trimmed = text.trim();
+      activeQuery.current = trimmed;
       setIsLoading(true);
       try {
-        const res = await api.get<{ results: TitleSummary[] }>(`/search?q=${encodeURIComponent(text.trim())}`);
+        const res = await api.get<SearchResponse>(`/search?q=${encodeURIComponent(trimmed)}`);
+        if (activeQuery.current !== trimmed) return; // a newer query already started
         setResults(res.results);
+        setPage(res.page);
+        setHasMore(res.hasMore);
       } catch {
         setResults([]);
+        setHasMore(false);
       } finally {
         setIsLoading(false);
       }
     }, 350);
+  }
+
+  async function loadMore() {
+    if (isLoadingMore || !hasMore || activeQuery.current.length < 2) return;
+    setIsLoadingMore(true);
+    try {
+      const res = await api.get<SearchResponse>(`/search?q=${encodeURIComponent(activeQuery.current)}&page=${page + 1}`);
+      setResults((prev) => [...prev, ...res.results]);
+      setPage(res.page);
+      setHasMore(res.hasMore);
+    } catch {
+      // leave hasMore as-is; user can pull to try scrolling again
+    } finally {
+      setIsLoadingMore(false);
+    }
   }
 
   return (
@@ -51,10 +83,13 @@ export function SearchScreen({ navigation }: Props) {
         keyExtractor={(item) => item.id}
         numColumns={2}
         columnWrapperStyle={{ gap: 12 }}
-        contentContainerStyle={{ gap: 12, paddingTop: 16 }}
+        contentContainerStyle={{ gap: 12, paddingTop: 16, paddingBottom: 24 }}
         renderItem={({ item }) => (
           <TitleCard title={item} onPress={() => navigation.navigate("TitleDetail", { titleId: item.id })} />
         )}
+        onEndReachedThreshold={0.5}
+        onEndReached={loadMore}
+        ListFooterComponent={isLoadingMore ? <ActivityIndicator color={colors.accent} style={{ marginVertical: 16 }} /> : null}
         ListEmptyComponent={
           !isLoading && query.length >= 2 ? <Text style={styles.empty}>No results for "{query}"</Text> : null
         }

@@ -62,6 +62,32 @@ export interface Trailer {
   publishedAt?: string;
 }
 
+/** One season of a TV show, as listed on the show's detail page — not the full episode list. */
+export interface SeasonSummary {
+  seasonNumber: number;
+  name: string;
+  episodeCount: number;
+  airDate?: string;
+  posterUrl?: string;
+  overview?: string;
+}
+
+export interface Episode {
+  episodeNumber: number;
+  name: string;
+  overview: string;
+  airDate?: string;
+  stillUrl?: string;
+  voteAverage?: number;
+}
+
+export interface SeasonDetail {
+  seasonNumber: number;
+  name: string;
+  overview?: string;
+  episodes: Episode[];
+}
+
 export interface TitleDetail extends TitleSummary {
   overview: string;
   tagline?: string;
@@ -77,6 +103,8 @@ export interface TitleDetail extends TitleSummary {
   /** TV/game-specific: season/episode or DLC context, when applicable. */
   seasonNumber?: number;
   episodeCount?: number;
+  /** TV only: one entry per season, for a season-picker UI. Fetch full episodes via the season detail endpoint. */
+  seasons?: SeasonSummary[];
   platforms?: string[]; // games only
   attribution: DataAttribution;
 }

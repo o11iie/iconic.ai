@@ -1,5 +1,5 @@
 import { getEnv, isTmdbConfigured } from "../../env";
-import type { Genre, MediaType, ReleaseWindow, TitleDetail, TitleSummary } from "@slate/shared";
+import type { Episode, Genre, MediaType, ReleaseWindow, SeasonDetail, TitleDetail, TitleSummary } from "@slate/shared";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p";
@@ -50,6 +50,32 @@ interface TmdbDetail {
   credits?: { cast: TmdbCastMember[] };
   videos?: { results: TmdbVideo[] };
   belongs_to_collection?: { id: number; name: string } | null;
+  seasons?: TmdbSeasonSummary[]; // tv only
+}
+
+interface TmdbSeasonSummary {
+  season_number: number;
+  name: string;
+  episode_count: number;
+  air_date: string | null;
+  poster_path: string | null;
+  overview?: string;
+}
+
+interface TmdbEpisode {
+  episode_number: number;
+  name: string;
+  overview: string;
+  air_date: string | null;
+  still_path: string | null;
+  vote_average: number;
+}
+
+interface TmdbSeasonDetail {
+  season_number: number;
+  name: string;
+  overview?: string;
+  episodes: TmdbEpisode[];
 }
 
 async function tmdbFetch<T>(path: string, params: Record<string, string> = {}): Promise<T> {
@@ -141,6 +167,17 @@ async function toDetail(item: TmdbDetail, mediaType: "movie" | "tv"): Promise<Ti
       .filter((v) => v.site === "YouTube" && (v.type === "Trailer" || v.type === "Teaser"))
       .map((v) => ({ id: v.id, name: v.name, site: "YouTube" as const, key: v.key, official: v.official, publishedAt: v.published_at })),
     episodeCount: item.number_of_episodes,
+    seasons: item.seasons
+      // TMDB includes a "Specials" pseudo-season as season_number 0 — exclude it from the picker.
+      ?.filter((s) => s.season_number > 0)
+      .map((s) => ({
+        seasonNumber: s.season_number,
+        name: s.name,
+        episodeCount: s.episode_count,
+        airDate: s.air_date ?? undefined,
+        posterUrl: posterUrl(s.poster_path),
+        overview: s.overview || undefined,
+      })),
     franchise: item.belongs_to_collection
       ? { id: String(item.belongs_to_collection.id), name: item.belongs_to_collection.name, watchOrder: [] }
       : undefined,
@@ -151,8 +188,12 @@ async function toDetail(item: TmdbDetail, mediaType: "movie" | "tv"): Promise<Ti
   };
 }
 
-export async function trending(mediaType: "movie" | "tv" | "all", window: "day" | "week"): Promise<TitleSummary[]> {
-  const data = await tmdbFetch<TmdbListResponse>(`/trending/${mediaType}/${window}`);
+export async function trending(
+  mediaType: "movie" | "tv" | "all",
+  window: "day" | "week",
+  page = 1,
+): Promise<TitleSummary[]> {
+  const data = await tmdbFetch<TmdbListResponse>(`/trending/${mediaType}/${window}`, { page: String(page) });
   return data.results.map((r) => toSummary(r, mediaType === "all" ? (r.title ? "movie" : "tv") : mediaType));
 }
 
@@ -179,4 +220,17 @@ export async function getDetail(mediaType: "movie" | "tv", externalId: string): 
 export function parseTitleId(titleId: string): { mediaType: MediaType; externalId: string } {
   const [prefix, externalId] = titleId.split(":");
   return { mediaType: prefix as MediaType, externalId };
+}
+
+export async function getSeasonDetail(tvId: string, seasonNumber: number): Promise<SeasonDetail> {
+  const data = await tmdbFetch<TmdbSeasonDetail>(`/tv/${tvId}/season/${seasonNumber}`);
+  const episodes: Episode[] = data.episodes.map((e) => ({
+    episodeNumber: e.episode_number,
+    name: e.name,
+    overview: e.overview,
+    airDate: e.air_date ?? undefined,
+    stillUrl: backdropUrl(e.still_path),
+    voteAverage: e.vote_average || undefined,
+  }));
+  return { seasonNumber: data.season_number, name: data.name, overview: data.overview || undefined, episodes };
 }

@@ -119,23 +119,26 @@ function toDetail(game: IgdbGame): TitleDetail {
 const GAME_FIELDS =
   "id,name,summary,cover.image_id,screenshots.image_id,first_release_date,genres.id,genres.name,platforms.name,rating,videos.video_id,videos.name";
 
-export async function upcomingGames(limit = 20): Promise<TitleSummary[]> {
+export async function upcomingGames(page = 1, limit = 20): Promise<TitleSummary[]> {
   const nowUnix = Math.floor(Date.now() / 1000);
-  const body = `fields ${GAME_FIELDS}; where first_release_date > ${nowUnix} & hypes > 0; sort hypes desc; limit ${limit};`;
+  const offset = (page - 1) * limit;
+  const body = `fields ${GAME_FIELDS}; where first_release_date > ${nowUnix} & hypes > 0; sort hypes desc; limit ${limit}; offset ${offset};`;
   const games = await igdbQuery<IgdbGame[]>("games", body);
   return games.map(toSummary);
 }
 
-export async function anticipatedGames(limit = 20): Promise<TitleSummary[]> {
+export async function anticipatedGames(page = 1, limit = 20): Promise<TitleSummary[]> {
   const nowUnix = Math.floor(Date.now() / 1000);
-  const body = `fields ${GAME_FIELDS}; where first_release_date > ${nowUnix}; sort hypes desc; limit ${limit};`;
+  const offset = (page - 1) * limit;
+  const body = `fields ${GAME_FIELDS}; where first_release_date > ${nowUnix}; sort hypes desc; limit ${limit}; offset ${offset};`;
   const games = await igdbQuery<IgdbGame[]>("games", body);
   return games.map(toSummary);
 }
 
-export async function searchGames(query: string, limit = 20): Promise<TitleSummary[]> {
+export async function searchGames(query: string, page = 1, limit = 20): Promise<TitleSummary[]> {
   const sanitized = query.replace(/"/g, "");
-  const body = `search "${sanitized}"; fields ${GAME_FIELDS}; limit ${limit};`;
+  const offset = (page - 1) * limit;
+  const body = `search "${sanitized}"; fields ${GAME_FIELDS}; limit ${limit}; offset ${offset};`;
   const games = await igdbQuery<IgdbGame[]>("games", body);
   return games.map(toSummary);
 }

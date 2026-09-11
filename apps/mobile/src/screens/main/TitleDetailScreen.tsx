@@ -1,9 +1,70 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Linking } from "react-native";
 import type { RouteProp } from "@react-navigation/native";
-import type { TitleDetail } from "@slate/shared";
+import type { SeasonDetail, TitleDetail } from "@slate/shared";
 import { api, ApiError } from "../../api/client";
 import { colors } from "../../theme";
+
+function SeasonList({ tvId, seasons }: { tvId: string; seasons: NonNullable<TitleDetail["seasons"]> }) {
+  const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
+  const [seasonDetail, setSeasonDetail] = useState<SeasonDetail | null>(null);
+  const [isLoadingSeason, setIsLoadingSeason] = useState(false);
+
+  async function toggleSeason(seasonNumber: number) {
+    if (expandedSeason === seasonNumber) {
+      setExpandedSeason(null);
+      setSeasonDetail(null);
+      return;
+    }
+    setExpandedSeason(seasonNumber);
+    setSeasonDetail(null);
+    setIsLoadingSeason(true);
+    try {
+      const res = await api.get<{ season: SeasonDetail }>(`/tv/${tvId}/season/${seasonNumber}`);
+      setSeasonDetail(res.season);
+    } catch {
+      setSeasonDetail(null);
+    } finally {
+      setIsLoadingSeason(false);
+    }
+  }
+
+  return (
+    <View>
+      <Text style={styles.sectionTitle}>Seasons</Text>
+      {seasons.map((season) => (
+        <View key={season.seasonNumber}>
+          <TouchableOpacity style={styles.seasonRow} onPress={() => toggleSeason(season.seasonNumber)}>
+            <Text style={styles.seasonName}>{season.name}</Text>
+            <Text style={styles.seasonMeta}>
+              {season.episodeCount} episode{season.episodeCount === 1 ? "" : "s"}
+              {season.airDate ? ` · ${new Date(season.airDate).getFullYear()}` : ""}
+            </Text>
+          </TouchableOpacity>
+          {expandedSeason === season.seasonNumber && (
+            <View style={styles.episodeList}>
+              {isLoadingSeason ? (
+                <ActivityIndicator color={colors.accent} style={{ marginVertical: 12 }} />
+              ) : seasonDetail ? (
+                seasonDetail.episodes.map((ep) => (
+                  <View key={ep.episodeNumber} style={styles.episodeRow}>
+                    <Text style={styles.episodeTitle}>
+                      {ep.episodeNumber}. {ep.name}
+                    </Text>
+                    {ep.airDate && <Text style={styles.episodeMeta}>{ep.airDate}</Text>}
+                    {ep.overview ? <Text style={styles.episodeOverview}>{ep.overview}</Text> : null}
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.episodeMeta}>Couldn't load episodes for this season.</Text>
+              )}
+            </View>
+          )}
+        </View>
+      ))}
+    </View>
+  );
+}
 
 type RouteParams = Record<string, object | undefined> & {
   TitleDetail: { titleId: string };
@@ -104,6 +165,10 @@ export function TitleDetailScreen({ route, navigation }: Props) {
           </>
         )}
 
+        {detail.mediaType === "tv" && detail.seasons && detail.seasons.length > 0 && (
+          <SeasonList tvId={titleId.split(":")[1]} seasons={detail.seasons} />
+        )}
+
         <Text style={styles.attribution}>{detail.attribution.notice}</Text>
       </View>
     </ScrollView>
@@ -127,4 +192,16 @@ const styles = StyleSheet.create({
   castText: { color: colors.textMuted, lineHeight: 20 },
   attribution: { color: colors.textMuted, fontSize: 11, marginTop: 24 },
   error: { color: colors.accent, textAlign: "center", marginTop: 60 },
+  seasonRow: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  seasonName: { color: colors.text, fontSize: 15, fontWeight: "600" },
+  seasonMeta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  episodeList: { paddingLeft: 12, paddingBottom: 8 },
+  episodeRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+  episodeTitle: { color: colors.text, fontSize: 14, fontWeight: "600" },
+  episodeMeta: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  episodeOverview: { color: colors.textMuted, fontSize: 12, marginTop: 4, lineHeight: 17 },
 });

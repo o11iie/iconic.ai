@@ -53,4 +53,12 @@ export async function moviesTvRoutes(app: FastifyInstance) {
     const detail = await handleTmdbErrors(reply, () => tmdb.getDetail("tv", params.id));
     if (detail) return reply.send({ title: detail });
   });
+
+  app.get("/tv/:id/season/:seasonNumber", async (req, reply) => {
+    const params = z
+      .object({ id: z.string(), seasonNumber: z.coerce.number().int().min(1) })
+      .parse(req.params);
+    const season = await handleTmdbErrors(reply, () => tmdb.getSeasonDetail(params.id, params.seasonNumber));
+    if (season) return reply.send({ season });
+  });
 }
