@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Activi
 import type { RouteProp } from "@react-navigation/native";
 import type { CommunityComment, CommunityPost, ReactionKind, ReportReason } from "@slate/shared";
 import { api } from "../../api/client";
+import { track } from "../../analytics/analytics";
 import { colors } from "../../theme";
 import { SpoilerGate } from "../../components/SpoilerGate";
 
@@ -59,6 +60,7 @@ export function PostDetailScreen({ route }: Props) {
     try {
       const res = await api.post<{ counts: Record<ReactionKind, number> }>(`/community/posts/${postId}/reactions`, { kind });
       setPost({ ...post, reactionCounts: res.counts });
+      track("community_reaction", { kind });
     } catch {
       // best-effort
     }
@@ -69,6 +71,7 @@ export function PostDetailScreen({ route }: Props) {
     setIsSubmittingComment(true);
     try {
       await api.post(`/community/posts/${postId}/comments`, { body: commentBody.trim(), containsSpoilers: commentHasSpoilers });
+      track("community_comment", { containsSpoilers: commentHasSpoilers });
       setCommentBody("");
       setCommentHasSpoilers(false);
       await loadComments();

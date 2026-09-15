@@ -7,6 +7,7 @@ import { AiProviderNotConfiguredError } from "./provider";
 import { assertWithinLimit, incrementUsage, AiRateLimitError, getDailyLimit, getUsedToday } from "./usage-limits";
 import * as tmdb from "../tmdb/tmdb.client";
 import * as igdb from "../igdb/igdb.client";
+import type { PaywallTrigger } from "@slate/shared";
 
 const MAX_MESSAGE_LENGTH = 1000;
 
@@ -110,6 +111,10 @@ export async function aiRoutes(app: FastifyInstance) {
         return reply.code(429).send({
           error: `You've reached today's Ask Slate limit (${err.limit}). Upgrade to Slate Pro for a higher daily limit.`,
           code: "AI_LIMIT_REACHED",
+          // Typed so the client opens the paywall on the benefit the user was
+          // actually reaching for, the same way the follow and watchlist
+          // gates do. Without it AI_LIMIT is a trigger nothing can ever emit.
+          trigger: "AI_LIMIT" satisfies PaywallTrigger,
         });
       }
       throw err;

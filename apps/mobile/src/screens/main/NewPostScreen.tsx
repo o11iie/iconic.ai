@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch, ActivityIn
 import type { RouteProp } from "@react-navigation/native";
 import type { PostKind } from "@slate/shared";
 import { api } from "../../api/client";
+import { track } from "../../analytics/analytics";
 import { colors } from "../../theme";
 
 type RouteParams = Record<string, object | undefined> & {
@@ -35,6 +36,7 @@ export function NewPostScreen({ route, navigation }: Props) {
     setError(null);
     try {
       await api.post("/community/posts", { titleId, kind, body: body.trim(), containsSpoilers });
+      track("community_post", { kind, containsSpoilers });
       navigation.goBack();
     } catch {
       setError("Couldn't post right now. Please try again.");

@@ -145,6 +145,11 @@ export function TitleDetailScreen({ route, navigation }: Props) {
       .get<{ title: TitleDetail; countdown: { displayLabel: string } }>(`/titles/${mediaType}/${externalId}`)
       .then((res) => {
         setDetail({ ...res.title, countdown: res.countdown });
+        // Only when a countdown is genuinely rendered — a title with no
+        // known release date shows "TBA" and is not a countdown view.
+        if (res.countdown?.displayLabel) {
+          track("countdown_view", { titleId, mediaType });
+        }
         track("title_view", { titleId, mediaType });
       })
       .catch(() => setError("Couldn't load this title."));

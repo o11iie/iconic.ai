@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, ActivityIndicator } from "react-native";
-import type { RouteProp } from "@react-navigation/native";
+import type { NavigationProp, RouteProp } from "@react-navigation/native";
+import type { PaywallTrigger } from "@slate/shared";
 import { api, ApiError } from "../../api/client";
 import { colors } from "../../theme";
 import { useAuth } from "../../state/AuthContext";
@@ -24,6 +25,7 @@ type RouteParams = Record<string, object | undefined> & {
 
 interface Props {
   route: RouteProp<RouteParams, "AskSlate">;
+  navigation: NavigationProp<{ ProUpgrade: { trigger?: PaywallTrigger } | undefined }>;
 }
 
 interface ChatMessage {
@@ -32,12 +34,17 @@ interface ChatMessage {
   content: string;
 }
 
-export function AskSlateScreen({ route }: Props) {
+export function AskSlateScreen({ route, navigation }: Props) {
   const titleId = route.params?.titleId;
   const { user } = useAuth();
   const spoilerSensitivity = toAskSlateSpoilerSensitivity(user?.preferences.spoilerSensitivity ?? "HIDE_RECENT");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
+  const [upgradeTrigger, setUpgradeTrigger] = useState<PaywallTrigger | null>(null);
+
+  useEffect(() => {
+    track("ai_open", { hasTitleContext: Boolean(titleId) });
+  }, [titleId]);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [isSending, setIsSending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -64,6 +71,9 @@ export function AskSlateScreen({ route }: Props) {
       if (err instanceof ApiError && err.code === "AI_LIMIT_REACHED") {
         track("ai_limit_reached");
         setNotice(err.message);
+        // The limit is the moment Pro is worth something to this user, so
+        // offer it here rather than leaving a dead end with a message.
+        setUpgradeTrigger(err.trigger ?? "AI_LIMIT");
       } else if (err instanceof ApiError && err.code === "AI_NOT_CONFIGURED") {
         setNotice("Ask Slate isn't configured yet — the backend needs an OpenAI API key.");
       } else {
@@ -93,6 +103,15 @@ export function AskSlateScreen({ route }: Props) {
         }
       />
       {notice && <Text style={styles.notice}>{notice}</Text>}
+      {upgradeTrigger && (
+        <TouchableOpacity
+          style={styles.upgradeButton}
+          onPress={() => navigation.navigate("ProUpgrade", { trigger: upgradeTrigger })}
+          accessibilityRole="button"
+        >
+          <Text style={styles.upgradeButtonText}>See Slate Pro</Text>
+        </TouchableOpacity>
+      )}
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
@@ -119,6 +138,14 @@ const styles = StyleSheet.create({
   bubbleText: { color: colors.text },
   empty: { color: colors.textMuted, marginTop: 40, textAlign: "center", lineHeight: 20 },
   notice: { color: colors.pro, fontSize: 12, marginBottom: 8 },
+  upgradeButton: {
+    backgroundColor: colors.pro,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  upgradeButtonText: { color: "#000", fontWeight: "700" },
   inputRow: { flexDirection: "row", gap: 8, alignItems: "center" },
   input: { flex: 1, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 10, padding: 12, color: colors.text },
   sendButton: { backgroundColor: colors.accent, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12 },

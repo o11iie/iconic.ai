@@ -3,6 +3,7 @@ import { View, Text, TextInput, FlatList, StyleSheet, ActivityIndicator } from "
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { TitleSummary } from "@slate/shared";
 import { api } from "../../api/client";
+import { track } from "../../analytics/analytics";
 import { colors } from "../../theme";
 import type { SearchStackParamList } from "../../navigation/types";
 import { TitleCard } from "../../components/TitleCard";
@@ -39,6 +40,8 @@ export function SearchScreen({ navigation }: Props) {
     debounceHandle.current = setTimeout(async () => {
       const trimmed = text.trim();
       activeQuery.current = trimmed;
+      // Fired on the debounced query that actually runs, not per keystroke.
+      track("search", { length: trimmed.length });
       setIsLoading(true);
       try {
         const res = await api.get<SearchResponse>(`/search?q=${encodeURIComponent(trimmed)}`);
