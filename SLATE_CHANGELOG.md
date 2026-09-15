@@ -2,6 +2,20 @@
 
 This tracks implementation decisions as Slate is built, in the order they were made. See `SLATE_RISKS.md` for open risks and missing credentials, and `SLATE_RELEASE_READINESS.md` (added before release) for ship/no-ship status.
 
+## Gate 0 — 48-Hour Architecture Freeze
+
+Architecture **frozen** on Expo SDK 51 / RN 0.74.5. No upgrade performed, no dependencies added, no redesign.
+
+**Corrected a wrong call from Day 5.** Day 5 configured `compileSdk`/`targetSdk` 36 and verified the values landed in the generated `gradle.properties` — but that only proved they were *present*, not consumable. React Native 0.74.5 pins **AGP 8.2.1**, which caps `compileSdk` at **34** (36 requires AGP 8.9.1+, plus Gradle 8.11+; this project has 8.8). The Day 5 configuration was a **deterministic build failure**, and EAS Build would have failed identically since it compiles this same config.
+
+Attempted the SDK 54 upgrade that API 36 actually requires, then **reverted it in full**: `expo install --fix` — the supported way to resolve the matched native version set — cannot run here because `api.expo.dev` is blocked by network policy (403). Hand-pinning ~15 interdependent native versions with no ability to compile or device-test is not a "smallest safe upgrade."
+
+Corrected targeting to **API 34** instead. Neither value ships today, but they fail differently: API 36 compiles nothing, while API 34 builds cleanly — which unblocks the real device QA that was Day 5's highest-value outstanding item. Verified via `expo prebuild` that AGP 8.2.1 / compileSdk 34 is self-consistent and cleartext stays disabled.
+
+Also checked and recorded: `react-native-iap` inherits SDK levels (no independent ceiling) and bundles Play Billing 7.0.0, overridable by Gradle property.
+
+Full decision, evidence table, and the required pre-submission steps are in `SLATE_48HR_BUILD_DECISION.md`. Suite green throughout: typecheck ×3 PASS, lint PASS, 24/24 tests.
+
 ## Day 5 — Release Gate (security, Android config, QA)
 
 No new product features, by design. See `SLATE_RELEASE_READINESS.md` for the full green/yellow/red assessment.

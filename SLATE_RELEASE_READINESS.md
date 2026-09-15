@@ -61,12 +61,14 @@ None of these are code defects. Each is an external account/credential action, a
 - **Difficulty:** Low effort, but must actually be run.
 - **Prevents Play Store submission:** **Yes** — there is no artifact to submit until this runs.
 
-### 2. API 36 targeting is configured but uncompiled, on an older Expo SDK
-- **Issue:** `expo-build-properties` is configured for `compileSdkVersion`/`targetSdkVersion` 36 and this was **verified to land correctly** in the generated `android/gradle.properties`. However, the project is on Expo SDK 51 / RN 0.74, whose template defaults to API 34. Targeting 36 from SDK 51 is a supported override but is **not a combination this project has compiled or run**, and API 35+ brings behavior changes (notably enforced edge-to-edge layout) that have not been visually tested.
-- **Impact:** The build may fail to compile, or may compile and render with layout problems under the new edge-to-edge behavior.
-- **Action required:** Either (a) run the production build and fix what surfaces, or (b) the cleaner long-term path — upgrade to Expo SDK 54, which targets API 36 natively. Note the ecosystem has already moved: installing `expo-build-properties` at `latest` resolves to the SDK 54-era version and had to be pinned back to `~0.12.5` for SDK 51.
-- **Difficulty:** Medium (option a) to High (option b, a full SDK upgrade requiring regression testing).
-- **Prevents Play Store submission:** **Yes** — Google Play will reject a new app targeting below the current minimum.
+### 2. Android target SDK is below Play's minimum (CORRECTED at Gate 0)
+> **This entry was wrong as originally written and has been corrected.** Day 5 claimed API 36 was "configured but uncompiled." It was in fact **impossible to compile**: React Native 0.74.5 pins **AGP 8.2.1**, which caps `compileSdk` at **34** (`compileSdk 36` requires AGP 8.9.1+). Verifying the value landed in `gradle.properties` proved it was *present*, not that the toolchain could consume it. See `SLATE_48HR_BUILD_DECISION.md`.
+
+- **Issue:** Targeting is now set to **API 34** — the maximum Expo SDK 51's toolchain supports — so the project genuinely compiles. API 34 is below Google Play's minimum for new apps.
+- **Impact:** The app builds and can be device-tested today, but **cannot be submitted**.
+- **Action required:** Upgrade to Expo SDK 54 (ships AGP ≥ 8.9 / Gradle ≥ 8.13 and native API 36 support), then restore targeting to 36. Must be done on a machine with unrestricted network access — `expo install --fix` requires `api.expo.dev`, which this sandbox blocks by policy — and an Android SDK to compile against.
+- **Difficulty:** High — a real SDK upgrade (RN 0.74→0.81, React 18→19, `react-native-iap` major) requiring a full regression pass.
+- **Prevents Play Store submission:** **Yes.**
 
 ### 3. No on-device QA has been performed
 - **Issue:** No emulator or physical device was available. The full user journey (launch → onboarding → discovery → follow → countdown → community → Ask Slate → paywall → purchase → restore) has been verified at the **API level against a real database**, but never by tapping through the actual app.
