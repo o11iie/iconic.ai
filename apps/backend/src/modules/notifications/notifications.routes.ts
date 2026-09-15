@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../prisma";
+import { requireRole } from "../../plugins/require-role";
+import { runReleaseAlertSweep } from "./release-alerts";
 
 export async function notificationRoutes(app: FastifyInstance) {
   app.get("/notifications", { preHandler: [app.authenticate] }, async (req, reply) => {
@@ -39,4 +41,24 @@ export async function notificationRoutes(app: FastifyInstance) {
     });
     return reply.send({ ok: true });
   });
+
+  app.get("/notifications/unread-count", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const count = await prisma.notification.count({ where: { userId: req.userId, readAt: null } });
+    return reply.send({ count });
+  });
+
+  /**
+   * Runs the release-alert sweep. Intended to be called on a schedule (a
+   * cron job or platform scheduler hitting this with an admin token) rather
+   * than from an in-process timer, so it works the same on one instance or
+   * ten. The sweep is idempotent, so a duplicate run is harmless.
+   */
+  app.post(
+    "/notifications/sweep-release-alerts",
+    { preHandler: [app.authenticate, requireRole("ADMIN")] },
+    async (_req, reply) => {
+      const result = await runReleaseAlertSweep();
+      return reply.send(result);
+    },
+  );
 }

@@ -2,6 +2,34 @@
 
 This tracks implementation decisions as Slate is built, in the order they were made. See `SLATE_RISKS.md` for open risks and missing credentials, and `SLATE_RELEASE_READINESS.md` (added before release) for ship/no-ship status.
 
+## Day 4 — Notifications, Ads, Analytics, Design Polish
+
+### Analytics: a dead table became a real feature
+`AnalyticsEvent` had existed in the schema since Day 1 with **zero code references** — no endpoint, no client, nothing writing to it. Built the whole path:
+- `POST /api/analytics/events` — validated batch ingest (max 50/request). Attribution is best-effort: a valid token attributes the event to a user, a missing/expired one records it anonymously rather than rejecting it, so pre-signup funnel events (`app_open`, `paywall_view`) are still measurable.
+- A mobile `track()` facade behind an `AnalyticsProvider` interface, queuing and flushing in batches so a burst of taps isn't a request per tap, re-queueing on network failure, and never surfacing an analytics error to the user.
+- Wired ~15 real call sites: app open, signup/login, title view, trailer view, follow/unfollow, watchlist add/remove, AI message, AI limit reached, paywall view (with the trigger that caused it), and the full purchase funnel (started/completed/failed/restored).
+
+### Notifications: generation, not just storage
+Only one notification was ever created app-wide (a community reply). There was no release-alert generation and no mobile UI at all.
+- `runReleaseAlertSweep()` scans followed titles and fires reminders at day milestones (free: 7/1/0, Pro additionally gets a 30-day heads-up). It honors the same precision rule as the countdown engine — a title whose date Slate only knows vaguely never produces a confident "releases tomorrow".
+- Idempotent by construction: each reminder records its `milestoneDays`, and the sweep skips a user+title+milestone it has already sent. Exposed as an admin-only endpoint intended for a cron/scheduler rather than an in-process timer, so it behaves identically on one instance or ten.
+- `dispatchNotification()` is now the **only** way a notification is created. Preference checks live there rather than at each call site, so a muted type can't leak through a feature that forgot to check.
+- Added real per-type preferences (`mutedNotificationTypes`, a new migration) on top of the existing global on/off, plumbed through the preferences API and shared types.
+- Built `NotificationsScreen` (read/unread, mark-all-read, tap-to-navigate into the title or post, empty state) and an unread badge on Home.
+
+### Ads: abstraction with Pro suppression enforced in one place
+No real ad network is wired up — AdMob needs an account, app ID, ad unit IDs, and a native module requiring a development build. Rather than ship a fake "Your ad here" placeholder, `NoOpAdProvider` renders nothing and the seam is ready: `AdSlot` is the only path an ad can reach the screen, and it checks the **backend-verified** entitlement first, so Pro users are ad-free by construction rather than by each screen remembering to check. Ad density lives in one config constant.
+
+### Design system
+`theme.ts` was just a color object. Expanded it into real tokens (spacing, radii, typography scale, min touch target) and added the shared state components the master spec calls for: `Skeleton`/`PosterRowSkeleton` (Home now shows layout-shaped skeletons instead of a bare spinner, so nothing jumps when data lands), and `EmptyState`/`ErrorState` with retry. Replaced generic copy with specific copy on Home, Search, and Watchlist.
+
+### Verification
+Backend typecheck/lint clean, 19/19 tests pass, mobile + shared typecheck clean. Live-verified against the real Postgres instance:
+- Analytics: authenticated events persisted **attributed**, anonymous events persisted **unattributed**, properties intact, empty batch correctly rejected with 400.
+- Sweep: created exactly one correctly-worded reminder, and a second identical run created **zero** — idempotency proven, not assumed.
+- Preference gates: muting `RELEASE_REMINDER` suppressed a due notification (0 created), unmuting let the same milestone through (1 created), and `notificationsEnabled: false` suppressed at the query level.
+
 ## Day 3 — Slate Pro, AI, Community
 
 ### Verification before building anything new

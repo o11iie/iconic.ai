@@ -7,6 +7,7 @@ import { AskSlateScreen } from "../screens/main/AskSlateScreen";
 import { ProUpgradeScreen } from "../screens/main/ProUpgradeScreen";
 import { NewPostScreen } from "../screens/main/NewPostScreen";
 import { PostDetailScreen } from "../screens/main/PostDetailScreen";
+import { NotificationsScreen } from "../screens/main/NotificationsScreen";
 import { colors } from "../theme";
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
@@ -26,6 +27,7 @@ export function HomeStack() {
       <Stack.Screen name="ProUpgrade" component={ProUpgradeScreen} options={{ title: "Slate Pro" }} />
       <Stack.Screen name="NewPost" component={NewPostScreen} options={{ title: "New Post" }} />
       <Stack.Screen name="PostDetail" component={PostDetailScreen} options={{ title: "Post" }} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

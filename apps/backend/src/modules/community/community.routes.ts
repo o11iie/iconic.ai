@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../prisma";
 import { ensureTitleExists } from "../titles/ensure-title";
+import { dispatchNotification } from "../notifications/dispatch";
 
 const postKindSchema = z.enum(["DISCUSSION", "PREDICTION", "THEORY", "REVIEW"]);
 const reactionKindSchema = z.enum(["HYPE", "LOVE", "MINDBLOWN", "LAUGH", "SKEPTICAL"]);
@@ -144,14 +145,12 @@ export async function communityRoutes(app: FastifyInstance) {
     });
 
     if (post.authorId !== req.userId) {
-      await prisma.notification.create({
-        data: {
-          userId: post.authorId,
-          type: "COMMUNITY_REPLY",
-          title: "New reply on your post",
-          body: body.body.slice(0, 140),
-          data: { postId: post.id, commentId: comment.id },
-        },
+      await dispatchNotification({
+        userId: post.authorId,
+        type: "COMMUNITY_REPLY",
+        title: "New reply on your post",
+        body: body.body.slice(0, 140),
+        data: { postId: post.id, commentId: comment.id },
       });
     }
 

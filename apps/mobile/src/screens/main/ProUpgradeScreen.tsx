@@ -5,6 +5,7 @@ import { api } from "../../api/client";
 import { colors } from "../../theme";
 import { useEntitlement } from "../../state/EntitlementContext";
 import { getExistingPurchases, purchaseSubscription } from "../../billing/iap";
+import { track } from "../../analytics/analytics";
 
 const BENEFITS = [
   "Unlimited follows & watchlist",
@@ -21,17 +22,21 @@ export function ProUpgradeScreen() {
   const [isRestoring, setIsRestoring] = useState(false);
 
   useEffect(() => {
+    track("paywall_view");
     api.get<{ products: ProductCatalogEntry[] }>("/billing/products").then((res) => setProducts(res.products));
   }, []);
 
   async function handlePurchase(productId: SlateProProductId) {
     setPurchasingId(productId);
+    track("purchase_started", { productId });
     try {
       const { purchaseToken } = await purchaseSubscription(productId);
       await api.post("/billing/verify-purchase", { productId, purchaseToken });
       await refresh();
+      track("purchase_completed", { productId });
       Alert.alert("Welcome to Slate Pro", "Your subscription is active.");
     } catch (err) {
+      track("purchase_failed", { productId, reason: err instanceof Error ? err.message : "unknown" });
       Alert.alert("Purchase failed", err instanceof Error ? err.message : "Please try again.");
     } finally {
       setPurchasingId(null);
@@ -46,6 +51,7 @@ export function ProUpgradeScreen() {
         await api.post("/billing/verify-purchase", p);
       }
       await refresh();
+      track("purchase_restored", { count: purchases.length });
       Alert.alert(purchases.length ? "Purchases restored" : "Nothing to restore", "");
     } catch (err) {
       Alert.alert("Restore failed", err instanceof Error ? err.message : "Please try again.");

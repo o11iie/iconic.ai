@@ -5,6 +5,9 @@ import type { TitleSummary } from "@slate/shared";
 import { api } from "../../api/client";
 import { colors } from "../../theme";
 import { TitleCard } from "../../components/TitleCard";
+import { PosterRowSkeleton } from "../../components/Skeleton";
+import { EmptyState, ErrorState } from "../../components/EmptyState";
+import { AdSlot } from "../../ads/AdSlot";
 import type { HomeStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "Home">;
@@ -64,9 +67,14 @@ export function HomeScreen({ navigation }: Props) {
   const [upcoming, setUpcoming] = useState<SectionState>(EMPTY_SECTION);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const load = useCallback(async () => {
     setError(null);
+    api
+      .get<{ count: number }>("/notifications/unread-count")
+      .then((res) => setUnreadCount(res.count))
+      .catch(() => setUnreadCount(0));
     try {
       const [forYouRes, trendingRes, upcomingRes] = await Promise.all([
         api.get<{ results: TitleSummary[]; personalized: boolean }>("/discover/for-you"),
@@ -115,13 +123,35 @@ export function HomeScreen({ navigation }: Props) {
       style={styles.container}
       refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} tintColor={colors.accent} />}
     >
-      <Text style={styles.header}>Slate</Text>
-      <Text style={styles.tagline}>The home of entertainment hype.</Text>
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.header}>Slate</Text>
+          <Text style={styles.tagline}>The home of entertainment hype.</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.bellButton}
+          onPress={() => navigation.navigate("Notifications")}
+          accessibilityRole="button"
+          accessibilityLabel={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+        >
+          <Text style={styles.bellIcon}>🔔</Text>
+          {unreadCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
 
       {isLoading && trending.items.length === 0 && upcoming.items.length === 0 ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={colors.accent} />
+        <>
+          <Text style={styles.sectionTitle}>Trending now</Text>
+          <PosterRowSkeleton />
+          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Coming up</Text>
+          <PosterRowSkeleton />
+        </>
       ) : error ? (
-        <Text style={styles.error}>{error}</Text>
+        <ErrorState message={error} onRetry={load} />
       ) : (
         <>
           {forYou.items.length > 0 && (
@@ -133,11 +163,15 @@ export function HomeScreen({ navigation }: Props) {
             </>
           )}
           <Section title="Trending now" state={trending} onPressTitle={goToDetail} onLoadMore={loadMoreTrending} />
+          <AdSlot placement="home_feed" />
           <Section title="Coming up" state={upcoming} onPressTitle={goToDetail} onLoadMore={loadMoreUpcoming} />
           {trending.items.length === 0 && upcoming.items.length === 0 && (
-            <Text style={styles.empty}>
-              No data configured yet. Add TMDB_API_KEY / TWITCH_CLIENT_ID+SECRET to the backend .env to populate Slate.
-            </Text>
+            <EmptyState
+              title="Nothing to show yet"
+              message="Slate's entertainment data isn't connected yet. Once TMDB and IGDB credentials are configured, trending and upcoming releases will appear here."
+              actionLabel="Retry"
+              onAction={load}
+            />
           )}
         </>
       )}
@@ -147,8 +181,24 @@ export function HomeScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background, padding: 20 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   header: { color: colors.text, fontSize: 32, fontWeight: "800", marginTop: 12 },
   tagline: { color: colors.textMuted, fontSize: 14, marginBottom: 20 },
+  bellButton: { marginTop: 16, padding: 8, minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  bellIcon: { fontSize: 20 },
+  badge: {
+    position: "absolute",
+    top: 2,
+    right: 0,
+    backgroundColor: colors.accent,
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  badgeText: { color: "#000", fontSize: 10, fontWeight: "800" },
   section: { marginBottom: 24 },
   sectionTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: 10 },
   error: { color: colors.accent, marginTop: 20 },

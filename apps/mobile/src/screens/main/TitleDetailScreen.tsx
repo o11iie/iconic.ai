@@ -4,6 +4,7 @@ import { useFocusEffect, type RouteProp } from "@react-navigation/native";
 import type { CommunityPost, ReactionKind, SeasonDetail, TitleDetail } from "@slate/shared";
 import { api, ApiError } from "../../api/client";
 import { colors } from "../../theme";
+import { track } from "../../analytics/analytics";
 import { CommunityPostCard } from "../../components/CommunityPostCard";
 
 function CommunitySection({
@@ -142,7 +143,10 @@ export function TitleDetailScreen({ route, navigation }: Props) {
     const [mediaType, externalId] = titleId.split(":");
     api
       .get<{ title: TitleDetail; countdown: { displayLabel: string } }>(`/titles/${mediaType}/${externalId}`)
-      .then((res) => setDetail({ ...res.title, countdown: res.countdown }))
+      .then((res) => {
+        setDetail({ ...res.title, countdown: res.countdown });
+        track("title_view", { titleId, mediaType });
+      })
       .catch(() => setError("Couldn't load this title."));
   }, [titleId]);
 
@@ -151,12 +155,15 @@ export function TitleDetailScreen({ route, navigation }: Props) {
       if (isFollowing) {
         await api.delete(`/follows/${titleId}`);
         setIsFollowing(false);
+        track("unfollow", { titleId });
       } else {
         await api.post("/follows", { titleId });
         setIsFollowing(true);
+        track("follow", { titleId });
       }
     } catch (err) {
       if (err instanceof ApiError && err.code === "PRO_REQUIRED") {
+        track("paywall_view", { trigger: "follow_limit" });
         navigation.navigate("ProUpgrade");
       }
     }
@@ -167,12 +174,15 @@ export function TitleDetailScreen({ route, navigation }: Props) {
       if (isOnWatchlist) {
         await api.delete(`/watchlist/${titleId}`);
         setIsOnWatchlist(false);
+        track("watchlist_remove", { titleId });
       } else {
         await api.post("/watchlist", { titleId });
         setIsOnWatchlist(true);
+        track("watchlist_add", { titleId });
       }
     } catch (err) {
       if (err instanceof ApiError && err.code === "PRO_REQUIRED") {
+        track("paywall_view", { trigger: "watchlist_limit" });
         navigation.navigate("ProUpgrade");
       }
     }
@@ -209,7 +219,12 @@ export function TitleDetailScreen({ route, navigation }: Props) {
         <Text style={styles.overview}>{detail.overview || "No overview available."}</Text>
 
         {trailer && (
-          <TouchableOpacity onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${trailer.key}`)}>
+          <TouchableOpacity
+            onPress={() => {
+              track("trailer_view", { titleId, trailerKey: trailer.key });
+              Linking.openURL(`https://www.youtube.com/watch?v=${trailer.key}`);
+            }}
+          >
             <Text style={styles.trailerLink}>▶ Watch trailer</Text>
           </TouchableOpacity>
         )}

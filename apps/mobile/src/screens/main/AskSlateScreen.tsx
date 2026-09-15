@@ -4,6 +4,7 @@ import type { RouteProp } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { colors } from "../../theme";
 import { useAuth } from "../../state/AuthContext";
+import { track } from "../../analytics/analytics";
 
 /** Ask Slate's request contract uses its own lowercase enum, independent of the stored SpoilerSensitivity enum. */
 function toAskSlateSpoilerSensitivity(pref: string): "hide_all" | "hide_recent" | "show_all" {
@@ -55,11 +56,13 @@ export function AskSlateScreen({ route }: Props) {
       );
       setConversationId(res.conversationId);
       setMessages((prev) => [...prev, { id: `${Date.now()}-a`, role: "assistant", content: res.message }]);
+      track("ai_message", { hasTitleContext: Boolean(titleId) });
       if (res.usage.requestsRemainingToday !== "unlimited" && res.usage.requestsRemainingToday <= 1) {
         setNotice(`${res.usage.requestsRemainingToday} Ask Slate question(s) left today. Upgrade to Pro for more.`);
       }
     } catch (err) {
       if (err instanceof ApiError && err.code === "AI_LIMIT_REACHED") {
+        track("ai_limit_reached");
         setNotice(err.message);
       } else if (err instanceof ApiError && err.code === "AI_NOT_CONFIGURED") {
         setNotice("Ask Slate isn't configured yet — the backend needs an OpenAI API key.");

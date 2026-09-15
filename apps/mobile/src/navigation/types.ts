@@ -10,6 +10,7 @@ export type HomeStackParamList = {
   ProUpgrade: undefined;
   NewPost: { titleId: string };
   PostDetail: { postId: string };
+  Notifications: undefined;
 };
 
 export type SearchStackParamList = {

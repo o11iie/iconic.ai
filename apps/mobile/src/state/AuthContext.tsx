@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import type { AuthenticatedUser, UserPreferences } from "@slate/shared";
 import { api, clearTokens, getTokens, setTokens } from "../api/client";
+import { track } from "../analytics/analytics";
 
 interface AuthContextValue {
   user: AuthenticatedUser | null;
@@ -42,12 +43,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const res = await api.post<AuthResponse>("/auth/login", { email, password });
     await setTokens(res.accessToken, res.refreshToken);
     setUser(res.user);
+    track("login");
   }, []);
 
   const signup = useCallback(async (email: string, password: string, handle: string, displayName: string) => {
     const res = await api.post<AuthResponse>("/auth/signup", { email, password, handle, displayName });
     await setTokens(res.accessToken, res.refreshToken);
     setUser(res.user);
+    track("signup");
   }, []);
 
   const logout = useCallback(async () => {

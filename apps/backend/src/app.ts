@@ -16,6 +16,7 @@ import { communityRoutes } from "./modules/community/community.routes";
 import { aiRoutes } from "./modules/ai/ai.routes";
 import { billingRoutes } from "./modules/billing/billing.routes";
 import { notificationRoutes } from "./modules/notifications/notifications.routes";
+import { analyticsRoutes } from "./modules/analytics/analytics.routes";
 import { adminRoutes } from "./modules/admin/admin.routes";
 
 export function buildApp() {
@@ -55,6 +56,7 @@ export function buildApp() {
   app.register(aiRoutes, { prefix: "/api" });
   app.register(billingRoutes, { prefix: "/api" });
   app.register(notificationRoutes, { prefix: "/api" });
+  app.register(analyticsRoutes, { prefix: "/api" });
   app.register(adminRoutes, { prefix: "/api" });
 
   return app;

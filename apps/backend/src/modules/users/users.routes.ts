@@ -2,10 +2,19 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../prisma";
 
+const notificationTypeSchema = z.enum([
+  "RELEASE_REMINDER",
+  "FOLLOWED_TITLE_UPDATE",
+  "COMMUNITY_REPLY",
+  "COMMUNITY_MENTION",
+  "SUBSCRIPTION_STATUS",
+]);
+
 const preferencesSchema = z.object({
   favoriteGenres: z.array(z.string().min(1).max(50)).max(20).optional(),
   spoilerSensitivity: z.enum(["HIDE_ALL", "HIDE_RECENT", "SHOW_ALL"]).optional(),
   notificationsEnabled: z.boolean().optional(),
+  mutedNotificationTypes: z.array(notificationTypeSchema).max(10).optional(),
 });
 
 export async function userRoutes(app: FastifyInstance) {
@@ -22,6 +31,7 @@ export async function userRoutes(app: FastifyInstance) {
         favoriteGenres: user.favoriteGenres,
         spoilerSensitivity: user.spoilerSensitivity,
         notificationsEnabled: user.notificationsEnabled,
+        mutedNotificationTypes: user.mutedNotificationTypes,
       },
     });
   });

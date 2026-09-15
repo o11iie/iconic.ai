@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { api } from "../../api/client";
 import { colors } from "../../theme";
 import type { WatchlistStackParamList } from "../../navigation/types";
+import { EmptyState } from "../../components/EmptyState";
 
 type Props = NativeStackScreenProps<WatchlistStackParamList, "Watchlist">;
 
@@ -39,7 +40,12 @@ export function WatchlistScreen({ navigation }: Props) {
             </View>
           </TouchableOpacity>
         )}
-        ListEmptyComponent={<Text style={styles.empty}>Nothing here yet. Add titles from their detail page.</Text>}
+        ListEmptyComponent={
+          <EmptyState
+            title="Your watchlist is empty"
+            message="Find something you're excited about and add it here — Slate will keep track of when it lands."
+          />
+        }
       />
     </View>
   );

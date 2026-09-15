@@ -6,6 +6,7 @@ import { api } from "../../api/client";
 import { colors } from "../../theme";
 import type { SearchStackParamList } from "../../navigation/types";
 import { TitleCard } from "../../components/TitleCard";
+import { EmptyState } from "../../components/EmptyState";
 
 type Props = NativeStackScreenProps<SearchStackParamList, "Search">;
 
@@ -91,7 +92,9 @@ export function SearchScreen({ navigation }: Props) {
         onEndReached={loadMore}
         ListFooterComponent={isLoadingMore ? <ActivityIndicator color={colors.accent} style={{ marginVertical: 16 }} /> : null}
         ListEmptyComponent={
-          !isLoading && query.length >= 2 ? <Text style={styles.empty}>No results for "{query}"</Text> : null
+          !isLoading && query.length >= 2 ? (
+            <EmptyState title={`No results for "${query}"`} message="Try a different spelling, or search for a franchise or actor instead." />
+          ) : null
         }
       />
     </View>
