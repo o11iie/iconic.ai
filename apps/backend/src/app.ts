@@ -37,7 +37,25 @@ export function buildApp() {
     bodyLimit: 128 * 1024,
   });
 
-  app.register(cors, { origin: true });
+  /**
+   * CORS is an allowlist, not a reflector. `origin: true` would echo any
+   * site's Origin back, letting an arbitrary page script Slate's API from a
+   * logged-in browser. Slate's only legitimate browser caller is its own
+   * web site (which hosts the Play-required account-deletion page), so only
+   * WEB_ORIGINS is permitted. Requests with no Origin header — the Android
+   * app, curl, server-to-server, Play's RTDN push — are not CORS requests
+   * and are allowed through unchanged.
+   */
+  const allowedOrigins = env.WEB_ORIGINS.split(",")
+    .map((o) => o.trim().replace(/\/$/, ""))
+    .filter((o) => o.length > 0);
+
+  app.register(cors, {
+    origin(origin, cb) {
+      if (!origin) return cb(null, true);
+      cb(null, allowedOrigins.includes(origin.replace(/\/$/, "")));
+    },
+  });
   app.register(jwt, { secret: env.JWT_ACCESS_SECRET });
   app.register(authenticatePlugin);
 

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · Slate</title>
+<meta name="description" content="What the Slate app collects, why, who it is shared with, how long it is kept, and how to delete it.">
+<link rel="stylesheet" href="assets/style.css">
+<script src="config.js"></script>
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html">SLA<span>TE</span></a>
+    <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="privacy.html" aria-current="page">Privacy</a>
+        <a href="terms.html">Terms</a>
+        <a href="community-guidelines.html">Guidelines</a>
+        <a href="copyright.html">Copyright</a>
+        <a href="delete-account.html">Delete account</a>
+        <a href="support.html">Support</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <h1>Privacy Policy</h1>
+    <p class="updated">Effective {{effectiveDate}} · Operated by {{legalEntity}} · Contact <span data-mailto="contactEmail"></span></p>
+
+    <p>This policy describes what the Slate Android app and its backend collect, why, how long
+    it is kept, and who it is shared with. It is written to match what the software actually
+    does. If the app changes, this page changes with it.</p>
+
+    <h2>1. The short version</h2>
+    <ul>
+      <li>Slate requires an account: an email address, a password, a handle and a display name.</li>
+      <li>Slate stores what you follow, watchlist, post and ask, because those <em>are</em> the product.</li>
+      <li>Slate does <strong>not</strong> collect your location, contacts, photos, microphone, camera,
+      calendar, SMS, call logs, installed-app list or device advertising identifier.</li>
+      <li>Slate does <strong>not</strong> sell personal information, and does not share it with data
+      brokers or advertisers.</li>
+      <li>This version of Slate contains <strong>no advertising SDK</strong> and no third-party
+      analytics SDK.</li>
+      <li>You can delete your account and data from inside the app, or
+      <a href="delete-account.html">from this website</a>, without contacting anyone.</li>
+    </ul>
+
+    <h2>2. What Slate collects</h2>
+
+    <h3>2.1 Account information</h3>
+    <table>
+      <thead><tr><th>Data</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Email address</td><td>Identifies your account and is used to sign in. Also used to contact you about your account or a security issue.</td></tr>
+        <tr><td>Password</td><td>Stored only as a bcrypt hash. Slate never stores, logs or can read your actual password.</td></tr>
+        <tr><td>Handle and display name</td><td>Shown publicly next to anything you post.</td></tr>
+        <tr><td>Profile image URL (optional)</td><td>Shown next to your posts, if you set one.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2.2 What you do in Slate</h3>
+    <table>
+      <thead><tr><th>Data</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Titles you follow and watchlist, and their status</td><td>To show your watchlist, drive release reminders, and personalise recommendations.</td></tr>
+        <tr><td>Saved watch/play journeys</td><td>To show your progress through a franchise.</td></tr>
+        <tr><td>Favourite genres and spoiler sensitivity</td><td>To personalise your feed and decide what to hide behind a spoiler gate.</td></tr>
+        <tr><td>Posts, comments and reactions</td><td>These are the community feature. Posts and comments are public to other signed-in Slate users.</td></tr>
+        <tr><td>Reports you file about other people's content</td><td>So moderators can review them.</td></tr>
+        <tr><td>Notification preferences and your notification history</td><td>To deliver, and let you mute, each kind of alert.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2.3 Ask Slate (AI)</h3>
+    <p>When you send a message to Ask Slate, Slate stores the conversation — your messages and the
+    assistant's replies — so you can see your history and so the assistant has context. Slate also
+    stores a per-day counter of how many messages you have sent, to enforce the free and Pro
+    daily limits.</p>
+
+    <h3>2.4 Subscription information</h3>
+    <p>If you buy Slate Pro, Slate stores the Google Play purchase token, the product you bought,
+    the subscription status Google reports, and the expiry and renewal state. <strong>Slate never
+    receives or stores your payment card, billing address or any other payment
+    instrument</strong> — that transaction happens entirely inside Google Play.</p>
+
+    <h3>2.5 Product analytics</h3>
+    <p>Slate records a small set of first-party product events — for example that a search
+    happened, a title was viewed, a paywall was shown, a purchase completed — with the event name,
+    a timestamp, and non-identifying properties such as a media type. These are sent to Slate's own
+    backend only. They are <strong>not</strong> sent to any third-party analytics service, and
+    Slate does not use an advertising identifier. If you delete your account, these events are
+    kept but permanently detached from you, so they survive only as anonymous counts.</p>
+
+    <h3>2.6 Technical data</h3>
+    <p>Like any internet service, Slate's servers process your IP address and the request itself
+    in order to answer it, to apply rate limits, and to detect abuse. Slate does not build
+    advertising or cross-site profiles from this.</p>
+
+    <h2>3. What Slate does not collect</h2>
+    <p>Slate requests only two Android permissions: <code>INTERNET</code> and
+    <code>com.android.vending.BILLING</code>. It explicitly blocks location, camera and microphone
+    permissions from being added by any dependency. Slate has no access to your location, contacts,
+    photos, files, camera, microphone, calendar, SMS, call logs, health data, or the list of apps
+    installed on your device, and does not read your device advertising ID.</p>
+
+    <h2>4. Who Slate shares data with</h2>
+    <table>
+      <thead><tr><th>Recipient</th><th>What reaches them</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>OpenAI</td>
+          <td>Your Ask Slate message, up to the last 10 messages in that conversation, your spoiler
+          sensitivity setting, and the <em>names</em> of titles you follow or have watchlisted.
+          <strong>Not</strong> your email, handle, display name, account ID, IP address or device
+          identifiers.</td>
+          <td>To generate the assistant's reply. The request is made by Slate's server, not by
+          your device.</td>
+        </tr>
+        <tr>
+          <td>TMDB</td>
+          <td>Your search terms and the IDs of titles being displayed, sent from Slate's server.
+          TMDB does not receive your account details or your device's IP address.</td>
+          <td>To fetch real movie and TV information.</td>
+        </tr>
+        <tr>
+          <td>IGDB / Twitch</td>
+          <td>Game search terms and title IDs, sent from Slate's server. Same limits as above.</td>
+          <td>To fetch real game information.</td>
+        </tr>
+        <tr>
+          <td>Google Play</td>
+          <td>Your purchase token, so Slate can verify with Google that a subscription is genuine
+          and current.</td>
+          <td>To grant and maintain Slate Pro access. Google's own handling of your purchase is
+          governed by Google's privacy policy.</td>
+        </tr>
+        <tr>
+          <td>Hosting and database providers</td>
+          <td>Data is stored on infrastructure operated by {{legalEntity}}'s hosting providers,
+          who process it on our instructions only.</td>
+          <td>To run the service.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Slate does not sell personal information, does not share it for cross-context behavioural
+    advertising, and has no advertising or data-broker relationships.</p>
+
+    <h2>5. What other people can see</h2>
+    <p>Your handle, display name, optional profile image, and anything you post or comment are
+    visible to other signed-in Slate users. Your email address, your watchlist, your follows, your
+    Ask Slate conversations, your notification history and your subscription status are not.</p>
+
+    <h2>6. How long Slate keeps data</h2>
+    <ul>
+      <li><strong>While your account exists:</strong> for as long as you keep it.</li>
+      <li><strong>Sessions:</strong> refresh tokens are stored hashed and expire; signing out
+      revokes them.</li>
+      <li><strong>After you delete your account:</strong> your account row, email, password hash,
+      sessions, follows, watchlist, journeys, notifications, Ask Slate conversations, reactions and
+      entitlement record are deleted immediately and irreversibly. Your posts and comments have
+      their text removed and their authorship reassigned to an anonymous <code>[deleted]</code>
+      account, so replies written by other people are not destroyed. Reports you filed stay with
+      moderators but no longer point at you. Analytics events are detached from you and remain only
+      as anonymous counts.</li>
+      <li><strong>Backups:</strong> deleted data may persist in encrypted backups for a short
+      period before those backups rotate out, and is not restored to the live service.</li>
+    </ul>
+
+    <h2>7. Your choices and rights</h2>
+    <ul>
+      <li><strong>Delete your account:</strong> in the app under Profile → Settings → Delete
+      account, or <a href="delete-account.html">from this website</a>. No email or support ticket
+      is required.</li>
+      <li><strong>Turn off notifications:</strong> all of them, or individually by type, in
+      Settings.</li>
+      <li><strong>Correct your details:</strong> change your display name, handle, genres and
+      spoiler sensitivity in the app.</li>
+      <li><strong>Access or export:</strong> email <span data-mailto="contactEmail"></span> and we
+      will provide a copy of your data.</li>
+      <li>Depending on where you live, you may also have rights to object to or restrict
+      processing, or to complain to your local data protection authority. Email
+      <span data-mailto="contactEmail"></span> to exercise them.</li>
+    </ul>
+    <p>Deleting your Slate account does <strong>not</strong> cancel a Slate Pro subscription.
+    Google Play controls the billing relationship — cancel it in the Play Store under
+    Payments &amp; subscriptions, or you will continue to be charged.</p>
+
+    <h2>8. Children</h2>
+    <p>Slate is not directed to children. You must be at least 13 years old — or the minimum age
+    of digital consent where you live, if that is higher — to create a Slate account. Slate does
+    not knowingly collect personal information from children below that age. If you believe a
+    child has created an account, email <span data-mailto="contactEmail"></span> and we will
+    delete it.</p>
+
+    <h2>9. Security</h2>
+    <p>Passwords are hashed with bcrypt and never stored in readable form. Access tokens are
+    short-lived and refresh tokens are stored hashed, rotated on use, and revocable. All traffic
+    between the app and Slate's servers is encrypted in transit; release builds refuse to
+    communicate over plaintext HTTP. API credentials for TMDB, IGDB, OpenAI and Google Play are
+    held only on Slate's servers and are never present in the app on your device. No system is
+    perfectly secure, but these are the measures in place.</p>
+
+    <h2>10. International transfers</h2>
+    <p>Slate's servers and the third parties listed in section 4 may process data in countries
+    other than your own, including the United States. Where required, transfers rely on
+    appropriate safeguards such as the European Commission's standard contractual clauses.</p>
+
+    <h2>11. Changes to this policy</h2>
+    <p>If this policy changes in a way that materially affects you, the effective date at the top
+    changes and Slate notifies you in the app before the change takes effect.</p>
+
+    <h2>12. Contact</h2>
+    <p>{{legalEntity}} — <span data-mailto="contactEmail"></span></p>
+
+  </div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p>Slate is operated by {{legalEntity}}. Contact: <span data-mailto="contactEmail"></span></p>
+    <p>
+      <a href="privacy.html">Privacy Policy</a> ·
+      <a href="terms.html">Terms of Service</a> ·
+      <a href="community-guidelines.html">Community Guidelines</a> ·
+      <a href="copyright.html">Copyright</a> ·
+      <a href="delete-account.html">Delete your account</a> ·
+      <a href="support.html">Support</a>
+    </p>
+    <p>Movie and TV data provided by TMDB. Game data provided by IGDB. Slate is not endorsed or certified by TMDB, IGDB or Twitch.</p>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

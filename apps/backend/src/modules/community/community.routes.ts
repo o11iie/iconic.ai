@@ -5,6 +5,7 @@ import { ensureTitleExists } from "../titles/ensure-title";
 import { dispatchNotification } from "../notifications/dispatch";
 import { WRITE_RATE_LIMIT, PROVIDER_RATE_LIMIT } from "../../plugins/rate-limits";
 import { canModerate } from "./authorization";
+import { BlockError, blockUser, blockedIdsFor, excludeBlockedAuthors, listBlockedUsers, unblockUser } from "./blocks.service";
 
 const postKindSchema = z.enum(["DISCUSSION", "PREDICTION", "THEORY", "REVIEW"]);
 const reactionKindSchema = z.enum(["HYPE", "LOVE", "MINDBLOWN", "LAUGH", "SKEPTICAL"]);
@@ -18,13 +19,18 @@ async function reactionCounts(postId: string) {
 }
 
 export async function communityRoutes(app: FastifyInstance) {
-  app.get("/community/posts", { config: { rateLimit: PROVIDER_RATE_LIMIT } }, async (req, reply) => {
+  app.get(
+    "/community/posts",
+    { preHandler: [app.optionalAuthenticate], config: { rateLimit: PROVIDER_RATE_LIMIT } },
+    async (req, reply) => {
     const query = z
       .object({ titleId: z.string().optional(), cursor: z.string().optional(), limit: z.coerce.number().min(1).max(50).default(20) })
       .parse(req.query);
 
+    const blockedIds = await blockedIdsFor(req.viewerId);
+
     const posts = await prisma.communityPost.findMany({
-      where: { titleId: query.titleId, deletedAt: null },
+      where: { titleId: query.titleId, deletedAt: null, ...excludeBlockedAuthors(blockedIds) },
       include: { author: true, _count: { select: { comments: true } } },
       orderBy: { createdAt: "desc" },
       take: query.limit,
@@ -47,15 +53,25 @@ export async function communityRoutes(app: FastifyInstance) {
     );
 
     return reply.send({ posts: withCounts, nextCursor: posts.length === query.limit ? posts[posts.length - 1].id : null });
-  });
+    },
+  );
 
-  app.get("/community/posts/:id", { config: { rateLimit: PROVIDER_RATE_LIMIT } }, async (req, reply) => {
+  app.get(
+    "/community/posts/:id",
+    { preHandler: [app.optionalAuthenticate], config: { rateLimit: PROVIDER_RATE_LIMIT } },
+    async (req, reply) => {
     const params = z.object({ id: z.string() }).parse(req.params);
     const post = await prisma.communityPost.findUnique({
       where: { id: params.id },
       include: { author: true, _count: { select: { comments: true } } },
     });
     if (!post || post.deletedAt) return reply.code(404).send({ error: "Post not found." });
+
+    // A blocked author's post is treated as not existing for this viewer,
+    // rather than 403 — which would confirm the post is there and who wrote
+    // it. Deep links to blocked content dead-end quietly.
+    const blockedIds = await blockedIdsFor(req.viewerId);
+    if (blockedIds.includes(post.authorId)) return reply.code(404).send({ error: "Post not found." });
 
     return reply.send({
       post: {
@@ -71,7 +87,8 @@ export async function communityRoutes(app: FastifyInstance) {
         reactionCounts: await reactionCounts(post.id),
       },
     });
-  });
+    },
+  );
 
   app.post("/community/posts", { preHandler: [app.authenticate], config: { rateLimit: WRITE_RATE_LIMIT } }, async (req, reply) => {
     const body = z
@@ -132,10 +149,14 @@ export async function communityRoutes(app: FastifyInstance) {
     },
   );
 
-  app.get("/community/posts/:id/comments", { config: { rateLimit: PROVIDER_RATE_LIMIT } }, async (req, reply) => {
+  app.get(
+    "/community/posts/:id/comments",
+    { preHandler: [app.optionalAuthenticate], config: { rateLimit: PROVIDER_RATE_LIMIT } },
+    async (req, reply) => {
     const params = z.object({ id: z.string() }).parse(req.params);
+    const blockedIds = await blockedIdsFor(req.viewerId);
     const comments = await prisma.communityComment.findMany({
-      where: { postId: params.id, deletedAt: null },
+      where: { postId: params.id, deletedAt: null, ...excludeBlockedAuthors(blockedIds) },
       include: { author: true },
       orderBy: { createdAt: "asc" },
     });
@@ -151,7 +172,8 @@ export async function communityRoutes(app: FastifyInstance) {
         createdAt: c.createdAt.toISOString(),
       })),
     });
-  });
+    },
+  );
 
   app.post("/community/posts/:id/comments", { preHandler: [app.authenticate], config: { rateLimit: WRITE_RATE_LIMIT } }, async (req, reply) => {
     const params = z.object({ id: z.string() }).parse(req.params);
@@ -218,4 +240,38 @@ export async function communityRoutes(app: FastifyInstance) {
     });
     return reply.code(201).send({ report });
   });
+
+  /**
+   * Blocking. Required by Google Play's User Generated Content policy
+   * alongside reporting: reporting asks Slate to act, blocking lets the
+   * user act immediately for themselves.
+   */
+  app.get("/community/blocks", { preHandler: [app.authenticate] }, async (req, reply) => {
+    return reply.send({ blocked: await listBlockedUsers(req.userId) });
+  });
+
+  app.post(
+    "/community/blocks",
+    { preHandler: [app.authenticate], config: { rateLimit: WRITE_RATE_LIMIT } },
+    async (req, reply) => {
+      const body = z.object({ userId: z.string() }).parse(req.body);
+      try {
+        await blockUser(req.userId, body.userId);
+      } catch (err) {
+        if (err instanceof BlockError) return reply.code(400).send({ error: err.message, code: err.code });
+        throw err;
+      }
+      return reply.code(201).send({ blocked: true });
+    },
+  );
+
+  app.delete(
+    "/community/blocks/:userId",
+    { preHandler: [app.authenticate], config: { rateLimit: WRITE_RATE_LIMIT } },
+    async (req, reply) => {
+      const params = z.object({ userId: z.string() }).parse(req.params);
+      await unblockUser(req.userId, params.userId);
+      return reply.code(204).send();
+    },
+  );
 }

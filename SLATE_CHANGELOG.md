@@ -2,6 +2,112 @@
 
 This tracks implementation decisions as Slate is built, in the order they were made. See `SLATE_RISKS.md` for open risks and missing credentials, and `SLATE_RELEASE_READINESS.md` (added before release) for ship/no-ship status.
 
+## Gate 2 — Google Play Compliance & Submission Readiness
+
+Compliance pass, not a feature pass. Everything below was added because Play
+policy requires it or because auditing against policy exposed a defect.
+
+**Account deletion — the critical Play requirement.** Two paths, both real:
+in-app at Profile → Settings → Delete account, and a working web page at
+`web/delete-account.html` that a reviewer can use without installing anything.
+Both call `POST /users/me/delete`, which re-authenticates by password, requires
+a typed `DELETE` confirmation, and deletes in one transaction — no queue, no
+support ticket, no cooling-off period.
+
+The hard part was the community graph. A plain cascade delete of the author
+would cascade user → posts → **other people's comments**, destroying data
+belonging to users who never asked for anything. So authored posts and comments
+are anonymized instead: body scrubbed to `[deleted]`, authorship reassigned to a
+non-login sentinel account. The deleting user's words and identity are gone; the
+thread other people participated in survives. Reports they filed stay reviewable
+but stop pointing at a person; analytics events detach via the existing
+`onDelete: SetNull`.
+
+Deletion now also reports whether the account still held a Play-billed
+entitlement, because deleting a Slate account does **not** cancel a Google Play
+subscription — only Google can. The user is told that at the moment it matters,
+not left to discover it on their next statement.
+
+**User blocking — the one UGC requirement Slate did not meet.** Play requires
+apps hosting user content to offer reporting *and* blocking. Reporting existed;
+blocking did not. Added `UserBlock` plus `GET/POST/DELETE /community/blocks`,
+a Block action on post detail, and a managed list in Settings. Semantics chosen
+deliberately: one-directional (a two-way disappearance would tell the blocked
+user they were blocked, inviting retaliation), silent (no endpoint exposes
+`blocksReceived`), and filtered at query time rather than destructive — a
+bystander's view is unchanged. A blocked author's post returns **404** to the
+blocker rather than 403, so a deep link can't confirm the content exists.
+
+**Three real defects found by auditing rather than by testing the happy path:**
+
+1. `expo prebuild` was emitting `SYSTEM_ALERT_WINDOW`,
+   `READ_EXTERNAL_STORAGE` and `WRITE_EXTERNAL_STORAGE` into the Android
+   manifest from the Expo/RN template, even though `app.json` listed only
+   `INTERNET` and `BILLING`. Slate would have shipped draw-over-other-apps and
+   storage access it never uses, and both would have appeared on the store
+   listing. Found by reading the *generated manifest* rather than trusting the
+   config — `app.json`'s `permissions` array is additive, not exhaustive. All
+   three are now in `blockedPermissions`; the shipped manifest is `INTERNET`,
+   `BILLING` and `VIBRATE` (an RN template normal-level permission, disclosed
+   rather than stripped, since removing something RN core may call is a crash
+   risk for no compliance gain).
+2. The mobile API client set `Content-Type: application/json` on *every*
+   request, including bodyless `DELETE`s, which Fastify rejects with 400 "Body
+   cannot be empty". **Unfollow and watchlist removal were broken in the app.**
+   Found while verifying the new unblock endpoint. Header is now set only when
+   there is a body; verified live against the running API, 400 → 204.
+3. `app.json` declared `slate://title/...` and `slate://post/...` intent
+   filters that the JavaScript never handled — tapping one opened Slate to
+   wherever it was last. Added `navigation/linking.ts` mapping exactly the two
+   declared hosts, and nothing more: a route without a matching intent filter
+   produces a link Android never delivers.
+
+**CORS tightened.** `origin: true` reflected any site's Origin back, letting an
+arbitrary page script the API from a browser. Replaced with a `WEB_ORIGINS`
+allowlist; requests with no Origin (the Android app, Play's RTDN push) are
+untouched. Verified live: allowed origin echoed, other origins refused,
+non-browser callers unaffected. This also gates the web deletion page, which is
+now the only legitimate browser caller.
+
+**Failed re-auth returns 403, not 401.** A wrong password on the delete endpoint
+was returning 401, which the mobile client's refresh-on-401 path would misread
+as an expired access token — burning a refresh-token rotation before surfacing
+the real error. The session is valid; it's the re-auth that failed.
+
+**Legal document set** — privacy, terms, community guidelines, copyright/DMCA,
+support and deletion, written against what the code actually does rather than
+from a template. `web/config.js` ships with every operator value blank on
+purpose: Slate's legal entity, contact address, domain and governing law are
+business facts, and inventing them would put false statements in front of users
+and reviewers. `web/verify-config.mjs` exits non-zero until they are filled, and
+every page renders a loud banner and disables the deletion form while
+unconfigured — a half-configured page is worse than an obviously unfinished one.
+
+**Release builds can no longer ship pointed at nothing.** `eas.json` carried
+`https://api.slate.example/api` as a production placeholder, which would have
+built successfully and failed in users' hands. Removed, and
+`scripts/check-release-env.mjs` now runs as EAS's `eas-build-pre-install` hook
+and **fails** a preview/production build whose API or web URL is missing,
+non-HTTPS, a reserved placeholder host, or a local address.
+
+**Verification.** The web deletion page was driven end to end in a real Chromium
+browser against the live API: wrong password rejected with the right message,
+confirmation text enforced, real deletion succeeded, login afterwards 401,
+nothing written to localStorage/sessionStorage/cookies. Blocking was verified
+with a three-user scenario proving the blocker's feed loses only the blocked
+author, the bystander's and anonymous views are unchanged, and the blocked user
+cannot see who blocked them. Suite: 41/41 tests, typecheck ×3 PASS, lint PASS.
+
+**Still blocked, and it is not fixable here.** `targetSdkVersion` is 34; Play
+requires 35+ for new apps and will reject the upload. Expo SDK 51 ships AGP
+8.2.1, which cannot compile past 34, and the SDK 54 upgrade that fixes it needs
+`api.expo.dev`, which this sandbox blocks. Documented as the single hard blocker
+in `SLATE_PLAY_COMPLIANCE.md` §1 rather than worked around.
+
+Six new documents: `SLATE_PLAY_COMPLIANCE.md`, `SLATE_DATA_SAFETY_AUDIT.md`,
+`SLATE_PLAY_REVIEWER_GUIDE.md`, `SLATE_PLAY_STORE_LISTING.md`,
+`SLATE_PLAY_STORE_SCREENSHOTS.md`, `SLATE_PRODUCTION_CONFIGURATION.md`.
+
 ## Gate 1 — Slate Pro Monetization Pass
 
 Pricing moved to **$7.99/mo · $59.99/yr**, changed in the one config file that already owned it. Annual savings (37%, $35.89, $5.00/mo equivalent) are now **derived from those prices** rather than written down, so marketing copy cannot drift from what a user is actually charged. The existing pricing test caught the change immediately — exactly what it was for.

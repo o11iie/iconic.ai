@@ -33,6 +33,8 @@ model User {
   comments          CommunityComment[]
   reactions         Reaction[]
   reportsFiled      Report[] @relation("ReportsFiled")
+  blocksMade        UserBlock[] @relation("BlocksMade")
+  blocksReceived    UserBlock[] @relation("BlocksReceived")
   entitlement       Entitlement?
   aiConversations   AiConversation[]
   aiUsageEvents     AiUsageEvent[]
@@ -220,6 +222,24 @@ model Reaction {
 
   @@unique([userId, postId, kind])
   @@index([postId])
+}
+
+// Google Play's User Generated Content policy requires apps with social
+// features to give users a way to block other users, not just report them.
+// A block is one-directional and private: the blocked user is never told,
+// and blocking hides their posts, comments and reactions from the blocker's
+// view of the community.
+model UserBlock {
+  id        String   @id @default(cuid())
+  blockerId String
+  blocker   User     @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User     @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
 }
 
 enum ReportReason {

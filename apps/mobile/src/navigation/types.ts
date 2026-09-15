@@ -34,6 +34,7 @@ export type WatchlistStackParamList = {
 export type ProfileStackParamList = {
   Profile: undefined;
   ProUpgrade: { trigger?: string } | undefined;
+  Settings: undefined;
 };
 
 export type MySlateStackParamList = {

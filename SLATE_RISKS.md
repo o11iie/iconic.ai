@@ -19,6 +19,70 @@ These cannot be resolved by writing more code. Each blocks a specific, real part
 
 None of the above were skipped or stubbed out with fake data — every integration point (TMDB client, IGDB client, OpenAI provider, Play Billing verification) is written against each provider's real, documented API contract and fails loudly/gracefully (503 with a clear error code) rather than fabricating a response when the credential is missing.
 
+## Gate 2 compliance risks (added Gate 2)
+
+### Blocking submission
+
+1. **Target API level 34.** Play requires 35+ for new apps and rejects the AAB
+   at upload. Expo SDK 51 ships AGP 8.2.1, which caps `compileSdk` at 34; the
+   SDK 54 upgrade that fixes it requires `api.expo.dev`, which this sandbox
+   blocks (403). Must be done on a machine with network and Android SDK access.
+   Full reasoning: `SLATE_48HR_BUILD_DECISION.md` and
+   `SLATE_PLAY_COMPLIANCE.md` §1. **This is the only item preventing
+   submission that is not an operator input.**
+
+### Operator inputs — code is ready, real-world values are not
+
+2. **Legal entity name, support email, copyright email, public domain,
+   governing jurisdiction, legal effective date.** All blank in
+   `web/config.js` by design. `node web/verify-config.mjs` exits non-zero until
+   filled, and the pages fail visibly rather than displaying a placeholder.
+   Inventing any of them would put a false statement in front of users and a
+   Play reviewer.
+3. **A public HTTPS host for `web/`.** Play requires both the privacy policy
+   and the account-deletion page to be publicly reachable with no sign-in wall
+   before submission. The pages exist and work; they are not hosted.
+4. **`WEB_ORIGINS` on the backend.** Without it the web deletion page's
+   requests are refused by CORS. Easy to miss because the page loads fine and
+   only fails on submit.
+5. **Play reviewer demo account.** Slate is entirely account-gated — a
+   reviewer without credentials sees a login screen and nothing else, which is
+   a common rejection cause. Setup: `SLATE_PLAY_REVIEWER_GUIDE.md`.
+
+### Not done, and not claimed to be
+
+6. **Store graphics.** No 512×512 store icon, no 1024×500 feature graphic, no
+   screenshots. The in-bundle icon/splash assets are valid PNGs but
+   placeholder-grade artwork. Screenshots additionally cannot be captured until
+   the target-API blocker is cleared, since they must come from a real build.
+   Plan: `SLATE_PLAY_STORE_SCREENSHOTS.md`.
+7. **Still zero on-device QA.** Every verification in this gate was against a
+   real database and a real browser, but nothing has run on an Android device.
+   `react-native-iap` in particular cannot be exercised in Expo Go — a real
+   purchase flow has never been executed.
+8. **Play Billing Library 7.0.0** is what `react-native-iap` 12.16.4 bundles.
+   Confirm Play's current minimum at submission; it is a one-line Gradle
+   property override if it has moved.
+
+### Accepted trade-offs worth re-examining
+
+9. **Deleting an account destroys its `PurchaseEvent` audit rows** via cascade.
+   Correct for privacy, but it means a later billing dispute for that user has
+   no local record — Play's own records remain the authority. Revisit if
+   financial-record retention obligations apply in your jurisdiction.
+10. **Backup retention is asserted as "up to 30 days"** on the deletion page.
+    That is a commitment to users; confirm it matches the hosting provider's
+    actual retention before publishing, and change the page if not.
+11. **Blocking hides content at query time rather than removing it.** A
+    blocked user's posts still exist and are still visible to everyone else.
+    This is the intended semantic, but it means blocking is not a moderation
+    action — genuinely objectionable content still needs a report.
+12. **No push notifications.** Unchanged from Day 4, but it now has a
+    compliance upside worth stating: with `expo-notifications` absent, Slate
+    requests no `POST_NOTIFICATIONS` permission and collects no push token, so
+    there is no notification-permission prompt and no extra Data Safety
+    identifier. The Settings screen says plainly that alerts are in-app only.
+
 ## Release-gate risks (added Day 5)
 
 These are separated by kind, because they are not the same class of problem:

@@ -7,7 +7,9 @@
     "start": "expo start",
     "android": "expo run:android",
     "typecheck": "tsc --noEmit",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "eas-build-pre-install": "node scripts/check-release-env.mjs",
+    "check-release-env": "node scripts/check-release-env.mjs"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^6.6.1",

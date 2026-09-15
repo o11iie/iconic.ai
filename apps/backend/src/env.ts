@@ -17,6 +17,14 @@ const envSchema = z.object({
    * https://<host>/api/billing/rtdn?token=<this value>.
    */
   RTDN_SHARED_SECRET: z.string().optional().default(""),
+  /**
+   * Comma-separated browser origins allowed to call the API with CORS —
+   * in practice just Slate's own web site, which hosts the Play-required
+   * account-deletion page. The Android app is not a browser origin and is
+   * unaffected. Empty means "no browser origin is allowed", which is the
+   * safe default for an API that otherwise only serves the mobile client.
+   */
+  WEB_ORIGINS: z.string().optional().default(""),
   PORT: z.coerce.number().default(4000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });

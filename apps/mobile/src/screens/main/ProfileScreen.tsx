@@ -85,6 +85,14 @@ export function ProfileScreen({ navigation }: Props) {
 
       <GenrePicker />
 
+      <TouchableOpacity
+        style={styles.settingsButton}
+        onPress={() => navigation.navigate("Settings")}
+        accessibilityRole="button"
+      >
+        <Text style={styles.settingsText}>Settings, privacy & account</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.logoutButton} onPress={logout}>
         <Text style={styles.logoutText}>Log out</Text>
       </TouchableOpacity>
@@ -110,6 +118,8 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
   chipText: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
   chipTextSelected: { color: "#000" },
+  settingsButton: { padding: 14, alignItems: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 10 },
+  settingsText: { color: colors.text, fontWeight: "600" },
   logoutButton: { padding: 14, alignItems: "center" },
   logoutText: { color: colors.accent, fontWeight: "600" },
 });

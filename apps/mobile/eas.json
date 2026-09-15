@@ -19,18 +19,12 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://staging-api.slate.example/api"
       }
     },
     "production": {
       "autoIncrement": "versionCode",
       "android": {
         "buildType": "app-bundle"
-      },
-      "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://api.slate.example/api"
       }
     }
   },

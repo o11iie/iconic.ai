@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Switch } from "react-native";
+import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Switch, Alert } from "react-native";
 import type { RouteProp } from "@react-navigation/native";
 import type { CommunityComment, CommunityPost, ReactionKind, ReportReason } from "@slate/shared";
 import { api } from "../../api/client";
@@ -39,6 +39,7 @@ export function PostDetailScreen({ route }: Props) {
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [reportStatus, setReportStatus] = useState<"idle" | "sent">("idle");
+  const [isBlocked, setIsBlocked] = useState(false);
 
   async function loadComments() {
     const res = await api.get<{ comments: CommunityComment[] }>(`/community/posts/${postId}/comments`);
@@ -76,6 +77,34 @@ export function PostDetailScreen({ route }: Props) {
     } finally {
       setIsSubmittingComment(false);
     }
+  }
+
+  /**
+   * Blocking is the self-service counterpart to reporting: reporting asks
+   * moderators to act, blocking takes effect for this user immediately.
+   * Google Play's UGC policy requires both.
+   */
+  function confirmBlock() {
+    if (!post) return;
+    Alert.alert(
+      `Block @${post.authorHandle}?`,
+      "You won't see their posts, comments or replies anywhere in Slate. They aren't told, and you can unblock them any time in Settings.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await api.post("/community/blocks", { userId: post.authorId });
+              setIsBlocked(true);
+            } catch {
+              Alert.alert("Couldn't block", "Please try again.");
+            }
+          },
+        },
+      ],
+    );
   }
 
   async function submitReport(reason: ReportReason) {
@@ -125,9 +154,18 @@ export function PostDetailScreen({ route }: Props) {
           ))}
         </View>
       ) : (
-        <TouchableOpacity onPress={() => setIsReportOpen(true)}>
-          <Text style={styles.reportLink}>Report</Text>
-        </TouchableOpacity>
+        <View style={styles.moderationRow}>
+          <TouchableOpacity onPress={() => setIsReportOpen(true)} accessibilityRole="button">
+            <Text style={styles.reportLink}>Report</Text>
+          </TouchableOpacity>
+          {isBlocked ? (
+            <Text style={styles.blockedText}>Blocked — manage in Settings</Text>
+          ) : (
+            <TouchableOpacity onPress={confirmBlock} accessibilityRole="button">
+              <Text style={styles.reportLink}>Block @{post.authorHandle}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       )}
 
       <Text style={styles.sectionTitle}>Comments</Text>
@@ -174,7 +212,9 @@ const styles = StyleSheet.create({
   reactionRow: { flexDirection: "row", gap: 16, marginTop: 16, marginBottom: 12 },
   reactionButton: { paddingVertical: 4 },
   reactionText: { color: colors.textMuted, fontSize: 14 },
-  reportLink: { color: colors.textMuted, fontSize: 12, marginBottom: 20 },
+  reportLink: { color: colors.textMuted, fontSize: 12 },
+  moderationRow: { flexDirection: "row", gap: 20, marginBottom: 20 },
+  blockedText: { color: colors.pro, fontSize: 12 },
   reportedText: { color: colors.pro, fontSize: 12, marginBottom: 20 },
   reportPanel: { backgroundColor: colors.surface, borderRadius: 10, padding: 12, marginBottom: 20 },
   reportPrompt: { color: colors.text, fontSize: 13, fontWeight: "600", marginBottom: 8 },

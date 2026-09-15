@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Delete your account · Slate</title>
+<meta name="description" content="Delete your Slate account and its data from the web, without installing the app.">
+<link rel="stylesheet" href="assets/style.css">
+<script src="config.js"></script>
+</head>
+<body data-requires="apiBaseUrl">
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="index.html">SLA<span>TE</span></a>
+    <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="terms.html">Terms</a>
+        <a href="community-guidelines.html">Guidelines</a>
+        <a href="copyright.html">Copyright</a>
+        <a href="delete-account.html" aria-current="page">Delete account</a>
+        <a href="support.html">Support</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <h1>Delete your Slate account</h1>
+    <p class="lede">App: <strong>Slate</strong> (<code>ai.iconic.slate</code>) · Developer: <strong>{{legalEntity}}</strong></p>
+
+    <p>You can delete your Slate account and its data here, from any browser, without installing
+    the app. You can also do it inside the app under <strong>Profile → Settings → Delete
+    account</strong>. Both routes do exactly the same thing, immediately.</p>
+
+    <div class="card">
+      <h2>What is deleted</h2>
+      <p>Deleted immediately and permanently, with no way to recover them:</p>
+      <ul>
+        <li>Your account, email address and password</li>
+        <li>Your handle, display name and profile image</li>
+        <li>All signed-in sessions</li>
+        <li>Everything you follow, and your entire watchlist</li>
+        <li>Your saved watch and play journeys</li>
+        <li>Your favourite genres and spoiler settings</li>
+        <li>Your notification history and preferences</li>
+        <li>Your Ask Slate conversations and message history</li>
+        <li>Your reactions on other people's posts</li>
+        <li>Your Slate Pro entitlement record</li>
+      </ul>
+
+      <h2>What is anonymised instead of destroyed</h2>
+      <p>Slate's community is threaded. If we deleted your posts outright, we would also delete
+      replies written by people who never asked for anything to be deleted. So instead:</p>
+      <ul>
+        <li><strong>Your posts and comments:</strong> the text you wrote is removed and replaced
+        with <code>[deleted]</code>, and authorship is reassigned to an anonymous account. Your
+        words and your name are gone; the surrounding conversation survives.</li>
+        <li><strong>Reports you filed:</strong> kept so moderators can still act on them, but no
+        longer linked to you.</li>
+        <li><strong>Product analytics events:</strong> permanently detached from your account and
+        kept only as anonymous counts.</li>
+      </ul>
+
+      <h2>How long it takes</h2>
+      <p>Immediately. The deletion runs as a single database transaction while you wait — there is
+      no queue and no cooling-off period. Deleted data may remain in encrypted backups for up to
+      30 days before those backups rotate out; it is never restored to the live service.</p>
+
+      <h2>Important: this does not cancel Slate Pro</h2>
+      <p>Slate Pro is billed by Google Play, not by Slate, and only Google can cancel it. If you
+      subscribe, cancel it in the <strong>Google Play Store → Payments &amp; subscriptions</strong>
+      as well, or you will keep being charged after your account is gone.</p>
+    </div>
+
+    <h2>Delete your account now</h2>
+    <p>Sign in with the account you want to delete. Your password is used only to prove the account
+    is yours and is never stored by this page.</p>
+
+    <form id="delete-form" novalidate>
+      <label for="email">Email address</label>
+      <input id="email" name="email" type="email" autocomplete="username" required>
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+      <label for="confirm">Type <code>DELETE</code> to confirm</label>
+      <input id="confirm" name="confirm" type="text" autocomplete="off" spellcheck="false" required>
+
+      <button id="submit" type="submit">Delete my Slate account</button>
+    </form>
+
+    <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+
+    <h2>If you cannot sign in</h2>
+    <p>Email <span data-mailto="contactEmail"></span> from the address on the account and ask for
+    it to be deleted. We will verify the request and delete the account.</p>
+
+    <p>For the full detail of what Slate stores and why, see the
+    <a href="privacy.html">Privacy Policy</a>.</p>
+
+  </div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p>Slate is operated by {{legalEntity}}. Contact: <span data-mailto="contactEmail"></span></p>
+    <p>
+      <a href="privacy.html">Privacy Policy</a> ·
+      <a href="terms.html">Terms of Service</a> ·
+      <a href="community-guidelines.html">Community Guidelines</a> ·
+      <a href="copyright.html">Copyright</a> ·
+      <a href="delete-account.html">Delete your account</a> ·
+      <a href="support.html">Support</a>
+    </p>
+    <p>Movie and TV data provided by TMDB. Game data provided by IGDB. Slate is not endorsed or certified by TMDB, IGDB or Twitch.</p>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+<script src="assets/delete-account.js"></script>
+</body>
+</html>

@@ -13,6 +13,7 @@ import { SearchStack } from "./SearchStack";
 import { WatchlistStack } from "./WatchlistStack";
 import { ProfileStack } from "./ProfileStack";
 import type { AuthStackParamList, MainTabParamList } from "./types";
+import { linking } from "./linking";
 import { colors } from "../theme";
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -58,7 +59,7 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={user ? linking : undefined}>
       {user ? (
         <EntitlementProvider>
           <MainTabs />

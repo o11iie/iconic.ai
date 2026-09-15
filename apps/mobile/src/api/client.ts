@@ -79,7 +79,10 @@ async function request<T>(path: string, options: RequestInit = {}, isRetry = fal
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      // Only when there is a body. Fastify rejects a bodyless request that
+      // declares `Content-Type: application/json` with 400 "Body cannot be
+      // empty", which would break every DELETE the app makes.
+      ...(options.body != null ? { "Content-Type": "application/json" } : {}),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...options.headers,
     },
