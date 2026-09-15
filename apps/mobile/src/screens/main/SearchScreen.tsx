@@ -23,7 +23,9 @@ export function SearchScreen({ navigation }: Props) {
   const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const debounceHandle = useRef<ReturnType<typeof setTimeout>>();
+  // React 19 requires an explicit initial value for useRef; the undefined
+  // case is real here (no timer scheduled yet) and clearTimeout accepts it.
+  const debounceHandle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const activeQuery = useRef("");
 
   function onChangeQuery(text: string) {

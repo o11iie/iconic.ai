@@ -61,16 +61,23 @@
         "expo-build-properties",
         {
           "android": {
-            "compileSdkVersion": 34,
-            "targetSdkVersion": 34,
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
             "minSdkVersion": 24,
             "usesCleartextTraffic": false
           }
+        }
+      ],
+      [
+        "./plugins/withPlayBilling",
+        {
+          "playBillingSdkVersion": "7.0.0"
         }
       ]
     ],
     "extra": {
       "apiBaseUrl": "http://10.0.2.2:4000/api"
-    }
+    },
+    "newArchEnabled": false
   }
 }
