@@ -6,7 +6,8 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^6.6.1",
@@ -14,9 +15,11 @@
     "@react-navigation/native-stack": "^6.11.0",
     "@slate/shared": "workspace:*",
     "expo": "~51.0.28",
+    "expo-build-properties": "^0.12.5",
     "expo-constants": "~16.0.2",
     "expo-secure-store": "~13.0.2",
     "expo-status-bar": "~1.12.1",
+    "expo-system-ui": "~3.0.7",
     "react": "18.2.0",
     "react-native": "0.74.5",
     "react-native-iap": "^12.15.6",

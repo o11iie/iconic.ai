@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
+import rateLimit from "@fastify/rate-limit";
 import { ZodError } from "zod";
 import { getEnv } from "./env";
 import authenticatePlugin from "./plugins/authenticate";
@@ -27,15 +28,48 @@ export function buildApp() {
       env.NODE_ENV === "development"
         ? { transport: { target: "pino-pretty" } }
         : true,
+    // Nothing Slate accepts is large; the biggest body is a 50-event
+    // analytics batch. Cap well below Fastify's 1MB default so an oversized
+    // payload is rejected before it's parsed.
+    bodyLimit: 128 * 1024,
   });
 
   app.register(cors, { origin: true });
   app.register(jwt, { secret: env.JWT_ACCESS_SECRET });
   app.register(authenticatePlugin);
 
-  app.setErrorHandler((error: Error & { statusCode?: number }, _req, reply) => {
+  /**
+   * Global backstop rate limit. Individual routes tighten this via their own
+   * config (see plugins/rate-limits.ts) — this exists so a route added later
+   * without explicit limits is never completely unbounded.
+   */
+  app.register(rateLimit, {
+    global: true,
+    max: 300,
+    timeWindow: "1 minute",
+    keyGenerator: (req) => req.userId ?? req.ip,
+    errorResponseBuilder: () => ({
+      statusCode: 429,
+      error: "Too many requests. Please slow down.",
+      code: "RATE_LIMITED",
+    }),
+  });
+
+  app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, _req, reply) => {
     if (error instanceof ZodError) {
       return reply.code(400).send({ error: "Validation failed", details: error.flatten() });
+    }
+    // Rate-limit rejections arrive here as the plain object built by
+    // errorResponseBuilder. They're expected traffic shaping, not faults —
+    // pass the 429 through instead of logging and masking them as a 500.
+    if (error.code === "RATE_LIMITED") {
+      // errorResponseBuilder puts the user-facing copy on `error`, not
+      // `message`, so read that first — otherwise every tier collapses to
+      // the same generic string and we lose the per-route guidance.
+      const builderMessage = (error as unknown as { error?: string }).error;
+      return reply
+        .code(error.statusCode ?? 429)
+        .send({ error: builderMessage ?? error.message ?? "Too many requests.", code: "RATE_LIMITED" });
     }
     app.log.error(error);
     const statusCode = error.statusCode ?? 500;

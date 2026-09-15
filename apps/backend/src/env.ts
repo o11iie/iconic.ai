@@ -11,6 +11,12 @@ const envSchema = z.object({
   OPENAI_MODEL: z.string().optional().default("gpt-4o-mini"),
   GOOGLE_PLAY_PACKAGE_NAME: z.string().optional().default("ai.iconic.slate"),
   GOOGLE_SERVICE_ACCOUNT_JSON: z.string().optional().default(""),
+  /**
+   * Shared secret proving an inbound RTDN webhook really came from our own
+   * Pub/Sub push subscription. Configure the subscription's push endpoint as
+   * https://<host>/api/billing/rtdn?token=<this value>.
+   */
+  RTDN_SHARED_SECRET: z.string().optional().default(""),
   PORT: z.coerce.number().default(4000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });

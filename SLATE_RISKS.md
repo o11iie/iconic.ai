@@ -19,6 +19,22 @@ These cannot be resolved by writing more code. Each blocks a specific, real part
 
 None of the above were skipped or stubbed out with fake data — every integration point (TMDB client, IGDB client, OpenAI provider, Play Billing verification) is written against each provider's real, documented API contract and fails loudly/gracefully (503 with a clear error code) rather than fabricating a response when the credential is missing.
 
+## Release-gate risks (added Day 5)
+
+These are separated by kind, because they are not the same class of problem:
+
+**Technical — unverified, needs a real build/device (see `SLATE_RELEASE_READINESS.md` RED section):**
+- The production `.aab` has never been compiled — no Android SDK in the build environment.
+- API 36 targeting is configured and verified present in the generated native project, but never compiled, and the project is on Expo SDK 51 whose template defaults to API 34. The cleaner long-term fix is an upgrade to Expo SDK 54. API 35+ edge-to-edge behavior changes are visually untested.
+- No on-device QA has been performed. The user journey is verified at the API level only.
+- A real Play purchase has never completed end to end; only the entitlement half is verified.
+
+**External configuration — code is ready, credentials are not:**
+TMDB, IGDB, OpenAI, Play Console + service account, `RTDN_SHARED_SECRET`, FCM, AdMob, a managed Postgres, a deployed HTTPS API host, and a scheduler for the release-alert sweep. Every one of these fails safely and visibly when absent — none silently fabricate data or grant access.
+
+**Future enhancement — explicitly not release blockers:**
+Genre-browse UI, watch-provider data, preference-aware spoiler logic (currently a binary gate), Redis caching for provider responses, community polls, and user blocking.
+
 ## Provider/architecture decisions and their tradeoffs
 
 Per explicit product direction:

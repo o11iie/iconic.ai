@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../prisma";
+import { AI_RATE_LIMIT } from "../../plugins/rate-limits";
 import { openAiProvider } from "./openai-provider";
 import { AiProviderNotConfiguredError } from "./provider";
 import { assertWithinLimit, incrementUsage, AiRateLimitError, getDailyLimit, getUsedToday } from "./usage-limits";
@@ -43,7 +44,7 @@ export async function aiRoutes(app: FastifyInstance) {
     return reply.send({ limit, used, remaining: Math.max(0, limit - used) });
   });
 
-  app.post("/ai/ask", { preHandler: [app.authenticate] }, async (req, reply) => {
+  app.post("/ai/ask", { preHandler: [app.authenticate], config: { rateLimit: AI_RATE_LIMIT } }, async (req, reply) => {
     const body = z
       .object({
         message: z.string().min(1).max(MAX_MESSAGE_LENGTH),

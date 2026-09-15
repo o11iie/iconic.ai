@@ -8,6 +8,7 @@ import { sortByHype } from "./hype";
 import { computeCountdown } from "./countdown";
 import { dedupeById, sortByPersonalizedScore } from "./personalization";
 import { prisma } from "../../prisma";
+import { PROVIDER_RATE_LIMIT } from "../../plugins/rate-limits";
 
 /** TMDB and IGDB both default to 20 results per page; a fetcher returning a full page means there's likely a next one. */
 const PROVIDER_PAGE_SIZE = 20;
@@ -30,7 +31,7 @@ async function settleAll(fns: Array<() => Promise<TitleSummary[]>>): Promise<{ r
 const pageSchema = z.coerce.number().int().min(1).max(50).default(1);
 
 export async function discoveryRoutes(app: FastifyInstance) {
-  app.get("/discover/trending", async (req, reply) => {
+  app.get("/discover/trending", { config: { rateLimit: PROVIDER_RATE_LIMIT } }, async (req, reply) => {
     const query = z
       .object({ mediaType: z.enum(["movie", "tv", "game", "all"]).default("all"), page: pageSchema })
       .parse(req.query);
@@ -50,7 +51,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
     return reply.send({ results: sortByHype(results), page: query.page, hasMore });
   });
 
-  app.get("/discover/upcoming", async (req, reply) => {
+  app.get("/discover/upcoming", { config: { rateLimit: PROVIDER_RATE_LIMIT } }, async (req, reply) => {
     const query = z
       .object({ mediaType: z.enum(["movie", "tv", "game", "all"]).default("all"), page: pageSchema })
       .parse(req.query);
@@ -73,7 +74,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
     return reply.send({ results: withCountdowns, page: query.page, hasMore });
   });
 
-  app.get("/search", async (req, reply) => {
+  app.get("/search", { config: { rateLimit: PROVIDER_RATE_LIMIT } }, async (req, reply) => {
     const query = z
       .object({ q: z.string().min(1), mediaType: z.enum(["movie", "tv", "game", "all"]).default("all"), page: pageSchema })
       .parse(req.query);
@@ -101,7 +102,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
    * tells the client that honestly rather than pretending to personalize
    * with no signal to personalize from.
    */
-  app.get("/discover/for-you", { preHandler: [app.authenticate] }, async (req, reply) => {
+  app.get("/discover/for-you", { preHandler: [app.authenticate], config: { rateLimit: PROVIDER_RATE_LIMIT } }, async (req, reply) => {
     const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId }, select: { favoriteGenres: true } });
 
     const fetchers: Array<() => Promise<TitleSummary[]>> = [];
@@ -121,7 +122,7 @@ export async function discoveryRoutes(app: FastifyInstance) {
     return reply.send({ results: ranked, personalized: user.favoriteGenres.length > 0 });
   });
 
-  app.get("/titles/:mediaType/:externalId", async (req, reply) => {
+  app.get("/titles/:mediaType/:externalId", { config: { rateLimit: PROVIDER_RATE_LIMIT } }, async (req, reply) => {
     const params = z.object({ mediaType: z.enum(["movie", "tv", "game"]), externalId: z.string() }).parse(req.params);
     try {
       const detail =

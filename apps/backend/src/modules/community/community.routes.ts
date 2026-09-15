@@ -3,6 +3,8 @@ import { z } from "zod";
 import { prisma } from "../../prisma";
 import { ensureTitleExists } from "../titles/ensure-title";
 import { dispatchNotification } from "../notifications/dispatch";
+import { WRITE_RATE_LIMIT, PROVIDER_RATE_LIMIT } from "../../plugins/rate-limits";
+import { canModerate } from "./authorization";
 
 const postKindSchema = z.enum(["DISCUSSION", "PREDICTION", "THEORY", "REVIEW"]);
 const reactionKindSchema = z.enum(["HYPE", "LOVE", "MINDBLOWN", "LAUGH", "SKEPTICAL"]);
@@ -16,7 +18,7 @@ async function reactionCounts(postId: string) {
 }
 
 export async function communityRoutes(app: FastifyInstance) {
-  app.get("/community/posts", async (req, reply) => {
+  app.get("/community/posts", { config: { rateLimit: PROVIDER_RATE_LIMIT } }, async (req, reply) => {
     const query = z
       .object({ titleId: z.string().optional(), cursor: z.string().optional(), limit: z.coerce.number().min(1).max(50).default(20) })
       .parse(req.query);
@@ -47,7 +49,7 @@ export async function communityRoutes(app: FastifyInstance) {
     return reply.send({ posts: withCounts, nextCursor: posts.length === query.limit ? posts[posts.length - 1].id : null });
   });
 
-  app.get("/community/posts/:id", async (req, reply) => {
+  app.get("/community/posts/:id", { config: { rateLimit: PROVIDER_RATE_LIMIT } }, async (req, reply) => {
     const params = z.object({ id: z.string() }).parse(req.params);
     const post = await prisma.communityPost.findUnique({
       where: { id: params.id },
@@ -71,7 +73,7 @@ export async function communityRoutes(app: FastifyInstance) {
     });
   });
 
-  app.post("/community/posts", { preHandler: [app.authenticate] }, async (req, reply) => {
+  app.post("/community/posts", { preHandler: [app.authenticate], config: { rateLimit: WRITE_RATE_LIMIT } }, async (req, reply) => {
     const body = z
       .object({
         titleId: z.string(),
@@ -99,18 +101,38 @@ export async function communityRoutes(app: FastifyInstance) {
     return reply.code(201).send({ post });
   });
 
-  app.delete("/community/posts/:id", { preHandler: [app.authenticate] }, async (req, reply) => {
+  app.delete("/community/posts/:id", { preHandler: [app.authenticate], config: { rateLimit: WRITE_RATE_LIMIT } }, async (req, reply) => {
     const params = z.object({ id: z.string() }).parse(req.params);
     const post = await prisma.communityPost.findUnique({ where: { id: params.id } });
     if (!post) return reply.code(404).send({ error: "Not found." });
-    if (post.authorId !== req.userId && req.userRole === "USER") {
+    if (!canModerate(req.userId, req.userRole, post.authorId)) {
       return reply.code(403).send({ error: "Not authorized to delete this post." });
     }
     await prisma.communityPost.update({ where: { id: params.id }, data: { deletedAt: new Date() } });
     return reply.code(204).send();
   });
 
-  app.get("/community/posts/:id/comments", async (req, reply) => {
+  /**
+   * Users must be able to remove their own comments — previously there was
+   * no way to, which left content permanently un-deletable by its author.
+   * Soft-deleted so moderation history stays intact.
+   */
+  app.delete(
+    "/community/comments/:id",
+    { preHandler: [app.authenticate], config: { rateLimit: WRITE_RATE_LIMIT } },
+    async (req, reply) => {
+      const params = z.object({ id: z.string() }).parse(req.params);
+      const comment = await prisma.communityComment.findUnique({ where: { id: params.id } });
+      if (!comment || comment.deletedAt) return reply.code(404).send({ error: "Not found." });
+      if (!canModerate(req.userId, req.userRole, comment.authorId)) {
+        return reply.code(403).send({ error: "Not authorized to delete this comment." });
+      }
+      await prisma.communityComment.update({ where: { id: params.id }, data: { deletedAt: new Date() } });
+      return reply.code(204).send();
+    },
+  );
+
+  app.get("/community/posts/:id/comments", { config: { rateLimit: PROVIDER_RATE_LIMIT } }, async (req, reply) => {
     const params = z.object({ id: z.string() }).parse(req.params);
     const comments = await prisma.communityComment.findMany({
       where: { postId: params.id, deletedAt: null },
@@ -131,7 +153,7 @@ export async function communityRoutes(app: FastifyInstance) {
     });
   });
 
-  app.post("/community/posts/:id/comments", { preHandler: [app.authenticate] }, async (req, reply) => {
+  app.post("/community/posts/:id/comments", { preHandler: [app.authenticate], config: { rateLimit: WRITE_RATE_LIMIT } }, async (req, reply) => {
     const params = z.object({ id: z.string() }).parse(req.params);
     const body = z
       .object({ body: z.string().min(1).max(1000), containsSpoilers: z.boolean().default(false), parentCommentId: z.string().optional() })
@@ -157,7 +179,7 @@ export async function communityRoutes(app: FastifyInstance) {
     return reply.code(201).send({ comment });
   });
 
-  app.post("/community/posts/:id/reactions", { preHandler: [app.authenticate] }, async (req, reply) => {
+  app.post("/community/posts/:id/reactions", { preHandler: [app.authenticate], config: { rateLimit: WRITE_RATE_LIMIT } }, async (req, reply) => {
     const params = z.object({ id: z.string() }).parse(req.params);
     const body = z.object({ kind: reactionKindSchema }).parse(req.body);
 
@@ -169,13 +191,13 @@ export async function communityRoutes(app: FastifyInstance) {
     return reply.code(201).send({ counts: await reactionCounts(params.id) });
   });
 
-  app.delete("/community/posts/:id/reactions/:kind", { preHandler: [app.authenticate] }, async (req, reply) => {
+  app.delete("/community/posts/:id/reactions/:kind", { preHandler: [app.authenticate], config: { rateLimit: WRITE_RATE_LIMIT } }, async (req, reply) => {
     const params = z.object({ id: z.string(), kind: reactionKindSchema }).parse(req.params);
     await prisma.reaction.deleteMany({ where: { userId: req.userId, postId: params.id, kind: params.kind } });
     return reply.send({ counts: await reactionCounts(params.id) });
   });
 
-  app.post("/community/reports", { preHandler: [app.authenticate] }, async (req, reply) => {
+  app.post("/community/reports", { preHandler: [app.authenticate], config: { rateLimit: WRITE_RATE_LIMIT } }, async (req, reply) => {
     const body = z
       .object({
         targetType: z.enum(["post", "comment"]),

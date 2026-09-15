@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../prisma";
+import { ANALYTICS_RATE_LIMIT } from "../../plugins/rate-limits";
 
 /**
  * First-party analytics ingest. Events are attributed to a user when the
@@ -23,7 +24,7 @@ const batchSchema = z.object({
 });
 
 export async function analyticsRoutes(app: FastifyInstance) {
-  app.post("/analytics/events", async (req, reply) => {
+  app.post("/analytics/events", { config: { rateLimit: ANALYTICS_RATE_LIMIT } }, async (req, reply) => {
     const body = batchSchema.parse(req.body);
 
     // Attribution is best-effort: a missing/expired token means an

@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { NotificationType, SpoilerSensitivity } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../prisma";
+import { AUTH_RATE_LIMIT } from "../../plugins/rate-limits";
 import {
   ACCESS_TOKEN_TTL,
   hashPassword,
@@ -42,7 +43,7 @@ function toPublicUser(user: { id: string; handle: string; displayName: string; a
 }
 
 export async function authRoutes(app: FastifyInstance) {
-  app.post("/auth/signup", async (req, reply) => {
+  app.post("/auth/signup", { config: { rateLimit: AUTH_RATE_LIMIT } }, async (req, reply) => {
     const body = signupSchema.parse(req.body);
     if (!isValidHandle(body.handle)) {
       return reply.code(400).send({ error: "Handle must be 3-20 lowercase letters, numbers, or underscores." });
@@ -72,7 +73,7 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.code(201).send({ user: toPublicUser(user), accessToken, refreshToken });
   });
 
-  app.post("/auth/login", async (req, reply) => {
+  app.post("/auth/login", { config: { rateLimit: AUTH_RATE_LIMIT } }, async (req, reply) => {
     const body = loginSchema.parse(req.body);
     const user = await prisma.user.findUnique({ where: { email: body.email } });
     if (!user || !(await verifyPassword(body.password, user.passwordHash))) {
@@ -85,7 +86,7 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send({ user: toPublicUser(user), accessToken, refreshToken });
   });
 
-  app.post("/auth/refresh", async (req, reply) => {
+  app.post("/auth/refresh", { config: { rateLimit: AUTH_RATE_LIMIT } }, async (req, reply) => {
     const body = z.object({ refreshToken: z.string() }).parse(req.body);
     try {
       const { userId, newToken } = await rotateRefreshToken(body.refreshToken);

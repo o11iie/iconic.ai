@@ -1,5 +1,7 @@
 import type { FastifyInstance } from "fastify";
+import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { getEnv } from "../../env";
 import { getProductCatalog, isValidProductId } from "../../config/products";
 import { verifySubscriptionPurchase, acknowledgeSubscriptionPurchase, PlayBillingNotConfiguredError } from "./play-verification";
 import { applyVerifiedPurchase, getEntitlement, isEntitlementActive, InvalidPurchaseError } from "./entitlement.service";
@@ -69,6 +71,25 @@ export async function billingRoutes(app: FastifyInstance) {
    * https://developer.android.com/google/play/billing/rtdn-reference
    */
   app.post("/billing/rtdn", async (req, reply) => {
+    // Verify the caller is really our Pub/Sub push subscription before doing
+    // any work. Without this, anyone who learns the URL can make Slate issue
+    // Play Developer API calls on demand. Compared in constant time so the
+    // secret can't be recovered by timing the response.
+    const expected = getEnv().RTDN_SHARED_SECRET;
+    if (!expected) {
+      app.log.error("RTDN webhook called but RTDN_SHARED_SECRET is not configured; refusing to process.");
+      return reply.code(503).send({ error: "Webhook not configured.", code: "RTDN_NOT_CONFIGURED" });
+    }
+    const presented = (req.query as { token?: string }).token ?? "";
+    const expectedBuf = Buffer.from(expected);
+    const presentedBuf = Buffer.from(presented);
+    const authorized =
+      expectedBuf.length === presentedBuf.length && timingSafeEqual(expectedBuf, presentedBuf);
+    if (!authorized) {
+      app.log.warn("Rejected RTDN webhook with missing or invalid token.");
+      return reply.code(401).send({ error: "Unauthorized." });
+    }
+
     const body = z
       .object({ message: z.object({ data: z.string(), messageId: z.string() }) })
       .safeParse(req.body);

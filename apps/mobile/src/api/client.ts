@@ -1,7 +1,37 @@
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 
-const API_BASE_URL = (Constants.expoConfig?.extra?.apiBaseUrl as string) ?? "http://10.0.2.2:4000/api";
+/** Local emulator loopback. Only ever used in development builds. */
+const DEV_FALLBACK_API_URL = "http://10.0.2.2:4000/api";
+
+/**
+ * Resolved at build time from EXPO_PUBLIC_API_BASE_URL (set per EAS build
+ * profile — see eas.json), falling back to the app config, then to the local
+ * emulator in development only.
+ *
+ * A release build MUST point at an HTTPS origin: Android blocks cleartext
+ * HTTP by default on API 28+, and shipping a plaintext API would expose
+ * users' access tokens on the wire. We fail loudly at startup rather than
+ * silently shipping a build that talks to a dev address or over HTTP.
+ */
+function resolveApiBaseUrl(): string {
+  const configured =
+    process.env.EXPO_PUBLIC_API_BASE_URL ?? (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined);
+
+  if (!__DEV__) {
+    if (!configured) {
+      throw new Error("EXPO_PUBLIC_API_BASE_URL must be set for release builds.");
+    }
+    if (!configured.startsWith("https://")) {
+      throw new Error("Slate release builds require an HTTPS API base URL.");
+    }
+    return configured;
+  }
+
+  return configured ?? DEV_FALLBACK_API_URL;
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 const ACCESS_TOKEN_KEY = "slate.accessToken";
 const REFRESH_TOKEN_KEY = "slate.refreshToken";

@@ -2,6 +2,30 @@
 
 This tracks implementation decisions as Slate is built, in the order they were made. See `SLATE_RISKS.md` for open risks and missing credentials, and `SLATE_RELEASE_READINESS.md` (added before release) for ship/no-ship status.
 
+## Day 5 — Release Gate (security, Android config, QA)
+
+No new product features, by design. See `SLATE_RELEASE_READINESS.md` for the full green/yellow/red assessment.
+
+### Security findings — found and fixed, not just documented
+- **No rate limiting existed anywhere in the API.** This was the most serious finding: `/auth/login` was an unthrottled brute-force surface, the TMDB/IGDB proxy routes let anyone burn Slate's provider quota, and the deliberately-unauthenticated analytics ingest could flood the database. Added tiered limits sized per route's actual abuse cost, plus a global backstop so a future route is never unbounded. *Verified live: the 11th rapid login attempt returns 429.*
+- **The RTDN billing webhook was completely unauthenticated.** Anyone who learned the URL could make Slate issue Play Developer API calls on demand. Now gated by a constant-time shared-secret check that refuses to process when unconfigured. *Verified live: 401 / 401 / 200 for missing, wrong, and correct tokens.*
+- **Moderation authorization failed open.** Post deletion used `role !== "USER"`, which would grant moderator powers to any undefined or unexpected role value. Replaced with an explicit `canModerate` allowlist that fails closed, with unit tests for exactly those cases.
+- **Users could not delete their own comments** — there was no endpoint at all. Added, with the same authorization rule. *Verified live: 403 cross-user, 204 for the owner.*
+- **A cleartext HTTP dev URL was baked into the mobile config.** Release builds now resolve the API base URL from `EXPO_PUBLIC_API_BASE_URL` and **refuse to start** if it's missing or not HTTPS, rather than silently shipping a build that leaks access tokens over plaintext.
+- Lowered the request body cap to 128KB and confirmed no secrets are committed.
+
+### Bug found while verifying the fixes
+The first rate-limit implementation returned **500 instead of 429** — `errorResponseBuilder`'s plain object has no `statusCode`, so the global error handler masked it as an internal error. Caught only because the limit was exercised live rather than assumed to work. Fixed on both sides, and the per-tier user-facing copy now surfaces correctly instead of collapsing to a generic string.
+
+### Android release configuration
+- Added `eas.json` with development/preview/production profiles; production builds an **app bundle** (`.aab`), not an APK, and auto-increments `versionCode`.
+- Added `expo-build-properties` targeting **compile/target SDK 36**, `minSdk 24`, and `usesCleartextTraffic: false`. **Verified by running `expo prebuild` and inspecting the generated native project** — `android.targetSdkVersion=36` really does land in `gradle.properties`, and the manifest really does carry `usesCleartextTraffic="false"`.
+- Version set to 1.0.0; added deep-link intent filters, `INTERNET`, and explicitly *blocked* location/camera/microphone permissions Slate has no reason to request.
+- Gitignored the generated `android/`/`ios/` directories so continuous native generation keeps working.
+
+### What could NOT be validated here, and is recorded as such
+This environment has Java and Gradle but **no Android SDK, no adb, and no device**. A real `.aab` compile and on-device QA were therefore impossible. No build result has been fabricated — these are the top items in the RED section of the readiness doc.
+
 ## Day 4 — Notifications, Ads, Analytics, Design Polish
 
 ### Analytics: a dead table became a real feature
