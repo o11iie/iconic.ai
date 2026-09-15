@@ -163,8 +163,7 @@ export function TitleDetailScreen({ route, navigation }: Props) {
       }
     } catch (err) {
       if (err instanceof ApiError && err.code === "PRO_REQUIRED") {
-        track("paywall_view", { trigger: "follow_limit" });
-        navigation.navigate("ProUpgrade");
+        navigation.navigate("ProUpgrade", { trigger: err.trigger ?? "FOLLOW_LIMIT" });
       }
     }
   }
@@ -182,8 +181,7 @@ export function TitleDetailScreen({ route, navigation }: Props) {
       }
     } catch (err) {
       if (err instanceof ApiError && err.code === "PRO_REQUIRED") {
-        track("paywall_view", { trigger: "watchlist_limit" });
-        navigation.navigate("ProUpgrade");
+        navigation.navigate("ProUpgrade", { trigger: err.trigger ?? "WATCHLIST_LIMIT" });
       }
     }
   }

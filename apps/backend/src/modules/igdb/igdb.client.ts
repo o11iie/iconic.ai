@@ -82,6 +82,8 @@ interface IgdbGame {
   videos?: { video_id: string; name: string }[];
   release_dates?: { date: number; human: string; region: number }[];
   hypes?: number;
+  /** IGDB's franchise grouping — the factual basis for a Play Journey. */
+  collection?: { id: number; name: string };
 }
 
 function coverUrl(imageId: string | undefined, size: "cover_big" | "screenshot_big" = "cover_big"): string | undefined {
@@ -125,6 +127,9 @@ function toDetail(game: IgdbGame): TitleDetail {
     })),
     platforms: (game.platforms ?? []).map((p) => p.name),
     developer,
+    franchise: game.collection
+      ? { id: String(game.collection.id), name: game.collection.name, watchOrder: [] }
+      : undefined,
     attribution: {
       source: "igdb",
       notice: "Game data provided by IGDB.",
@@ -133,7 +138,7 @@ function toDetail(game: IgdbGame): TitleDetail {
 }
 
 const GAME_FIELDS =
-  "id,name,summary,cover.image_id,screenshots.image_id,first_release_date,genres.id,genres.name,platforms.name,rating,hypes,videos.video_id,videos.name,involved_companies.company.name,involved_companies.developer";
+  "id,name,summary,cover.image_id,screenshots.image_id,first_release_date,genres.id,genres.name,platforms.name,rating,hypes,videos.video_id,videos.name,involved_companies.company.name,involved_companies.developer,collection.id,collection.name";
 
 export async function upcomingGames(page = 1, limit = 20): Promise<TitleSummary[]> {
   const nowUnix = Math.floor(Date.now() / 1000);
@@ -164,4 +169,25 @@ export async function getGameDetail(id: string): Promise<TitleDetail> {
   const games = await igdbQuery<IgdbGame[]>("games", body);
   if (games.length === 0) throw new IgdbApiError("Game not found", 404);
   return toDetail(games[0]);
+}
+
+/**
+ * Every game in an IGDB collection (franchise), in real release order.
+ *
+ * This is the factual basis for a Play Journey — "Essential Zelda" is
+ * IGDB's actual Zelda collection sorted by actual release date, not a
+ * hand-written list Slate invented. Games with no release date sort last
+ * rather than having a position guessed for them.
+ */
+export async function getCollectionGames(collectionId: string, limit = 50): Promise<TitleSummary[]> {
+  const body = `fields ${GAME_FIELDS}; where collection = ${Number(collectionId)}; sort first_release_date asc; limit ${limit};`;
+  const games = await igdbQuery<IgdbGame[]>("games", body);
+  return games.map(toSummary).sort((a, b) => {
+    const aDate = a.releaseWindow.date;
+    const bDate = b.releaseWindow.date;
+    if (!aDate && !bDate) return 0;
+    if (!aDate) return 1;
+    if (!bDate) return -1;
+    return new Date(aDate).getTime() - new Date(bDate).getTime();
+  });
 }

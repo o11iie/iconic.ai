@@ -1,39 +1,97 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from "react-native";
-import type { ProductCatalogEntry, SlateProProductId } from "@slate/shared";
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView } from "react-native";
+import type { RouteProp } from "@react-navigation/native";
+import type { PaywallTrigger, ProductCatalogEntry, SlateProProductId } from "@slate/shared";
 import { api } from "../../api/client";
-import { colors } from "../../theme";
+import { colors, radii, spacing, type, MIN_TOUCH_TARGET } from "../../theme";
 import { useEntitlement } from "../../state/EntitlementContext";
 import { getExistingPurchases, purchaseSubscription } from "../../billing/iap";
 import { track } from "../../analytics/analytics";
 
-const BENEFITS = [
-  "Unlimited follows & watchlist",
-  "Smart release alerts, the moment they're announced",
-  "Expanded Ask Slate — more questions per day",
-  "Advanced spoiler controls & watch journeys",
-  "Ad-free, always",
+type RouteParams = Record<string, object | undefined> & {
+  ProUpgrade: { trigger?: PaywallTrigger } | undefined;
+};
+
+interface Props {
+  route?: RouteProp<RouteParams, "ProUpgrade">;
+}
+
+interface ProductsResponse {
+  products: ProductCatalogEntry[];
+  annual: { percent: number; amountUsd: number; monthlyEquivalentUsd: number };
+}
+
+/**
+ * Lead with the benefit the user was actually reaching for. Someone who hit
+ * the follow limit cares about follows, not a generic pitch — the rest of
+ * the value is still listed below, but the headline meets them where they are.
+ */
+const TRIGGER_HEADLINE: Record<PaywallTrigger, { title: string; body: string }> = {
+  FOLLOW_LIMIT: {
+    title: "Follow everything you care about",
+    body: "You've hit the Free follow limit. Pro removes it across movies, TV and games.",
+  },
+  WATCHLIST_LIMIT: {
+    title: "A watchlist without a ceiling",
+    body: "Your Free watchlist is full. Pro keeps everything you mean to get to in one place.",
+  },
+  AI_LIMIT: {
+    title: "Go deeper with Slate Intelligence",
+    body: "You've used today's Free questions. Pro raises the daily limit substantially.",
+  },
+  ADVANCED_RELEASE_RADAR: {
+    title: "See the whole year ahead",
+    body: "Free Radar looks two weeks out. Pro shows your full release horizon.",
+  },
+  ADVANCED_JOURNEY: {
+    title: "Track every journey at once",
+    body: "Pro lets you run unlimited watch and play journeys side by side.",
+  },
+  PERSONALIZATION: {
+    title: "Slate, tuned to you",
+    body: "Pro unlocks personalized recommendations across all three categories.",
+  },
+  SPOILER_CONTROLS: {
+    title: "Spoiler control, per title",
+    body: "Pro adds per-title spoiler rules instead of one global setting.",
+  },
+  DIRECT: {
+    title: "Your entertainment. Smarter.",
+    body: "Own your entertainment universe across movies, TV and games.",
+  },
+};
+
+const PILLARS = [
+  "Unlimited follows",
+  "Advanced Release Radar",
+  "Expanded Slate Intelligence",
+  "Advanced Watch Journeys",
+  "Personalized entertainment",
+  "Hype Intelligence",
+  "Advanced spoiler controls",
+  "Ad-free",
 ];
 
-export function ProUpgradeScreen() {
+export function ProUpgradeScreen({ route }: Props) {
+  const trigger: PaywallTrigger = route?.params?.trigger ?? "DIRECT";
   const { refresh } = useEntitlement();
-  const [products, setProducts] = useState<ProductCatalogEntry[]>([]);
+  const [data, setData] = useState<ProductsResponse | null>(null);
   const [purchasingId, setPurchasingId] = useState<SlateProProductId | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
 
   useEffect(() => {
-    track("paywall_view");
-    api.get<{ products: ProductCatalogEntry[] }>("/billing/products").then((res) => setProducts(res.products));
-  }, []);
+    track("paywall_view", { trigger });
+    api.get<ProductsResponse>("/billing/products").then(setData).catch(() => setData(null));
+  }, [trigger]);
 
   async function handlePurchase(productId: SlateProProductId) {
     setPurchasingId(productId);
-    track("purchase_started", { productId });
+    track("purchase_started", { productId, trigger });
     try {
       const { purchaseToken } = await purchaseSubscription(productId);
       await api.post("/billing/verify-purchase", { productId, purchaseToken });
       await refresh();
-      track("purchase_completed", { productId });
+      track("purchase_completed", { productId, trigger });
       Alert.alert("Welcome to Slate Pro", "Your subscription is active.");
     } catch (err) {
       track("purchase_failed", { productId, reason: err instanceof Error ? err.message : "unknown" });
@@ -47,9 +105,7 @@ export function ProUpgradeScreen() {
     setIsRestoring(true);
     try {
       const purchases = await getExistingPurchases();
-      for (const p of purchases) {
-        await api.post("/billing/verify-purchase", p);
-      }
+      for (const p of purchases) await api.post("/billing/verify-purchase", p);
       await refresh();
       track("purchase_restored", { count: purchases.length });
       Alert.alert(purchases.length ? "Purchases restored" : "Nothing to restore", "");
@@ -60,56 +116,118 @@ export function ProUpgradeScreen() {
     }
   }
 
+  const headline = TRIGGER_HEADLINE[trigger];
+  const monthly = data?.products.find((p) => p.billingPeriod === "P1M");
+  const yearly = data?.products.find((p) => p.billingPeriod === "P1Y");
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Your entertainment. Smarter.</Text>
-      <View style={styles.benefits}>
-        {BENEFITS.map((b) => (
-          <Text key={b} style={styles.benefit}>✓ {b}</Text>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Text style={styles.eyebrow}>SLATE PRO</Text>
+      <Text style={styles.title}>{headline.title}</Text>
+      <Text style={styles.subtitle}>{headline.body}</Text>
+
+      <View style={styles.pillars}>
+        {PILLARS.map((p) => (
+          <View key={p} style={styles.pillarRow}>
+            <Text style={styles.check}>✓</Text>
+            <Text style={styles.pillarText}>{p}</Text>
+          </View>
         ))}
       </View>
 
-      {products.length === 0 ? (
-        <ActivityIndicator color={colors.pro} style={{ marginTop: 30 }} />
+      {!data ? (
+        <ActivityIndicator color={colors.pro} style={{ marginTop: spacing.lg }} />
       ) : (
-        products.map((p) => (
-          <TouchableOpacity
-            key={p.productId}
-            style={styles.planButton}
-            onPress={() => handlePurchase(p.productId)}
-            disabled={purchasingId !== null}
-          >
-            {purchasingId === p.productId ? (
-              <ActivityIndicator color="#000" />
-            ) : (
-              <Text style={styles.planButtonText}>
-                {p.billingPeriod === "P1Y" ? "Yearly" : "Monthly"} — ${p.referencePriceUsd.toFixed(2)}
-                {p.billingPeriod === "P1Y" ? "/yr" : "/mo"}
-              </Text>
-            )}
-          </TouchableOpacity>
-        ))
+        <>
+          {yearly && (
+            <TouchableOpacity
+              style={[styles.planButton, styles.planPrimary]}
+              onPress={() => handlePurchase(yearly.productId)}
+              disabled={purchasingId !== null}
+              accessibilityRole="button"
+              accessibilityLabel={`Subscribe yearly, ${yearly.referencePriceUsd} dollars per year`}
+            >
+              {purchasingId === yearly.productId ? (
+                <ActivityIndicator color="#000" />
+              ) : (
+                <>
+                  <Text style={styles.planPrimaryText}>Yearly · ${yearly.referencePriceUsd.toFixed(2)}</Text>
+                  {data.annual && (
+                    <Text style={styles.planSubtext}>
+                      ${data.annual.monthlyEquivalentUsd.toFixed(2)}/mo · save {data.annual.percent}% vs monthly
+                    </Text>
+                  )}
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {monthly && (
+            <TouchableOpacity
+              style={[styles.planButton, styles.planSecondary]}
+              onPress={() => handlePurchase(monthly.productId)}
+              disabled={purchasingId !== null}
+              accessibilityRole="button"
+              accessibilityLabel={`Subscribe monthly, ${monthly.referencePriceUsd} dollars per month`}
+            >
+              {purchasingId === monthly.productId ? (
+                <ActivityIndicator color={colors.text} />
+              ) : (
+                <Text style={styles.planSecondaryText}>Monthly · ${monthly.referencePriceUsd.toFixed(2)}/mo</Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </>
       )}
 
-      <TouchableOpacity onPress={handleRestore} disabled={isRestoring}>
+      <TouchableOpacity onPress={handleRestore} disabled={isRestoring} accessibilityRole="button">
         <Text style={styles.restoreLink}>{isRestoring ? "Restoring…" : "Restore purchases"}</Text>
       </TouchableOpacity>
 
-      <Text style={styles.disclaimer}>
-        Billed through Google Play. Cancel anytime in your Play Store subscriptions. Prices shown are reference
-        values — final price and currency are set by Google Play at checkout.
+      <Text style={styles.freeNote}>
+        Free keeps full discovery, search, details, countdowns, community and a real watchlist. Pro adds scale and
+        intelligence on top.
       </Text>
-    </View>
+
+      <Text style={styles.disclaimer}>
+        Billed through Google Play. Cancel anytime in your Play Store subscriptions. Prices shown are reference values —
+        your final price and currency are set by Google Play at checkout.
+      </Text>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: 24, paddingTop: 60 },
-  title: { color: colors.text, fontSize: 26, fontWeight: "800", marginBottom: 20 },
-  benefits: { marginBottom: 30 },
-  benefit: { color: colors.text, marginBottom: 10, fontSize: 15 },
-  planButton: { backgroundColor: colors.pro, borderRadius: 12, padding: 16, alignItems: "center", marginBottom: 12 },
-  planButtonText: { color: "#000", fontWeight: "700", fontSize: 16 },
-  restoreLink: { color: colors.textMuted, textAlign: "center", marginTop: 8 },
-  disclaimer: { color: colors.textMuted, fontSize: 11, marginTop: 24, lineHeight: 16, textAlign: "center" },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.xxl },
+  eyebrow: { color: colors.pro, ...type.caption, fontWeight: "800", letterSpacing: 1.5 },
+  title: { ...type.h1, color: colors.text, marginTop: spacing.sm },
+  subtitle: { ...type.body, color: colors.textMuted, marginTop: spacing.sm, marginBottom: spacing.lg },
+  pillars: { marginBottom: spacing.xl },
+  pillarRow: { flexDirection: "row", alignItems: "center", marginBottom: spacing.md },
+  check: { color: colors.pro, fontSize: 15, fontWeight: "800", marginRight: spacing.md },
+  pillarText: { ...type.bodyLarge, color: colors.text },
+  planButton: {
+    borderRadius: radii.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: MIN_TOUCH_TARGET + 8,
+    marginBottom: spacing.md,
+  },
+  planPrimary: { backgroundColor: colors.pro },
+  planPrimaryText: { color: "#000", fontWeight: "800", fontSize: 16 },
+  planSubtext: { color: "#000", opacity: 0.75, fontSize: 12, marginTop: 2, fontWeight: "600" },
+  planSecondary: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  planSecondaryText: { color: colors.text, fontWeight: "700", fontSize: 15 },
+  restoreLink: { color: colors.textMuted, textAlign: "center", marginTop: spacing.sm, paddingVertical: spacing.sm },
+  freeNote: {
+    ...type.caption,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginTop: spacing.lg,
+    lineHeight: 17,
+  },
+  disclaimer: { ...type.micro, color: colors.textMuted, marginTop: spacing.md, lineHeight: 15, textAlign: "center" },
 });

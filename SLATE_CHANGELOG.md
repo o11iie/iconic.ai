@@ -2,6 +2,22 @@
 
 This tracks implementation decisions as Slate is built, in the order they were made. See `SLATE_RISKS.md` for open risks and missing credentials, and `SLATE_RELEASE_READINESS.md` (added before release) for ship/no-ship status.
 
+## Gate 1 — Slate Pro Monetization Pass
+
+Pricing moved to **$7.99/mo · $59.99/yr**, changed in the one config file that already owned it. Annual savings (37%, $35.89, $5.00/mo equivalent) are now **derived from those prices** rather than written down, so marketing copy cannot drift from what a user is actually charged. The existing pricing test caught the change immediately — exactly what it was for.
+
+**Consolidated before extending.** The `isPro` status check was duplicated across follows, watchlist and AI usage, with tier limits scattered as local constants. Gate 1 adds more gates, so that became one `PLAN_LIMITS` contract in shared plus one `getPlanTier()` service — which also fixed a latent bug: an `ACTIVE` row whose expiry had passed previously still counted as entitled.
+
+**Pro pillars, all covering movies, TV and games equally:**
+- **Release Radar** — TODAY / THIS WEEK / NEXT WEEK / THIS MONTH / LATER, ranked followed > watchlisted > trending. Free gets a genuinely useful 14-day horizon; Pro gets 365 days. When the horizon hides entries, the response says so (`truncatedByPlan`) so the UI can be honest instead of silently truncating. Buckets respect the countdown precision rule — a "Q4 2026" title can never land in THIS WEEK.
+- **Watch/Play Journeys** — built from **real provider franchise data**: TMDB collections (whose parts were previously fetched as an empty array) and IGDB collections, both newly wired and sorted by actual release date. Step rationale stays factual (position, franchise, year); Slate does not assert plot claims it can't source. Games are a first-class `PLAY` journey, not an afterthought.
+- **My Slate** — one command-center response: follows and watchlist broken out per category, radar, journeys with live progress, recommendations, unread count.
+- **Ask Slate** — context now carries game-specific facts (developer, platforms), franchise, seasons and genres, plus the user's actual follows/watchlist so "what should I watch tonight?" is answered from their library rather than generic picks.
+
+**Paywall honesty.** Every gate returns a typed `PaywallTrigger`, propagated through `ApiError` into the Pro screen, which leads with the benefit the user was reaching for instead of a generic pitch. Verified live that downgrading Pro→Free **keeps existing data visible** — it caps new additions and shortens the horizon rather than deleting or breaking anything.
+
+Verified end-to-end against real Postgres across all three personas: followed a movie, series and game; hit `FOLLOW_LIMIT` at exactly 10 with the right trigger and copy; upgraded and watched the radar go 3 → 11 entries across all three categories with `truncated: false`; AI limit 5 → 100. Suite: 39/39 tests (13 new for radar and journey logic), typecheck ×3 PASS, lint PASS.
+
 ## Gate 0 — 48-Hour Architecture Freeze
 
 Architecture **frozen** on Expo SDK 51 / RN 0.74.5. No upgrade performed, no dependencies added, no redesign.

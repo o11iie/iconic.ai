@@ -222,6 +222,36 @@ export function parseTitleId(titleId: string): { mediaType: MediaType; externalI
   return { mediaType: prefix as MediaType, externalId };
 }
 
+interface TmdbCollection {
+  id: number;
+  name: string;
+  overview?: string;
+  parts: TmdbListResult[];
+}
+
+/**
+ * Fetches a TMDB collection (a franchise like "The Avengers Collection")
+ * and returns its entries in real release order.
+ *
+ * This is the factual backbone of Watch Journeys: the ordering comes from
+ * TMDB's actual release dates, never from an invented "recommended order".
+ * Entries with no release date sort last rather than being guessed at.
+ */
+export async function getCollection(collectionId: string): Promise<{ id: string; name: string; parts: TitleSummary[] }> {
+  const data = await tmdbFetch<TmdbCollection>(`/collection/${collectionId}`);
+  const parts = data.parts
+    .map((p) => toSummary(p, "movie"))
+    .sort((a, b) => {
+      const aDate = a.releaseWindow.date;
+      const bDate = b.releaseWindow.date;
+      if (!aDate && !bDate) return 0;
+      if (!aDate) return 1;
+      if (!bDate) return -1;
+      return new Date(aDate).getTime() - new Date(bDate).getTime();
+    });
+  return { id: String(data.id), name: data.name, parts };
+}
+
 export async function getSeasonDetail(tvId: string, seasonNumber: number): Promise<SeasonDetail> {
   const data = await tmdbFetch<TmdbSeasonDetail>(`/tv/${tvId}/season/${seasonNumber}`);
   const episodes: Episode[] = data.episodes.map((e) => ({

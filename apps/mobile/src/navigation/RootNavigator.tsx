@@ -8,6 +8,7 @@ import { EntitlementProvider } from "../state/EntitlementContext";
 import { LoginScreen } from "../screens/auth/LoginScreen";
 import { SignupScreen } from "../screens/auth/SignupScreen";
 import { HomeStack } from "./HomeStack";
+import { MySlateStack } from "./MySlateStack";
 import { SearchStack } from "./SearchStack";
 import { WatchlistStack } from "./WatchlistStack";
 import { ProfileStack } from "./ProfileStack";
@@ -37,6 +38,7 @@ function MainTabs() {
       }}
     >
       <Tab.Screen name="HomeTab" component={HomeStack} options={{ title: "Discover" }} />
+      <Tab.Screen name="MySlateTab" component={MySlateStack} options={{ title: "My Slate" }} />
       <Tab.Screen name="SearchTab" component={SearchStack} options={{ title: "Search" }} />
       <Tab.Screen name="WatchlistTab" component={WatchlistStack} options={{ title: "Watchlist" }} />
       <Tab.Screen name="ProfileTab" component={ProfileStack} options={{ title: "Profile" }} />

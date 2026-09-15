@@ -1,3 +1,4 @@
+import type { PaywallTrigger } from "@slate/shared";
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 
@@ -56,7 +57,13 @@ export async function clearTokens() {
 }
 
 export class ApiError extends Error {
-  constructor(message: string, public statusCode: number, public code?: string) {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public code?: string,
+    /** Set on PRO_REQUIRED responses so the paywall can lead with the right benefit. */
+    public trigger?: PaywallTrigger,
+  ) {
     super(message);
   }
 }
@@ -85,7 +92,7 @@ async function request<T>(path: string, options: RequestInit = {}, isRetry = fal
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(body.error ?? "Request failed", res.status, body.code);
+    throw new ApiError(body.error ?? "Request failed", res.status, body.code, body.trigger);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;

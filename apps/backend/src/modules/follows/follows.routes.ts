@@ -3,8 +3,7 @@ import { z } from "zod";
 import { prisma } from "../../prisma";
 import { ensureTitleExists } from "../titles/ensure-title";
 import { fromPrismaMediaType } from "../../lib/media-type";
-
-const FREE_FOLLOW_LIMIT = 10;
+import { getPlan, paywall } from "../billing/plan.service";
 
 export async function followRoutes(app: FastifyInstance) {
   app.get("/follows", { preHandler: [app.authenticate] }, async (req, reply) => {
@@ -26,16 +25,19 @@ export async function followRoutes(app: FastifyInstance) {
   app.post("/follows", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = z.object({ titleId: z.string() }).parse(req.body);
 
-    const [entitlement, currentCount] = await Promise.all([
-      prisma.entitlement.findUnique({ where: { userId: req.userId } }),
+    const [{ limits }, currentCount] = await Promise.all([
+      getPlan(req.userId),
       prisma.follow.count({ where: { userId: req.userId } }),
     ]);
-    const isPro = entitlement?.status === "ACTIVE" || entitlement?.status === "GRACE_PERIOD";
-    if (!isPro && currentCount >= FREE_FOLLOW_LIMIT) {
-      return reply.code(403).send({
-        error: `Free plan is limited to following ${FREE_FOLLOW_LIMIT} titles. Upgrade to Slate Pro for unlimited follows and smart release alerts.`,
-        code: "PRO_REQUIRED",
-      });
+    if (limits.maxFollows !== null && currentCount >= limits.maxFollows) {
+      return reply
+        .code(403)
+        .send(
+          paywall(
+            "FOLLOW_LIMIT",
+            `You're following ${limits.maxFollows} titles — the Free limit. Slate Pro gives you unlimited follows across movies, TV and games, so nothing you care about slips past.`,
+          ),
+        );
     }
 
     try {

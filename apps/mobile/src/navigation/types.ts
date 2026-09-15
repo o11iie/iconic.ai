@@ -7,7 +7,7 @@ export type HomeStackParamList = {
   Home: undefined;
   TitleDetail: { titleId: string };
   AskSlate: { titleId?: string } | undefined;
-  ProUpgrade: undefined;
+  ProUpgrade: { trigger?: string } | undefined;
   NewPost: { titleId: string };
   PostDetail: { postId: string };
   Notifications: undefined;
@@ -19,7 +19,7 @@ export type SearchStackParamList = {
   NewPost: { titleId: string };
   PostDetail: { postId: string };
   AskSlate: { titleId?: string } | undefined;
-  ProUpgrade: undefined;
+  ProUpgrade: { trigger?: string } | undefined;
 };
 
 export type WatchlistStackParamList = {
@@ -28,16 +28,24 @@ export type WatchlistStackParamList = {
   NewPost: { titleId: string };
   PostDetail: { postId: string };
   AskSlate: { titleId?: string } | undefined;
-  ProUpgrade: undefined;
+  ProUpgrade: { trigger?: string } | undefined;
 };
 
 export type ProfileStackParamList = {
   Profile: undefined;
-  ProUpgrade: undefined;
+  ProUpgrade: { trigger?: string } | undefined;
+};
+
+export type MySlateStackParamList = {
+  MySlate: undefined;
+  TitleDetail: { titleId: string };
+  AskSlate: { titleId?: string } | undefined;
+  ProUpgrade: { trigger?: string } | undefined;
 };
 
 export type MainTabParamList = {
   HomeTab: undefined;
+  MySlateTab: undefined;
   SearchTab: undefined;
   WatchlistTab: undefined;
   ProfileTab: undefined;

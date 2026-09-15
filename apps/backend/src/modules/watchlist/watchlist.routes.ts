@@ -3,8 +3,7 @@ import { z } from "zod";
 import { prisma } from "../../prisma";
 import { ensureTitleExists } from "../titles/ensure-title";
 import { fromPrismaMediaType } from "../../lib/media-type";
-
-const FREE_WATCHLIST_LIMIT = 25;
+import { getPlan, paywall } from "../billing/plan.service";
 
 export async function watchlistRoutes(app: FastifyInstance) {
   app.get("/watchlist", { preHandler: [app.authenticate] }, async (req, reply) => {
@@ -27,16 +26,19 @@ export async function watchlistRoutes(app: FastifyInstance) {
   app.post("/watchlist", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = z.object({ titleId: z.string() }).parse(req.body);
 
-    const [entitlement, currentCount] = await Promise.all([
-      prisma.entitlement.findUnique({ where: { userId: req.userId } }),
+    const [{ limits }, currentCount] = await Promise.all([
+      getPlan(req.userId),
       prisma.watchlistItem.count({ where: { userId: req.userId } }),
     ]);
-    const isPro = entitlement?.status === "ACTIVE" || entitlement?.status === "GRACE_PERIOD";
-    if (!isPro && currentCount >= FREE_WATCHLIST_LIMIT) {
-      return reply.code(403).send({
-        error: `Free watchlist is limited to ${FREE_WATCHLIST_LIMIT} titles. Upgrade to Slate Pro for unlimited watchlist.`,
-        code: "PRO_REQUIRED",
-      });
+    if (limits.maxWatchlistItems !== null && currentCount >= limits.maxWatchlistItems) {
+      return reply
+        .code(403)
+        .send(
+          paywall(
+            "WATCHLIST_LIMIT",
+            `Your watchlist is full at ${limits.maxWatchlistItems} titles. Slate Pro removes the cap so you can keep every movie, show and game you mean to get to in one place.`,
+          ),
+        );
     }
 
     try {

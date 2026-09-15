@@ -38,6 +38,7 @@ model User {
   aiUsageEvents     AiUsageEvent[]
   notifications     Notification[]
   analyticsEvents   AnalyticsEvent[]
+  savedJourneys     SavedJourney[]
 }
 
 enum UserRole {
@@ -127,6 +128,31 @@ model Follow {
   @@unique([userId, titleId])
   @@index([userId])
   @@index([titleId])
+}
+
+// ---------- Watch / Play Journeys ----------
+
+enum JourneyKind {
+  WATCH
+  PLAY
+}
+
+// A journey the user is tracking. Step membership/order is resolved from
+// provider franchise data at build time and snapshotted here; progress is
+// recomputed live from the user's COMPLETED watchlist entries rather than
+// stored, so it can never drift from what they've actually finished.
+model SavedJourney {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  kind          JourneyKind
+  mediaType     MediaType
+  stepTitleIds  String[]
+  targetTitleId String?
+  createdAt     DateTime    @default(now())
+
+  @@index([userId])
 }
 
 // ---------- Community ----------

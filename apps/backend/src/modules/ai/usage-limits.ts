@@ -1,17 +1,15 @@
 import { prisma } from "../../prisma";
-
-export const FREE_DAILY_AI_LIMIT = 5;
-export const PRO_DAILY_AI_LIMIT = 100; // configurable ceiling, not truly "unlimited", to bound cost/abuse
+import { getPlan } from "../billing/plan.service";
 
 function todayUtc(): Date {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
+/** Daily Ask Slate allowance for this user, from the central plan config. */
 export async function getDailyLimit(userId: string): Promise<number> {
-  const entitlement = await prisma.entitlement.findUnique({ where: { userId } });
-  const isPro = entitlement?.status === "ACTIVE" || entitlement?.status === "GRACE_PERIOD";
-  return isPro ? PRO_DAILY_AI_LIMIT : FREE_DAILY_AI_LIMIT;
+  const { limits } = await getPlan(userId);
+  return limits.dailyAiMessages;
 }
 
 export async function getUsedToday(userId: string): Promise<number> {

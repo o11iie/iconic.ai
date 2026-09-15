@@ -2,14 +2,17 @@ import type { FastifyInstance } from "fastify";
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { getEnv } from "../../env";
-import { getProductCatalog, isValidProductId } from "../../config/products";
+import { annualSavings, getProductCatalog, isValidProductId } from "../../config/products";
+import { PLAN_LIMITS } from "@slate/shared";
 import { verifySubscriptionPurchase, acknowledgeSubscriptionPurchase, PlayBillingNotConfiguredError } from "./play-verification";
 import { applyVerifiedPurchase, getEntitlement, isEntitlementActive, InvalidPurchaseError } from "./entitlement.service";
 import { prisma } from "../../prisma";
 
 export async function billingRoutes(app: FastifyInstance) {
   app.get("/billing/products", async (_req, reply) => {
-    return reply.send({ products: getProductCatalog() });
+    // Savings are derived from the catalog, never a written-down claim, so
+    // the annual pitch can't drift from what's actually charged.
+    return reply.send({ products: getProductCatalog(), annual: annualSavings(), limits: PLAN_LIMITS });
   });
 
   app.get("/billing/entitlement", { preHandler: [app.authenticate] }, async (req, reply) => {
