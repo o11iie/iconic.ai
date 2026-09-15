@@ -25,6 +25,19 @@ const envSchema = z.object({
    * safe default for an API that otherwise only serves the mobile client.
    */
   WEB_ORIGINS: z.string().optional().default(""),
+  /**
+   * How many reverse proxies sit in front of the API, or "false" when it is
+   * exposed directly.
+   *
+   * This matters more than it looks. `AUTH_RATE_LIMIT` keys on `req.ip` to
+   * bound credential brute-forcing. Behind a load balancer without this set,
+   * every request appears to come from the balancer, so all of the internet
+   * shares one login budget — which both lets one attacker lock everyone out
+   * and lets a distributed attacker evade the limit entirely. Fastify only
+   * reads X-Forwarded-For when it is told how far to trust it; trusting it
+   * blindly would let a client forge its own source address.
+   */
+  TRUST_PROXY: z.string().optional().default("false"),
   PORT: z.coerce.number().default(4000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });
@@ -40,9 +53,80 @@ export function getEnv(): Env {
     if (!parsed.success) {
       throw new Error(`Invalid environment configuration: ${parsed.error.message}`);
     }
+    assertProductionSafety(parsed.data);
     cached = parsed.data;
   }
   return cached;
+}
+
+/** Values that are fine in development but must never reach production. */
+const PLACEHOLDER_MARKERS = ["replace-with", "changeme", "change-me", "example", "placeholder", "xxx"];
+
+function looksLikePlaceholder(value: string): boolean {
+  const lower = value.toLowerCase();
+  return PLACEHOLDER_MARKERS.some((marker) => lower.includes(marker));
+}
+
+/**
+ * Production-only refusals. Each of these is a configuration mistake that
+ * starts up perfectly happily and is only discovered after it has done
+ * damage, so the server declines to run instead.
+ */
+function assertProductionSafety(env: Env): void {
+  if (env.NODE_ENV !== "production") return;
+
+  const problems: string[] = [];
+
+  if (env.JWT_ACCESS_SECRET === env.JWT_REFRESH_SECRET) {
+    // Sharing one secret means a refresh token is a valid access token:
+    // a stolen long-lived credential becomes an immediate API key.
+    problems.push("JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different values.");
+  }
+  for (const key of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"] as const) {
+    if (looksLikePlaceholder(env[key])) {
+      problems.push(`${key} still looks like the placeholder from .env.example.`);
+    }
+    if (env[key].length < 32) {
+      problems.push(`${key} is too short for production (want 32+ characters).`);
+    }
+  }
+  if (env.DATABASE_URL.includes("localhost") || env.DATABASE_URL.includes("127.0.0.1")) {
+    problems.push("DATABASE_URL points at localhost, which is almost certainly not the production database.");
+  }
+  if (env.WEB_ORIGINS.split(",").some((o) => o.trim().startsWith("http://"))) {
+    problems.push("WEB_ORIGINS contains a plaintext http:// origin.");
+  }
+
+  if (problems.length > 0) {
+    throw new Error(
+      `Refusing to start in production with an unsafe configuration:\n  - ${problems.join("\n  - ")}`,
+    );
+  }
+}
+
+/**
+ * Parsed form of TRUST_PROXY for Fastify.
+ *
+ *   "false" (default) — direct exposure; X-Forwarded-For is ignored entirely.
+ *   "true"            — trust every hop. Only correct when something upstream
+ *                       strips client-supplied forwarding headers.
+ *   a number          — trust exactly that many hops, expressed as Fastify's
+ *                       TrustProxyFunction since its types model a hop count
+ *                       that way.
+ *   anything else     — an IP or CIDR allowlist, passed through verbatim.
+ */
+export function getTrustProxy(): boolean | string | string[] | ((address: string, hop: number) => boolean) {
+  const raw = getEnv().TRUST_PROXY.trim();
+  if (raw === "" || raw.toLowerCase() === "false") return false;
+  if (raw.toLowerCase() === "true") return true;
+
+  const hops = Number(raw);
+  if (Number.isInteger(hops) && hops >= 0) {
+    return (_address: string, hop: number) => hop < hops;
+  }
+
+  const list = raw.split(",").map((entry) => entry.trim()).filter(Boolean);
+  return list.length > 1 ? list : raw;
 }
 
 export function isTmdbConfigured(): boolean {

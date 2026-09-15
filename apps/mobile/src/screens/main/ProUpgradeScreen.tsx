@@ -2,10 +2,20 @@ import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView } from "react-native";
 import type { RouteProp } from "@react-navigation/native";
 import type { PaywallTrigger, ProductCatalogEntry, SlateProProductId } from "@slate/shared";
-import { api } from "../../api/client";
+import { api, ApiError } from "../../api/client";
 import { colors, radii, spacing, type, MIN_TOUCH_TARGET } from "../../theme";
 import { useEntitlement } from "../../state/EntitlementContext";
-import { getExistingPurchases, purchaseSubscription } from "../../billing/iap";
+import {
+  AlreadyOwnedError,
+  PurchaseCancelledError,
+  type SubscriptionOption,
+  endIap,
+  fetchSubscriptionOptions,
+  getExistingPurchases,
+  initIap,
+  purchaseSubscription,
+} from "../../billing/iap";
+import { useAuth } from "../../state/AuthContext";
 import { track } from "../../analytics/analytics";
 
 type RouteParams = Record<string, object | undefined> & {
@@ -75,25 +85,91 @@ const PILLARS = [
 export function ProUpgradeScreen({ route }: Props) {
   const trigger: PaywallTrigger = route?.params?.trigger ?? "DIRECT";
   const { refresh } = useEntitlement();
+  const { user } = useAuth();
   const [data, setData] = useState<ProductsResponse | null>(null);
   const [purchasingId, setPurchasingId] = useState<SlateProProductId | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
+  /**
+   * Play's own offer tokens and localized prices. Purchases cannot be made
+   * without an offer token, and the price Google shows at checkout is the
+   * price that should be on this screen — the backend catalog is only a
+   * reference value for copy and analytics.
+   */
+  const [offers, setOffers] = useState<SubscriptionOption[]>([]);
 
   useEffect(() => {
     track("paywall_view", { trigger });
     api.get<ProductsResponse>("/billing/products").then(setData).catch(() => setData(null));
   }, [trigger]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await initIap();
+        const ids: SlateProProductId[] = ["SLATE_PRO_YEARLY", "SLATE_PRO_MONTHLY"];
+        const found = await fetchSubscriptionOptions(ids);
+        if (!cancelled) setOffers(found);
+      } catch {
+        // Play unavailable (no Play Services, offline, products not yet
+        // published). The screen still renders with reference pricing and
+        // the buttons explain themselves rather than failing on tap.
+        if (!cancelled) setOffers([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      endIap();
+    };
+  }, []);
+
+  function offerFor(productId: SlateProProductId) {
+    return offers.find((o) => o.productId === productId) ?? null;
+  }
+
   async function handlePurchase(productId: SlateProProductId) {
+    const offer = offerFor(productId);
+    if (!offer) {
+      Alert.alert(
+        "Subscriptions unavailable",
+        "Slate couldn't reach Google Play. Check your connection and try again.",
+      );
+      return;
+    }
+
     setPurchasingId(productId);
     track("purchase_started", { productId, trigger });
     try {
-      const { purchaseToken } = await purchaseSubscription(productId);
+      // The account id is passed to Play so a purchase can be traced back to
+      // the Slate account that made it. Entitlement still comes from the
+      // server's own verification, never from this callback.
+      const { purchaseToken, isPending } = await purchaseSubscription(offer, user?.id);
       await api.post("/billing/verify-purchase", { productId, purchaseToken });
       await refresh();
-      track("purchase_completed", { productId, trigger });
-      Alert.alert("Welcome to Slate Pro", "Your subscription is active.");
+
+      if (isPending) {
+        // Google has the purchase but has not completed it. Saying "you're
+        // Pro" here would be a lie the server correctly refuses to back.
+        track("purchase_pending", { productId, trigger });
+        Alert.alert(
+          "Purchase pending",
+          "Google Play is still processing your payment. Slate Pro unlocks as soon as it completes — you don't need to do anything.",
+        );
+      } else {
+        track("purchase_completed", { productId, trigger });
+        Alert.alert("Welcome to Slate Pro", "Your subscription is active.");
+      }
     } catch (err) {
+      if (err instanceof PurchaseCancelledError) {
+        // Backing out of the Play sheet is a normal choice, not a failure.
+        track("purchase_cancelled", { productId, trigger });
+        return;
+      }
+      if (err instanceof AlreadyOwnedError) {
+        track("purchase_failed", { productId, reason: "already_owned" });
+        Alert.alert("Already subscribed", `${err.message} Use "Restore purchases" to link it to this account.`);
+        return;
+      }
       track("purchase_failed", { productId, reason: err instanceof Error ? err.message : "unknown" });
       Alert.alert("Purchase failed", err instanceof Error ? err.message : "Please try again.");
     } finally {
@@ -104,11 +180,44 @@ export function ProUpgradeScreen({ route }: Props) {
   async function handleRestore() {
     setIsRestoring(true);
     try {
+      await initIap();
       const purchases = await getExistingPurchases();
-      for (const p of purchases) await api.post("/billing/verify-purchase", p);
+      let linked = 0;
+      let claimedByAnother = false;
+
+      for (const p of purchases) {
+        try {
+          await api.post("/billing/verify-purchase", {
+            productId: p.productId,
+            purchaseToken: p.purchaseToken,
+          });
+          linked++;
+        } catch (err) {
+          // A purchase belonging to a different Slate account is a real
+          // situation (shared device, second account) and must not read as
+          // a generic failure.
+          if (err instanceof ApiError && err.code === "PURCHASE_ALREADY_LINKED") {
+            claimedByAnother = true;
+            continue;
+          }
+          throw err;
+        }
+      }
+
       await refresh();
-      track("purchase_restored", { count: purchases.length });
-      Alert.alert(purchases.length ? "Purchases restored" : "Nothing to restore", "");
+      track("purchase_restored", { count: linked });
+
+      if (claimedByAnother && linked === 0) {
+        Alert.alert(
+          "Already linked elsewhere",
+          "This Google Play subscription belongs to a different Slate account. Sign in with that account to use Pro.",
+        );
+      } else {
+        Alert.alert(
+          linked > 0 ? "Purchases restored" : "Nothing to restore",
+          linked > 0 ? "Slate Pro is active on this account." : "Google Play has no active Slate subscription for this account.",
+        );
+      }
     } catch (err) {
       Alert.alert("Restore failed", err instanceof Error ? err.message : "Please try again.");
     } finally {

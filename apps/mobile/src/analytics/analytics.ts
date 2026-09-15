@@ -35,6 +35,13 @@ export type AnalyticsEventName =
   | "purchase_started"
   | "purchase_completed"
   | "purchase_failed"
+  // Backing out of the Play sheet is a normal outcome, not a failure, and
+  // conflating the two makes the checkout conversion rate meaningless.
+  | "purchase_cancelled"
+  // Google took the payment but has not completed it. Tracked separately so
+  // pending purchases that never complete are visible rather than showing up
+  // as successes that produced no entitlement.
+  | "purchase_pending"
   | "purchase_restored"
   | "notification_opened";
 

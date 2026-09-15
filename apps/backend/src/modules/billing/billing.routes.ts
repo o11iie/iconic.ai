@@ -5,7 +5,13 @@ import { getEnv } from "../../env";
 import { annualSavings, getProductCatalog, isValidProductId } from "../../config/products";
 import { PLAN_LIMITS } from "@slate/shared";
 import { verifySubscriptionPurchase, acknowledgeSubscriptionPurchase, PlayBillingNotConfiguredError } from "./play-verification";
-import { applyVerifiedPurchase, getEntitlement, isEntitlementActive, InvalidPurchaseError } from "./entitlement.service";
+import {
+  applyVerifiedPurchase,
+  getEntitlement,
+  isEntitlementActive,
+  InvalidPurchaseError,
+  PurchaseTokenAlreadyBoundError,
+} from "./entitlement.service";
 import { prisma } from "../../prisma";
 
 export async function billingRoutes(app: FastifyInstance) {
@@ -55,6 +61,15 @@ export async function billingRoutes(app: FastifyInstance) {
     } catch (err) {
       if (err instanceof PlayBillingNotConfiguredError) {
         return reply.code(503).send({ error: err.message, code: "BILLING_NOT_CONFIGURED" });
+      }
+      if (err instanceof PurchaseTokenAlreadyBoundError) {
+        // 409, not 403: the purchase is genuine, it just belongs to another
+        // account. The message deliberately does not say which one.
+        app.log.warn(
+          { userId: req.userId },
+          "Rejected a purchase token already bound to a different account",
+        );
+        return reply.code(409).send({ error: err.message, code: "PURCHASE_ALREADY_LINKED" });
       }
       if (err instanceof InvalidPurchaseError) {
         return reply.code(400).send({ error: err.message });
@@ -114,6 +129,19 @@ export async function billingRoutes(app: FastifyInstance) {
       const purchase = await verifySubscriptionPurchase(purchaseToken);
       await applyVerifiedPurchase(entitlement.userId, purchase, purchaseToken);
     } catch (err) {
+      if (err instanceof PlayBillingNotConfiguredError) {
+        // A deployment problem, not a bad notification. 503 so Pub/Sub keeps
+        // the message and redelivers once credentials are in place, and so
+        // this is distinguishable from a genuine processing fault in logs.
+        app.log.error("RTDN received but Play Billing credentials are not configured; cannot verify.");
+        return reply.code(503).send({ error: "Billing not configured.", code: "BILLING_NOT_CONFIGURED" });
+      }
+      if (err instanceof PurchaseTokenAlreadyBoundError) {
+        // The token routed to an entitlement that no longer owns it. Retrying
+        // will never fix that, so acknowledge and surface it for a human.
+        app.log.error({ purchaseToken }, "RTDN token is bound to a different account; not retrying.");
+        return reply.code(200).send({ ok: true });
+      }
       app.log.error({ err }, "Failed to process RTDN");
       return reply.code(500).send({ error: "Processing failed, please redeliver." });
     }

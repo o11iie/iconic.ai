@@ -305,6 +305,16 @@ model Entitlement {
   updatedAt           DateTime          @updatedAt
 
   purchaseEvents PurchaseEvent[]
+
+  // Google's RTDN webhook identifies a subscription only by its purchase
+  // token, so every renewal, cancellation and grace-period notification
+  // looks the entitlement up by this column. Without an index that is a
+  // sequential scan over every subscriber on each notification.
+  //
+  // Deliberately not @unique: during an account transfer or a re-purchase
+  // two rows can briefly carry the same token, and a unique constraint
+  // would turn that into a write failure on a legitimate path.
+  @@index([latestPurchaseToken])
 }
 
 // Immutable audit log of every purchase/notification received from Google

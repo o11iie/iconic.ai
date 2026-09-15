@@ -3,7 +3,8 @@ import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import rateLimit from "@fastify/rate-limit";
 import { ZodError } from "zod";
-import { getEnv } from "./env";
+import { getEnv, getTrustProxy, isTmdbConfigured, isIgdbConfigured, isAiConfigured, isPlayBillingConfigured } from "./env";
+import { prisma } from "./prisma";
 import authenticatePlugin from "./plugins/authenticate";
 import { authRoutes } from "./modules/auth/auth.routes";
 import { userRoutes } from "./modules/users/users.routes";
@@ -35,6 +36,9 @@ export function buildApp() {
     // analytics batch. Cap well below Fastify's 1MB default so an oversized
     // payload is rejected before it's parsed.
     bodyLimit: 128 * 1024,
+    // See TRUST_PROXY in env.ts — this is what makes req.ip the real client
+    // behind a load balancer, which the auth rate limit depends on.
+    trustProxy: getTrustProxy(),
   });
 
   /**
@@ -97,7 +101,51 @@ export function buildApp() {
     return reply.code(statusCode).send({ error: statusCode === 500 ? "Internal server error" : error.message });
   });
 
+  /**
+   * Liveness. Answers "is this process running?" and nothing else, so a
+   * database blip never causes an orchestrator to kill healthy instances.
+   * Deliberately does no I/O.
+   */
   app.get("/health", async () => ({ status: "ok", timestamp: new Date().toISOString() }));
+
+  /**
+   * Readiness. Answers "should this instance receive traffic?", which is a
+   * different question: it needs the database. Returns 503 when it does not
+   * have one, so a rolling deploy waits for the new instance to be genuinely
+   * usable instead of routing requests into errors.
+   *
+   * It also reports which optional providers are configured. That is not a
+   * readiness condition — Slate degrades honestly without them rather than
+   * failing — but it turns "why is search empty in production?" into
+   * something answerable with one curl instead of a log dig.
+   */
+  app.get("/ready", async (_req, reply) => {
+    const startedAt = Date.now();
+    let database: "ok" | "unavailable" = "ok";
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+    } catch (err) {
+      database = "unavailable";
+      app.log.error({ err }, "Readiness check failed: database unreachable");
+    }
+
+    const body = {
+      status: database === "ok" ? "ready" : "not_ready",
+      database,
+      databaseLatencyMs: Date.now() - startedAt,
+      providers: {
+        tmdb: isTmdbConfigured(),
+        igdb: isIgdbConfigured(),
+        ai: isAiConfigured(),
+        playBilling: isPlayBillingConfigured(),
+        rtdnWebhook: env.RTDN_SHARED_SECRET.length > 0,
+        webOrigins: env.WEB_ORIGINS.length > 0,
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    return reply.code(database === "ok" ? 200 : 503).send(body);
+  });
 
   app.register(authRoutes, { prefix: "/api" });
   app.register(userRoutes, { prefix: "/api" });
