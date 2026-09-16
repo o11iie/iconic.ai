@@ -99,7 +99,7 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     this.baseUrl = configured.replace(/\/+$/, '');
     this.ready = true;
     this.notReadyReason = null;
-    this.invalidate();
+    this.touch();
 
     return ok(this.getStatus());
   }
@@ -117,6 +117,10 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
       return err(SpatialError.notConfigured(this.id));
     }
 
+    // Entering the lifecycle bumps the generation, so a load already in
+    // flight for a different model cannot complete into this one.
+    const { generation } = this.scene.dispatchLifecycle({ type: 'load', modelRef });
+
     const manifestUrl = `${this.baseUrl}/${modelRef}/manifest.json`;
     options?.onProgress?.({
       ratio: null,
@@ -132,28 +136,30 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
         headers: { accept: 'application/json' },
       });
       if (!response.ok) {
-        return err(
-          SpatialError.modelUnavailable(
-            modelRef,
-            `manifest request failed with HTTP ${response.status}`,
-          ),
+        const failure = SpatialError.modelUnavailable(
+          modelRef,
+          `manifest request failed with HTTP ${response.status}`,
         );
+        this.scene.dispatchLifecycle({ type: 'fail', error: failure.message, generation });
+        return err(failure);
       }
       payload = await response.json();
     } catch (cause) {
-      return err(SpatialError.assetLoadFailed(manifestUrl, cause));
+      const failure = SpatialError.assetLoadFailed(manifestUrl, cause);
+      this.scene.dispatchLifecycle({ type: 'fail', error: failure.message, generation });
+      return err(failure);
     }
 
     options?.onProgress?.({ ratio: null, loadedBytes: 0, totalBytes: null, phase: 'mapping' });
 
     const parsed = parseManifest(payload);
     if (!parsed.ok) {
-      return err(
-        SpatialError.modelUnavailable(
-          modelRef,
-          `${parsed.error.message} ${parsed.error.issues.join('; ')}`,
-        ),
+      const failure = SpatialError.modelUnavailable(
+        modelRef,
+        `${parsed.error.message} ${parsed.error.issues.join('; ')}`,
       );
+      this.scene.dispatchLifecycle({ type: 'fail', error: failure.message, generation });
+      return err(failure);
     }
 
     const manifest = parsed.value;
@@ -162,8 +168,10 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     this.assetUrl = `${this.baseUrl}/${modelRef}/${manifest.assetPath}`;
 
     const graph = this.toGraph(manifest);
-    this.graph = graph;
-    this.invalidate();
+    // publishGraph tells the scene controller which objects now exist, which
+    // is what makes selection and visual state resolvable.
+    this.publishGraph(graph);
+    this.scene.dispatchLifecycle({ type: 'loaded', generation });
 
     options?.onProgress?.({ ratio: 1, loadedBytes: 0, totalBytes: null, phase: 'ready' });
     return ok(graph);

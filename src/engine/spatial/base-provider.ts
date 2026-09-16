@@ -18,19 +18,26 @@ import type {
   SpatialProviderStatus,
   SpatialResult,
 } from './provider';
+import { SceneController, type CameraCommand, type SceneSnapshot } from './scene-controller';
 import type { FlyToOptions, ObjectSummary, SceneVisualState } from './types';
-import { computeIsolationSets, resolveVisualState } from './visual-state';
+import type { ModelLifecycleState } from './model-lifecycle';
+
+export type { CameraCommand } from './scene-controller';
 
 /**
- * Camera commands are queued rather than executed, because the provider does
- * not own the camera — the React Three Fiber controller does. `version` lets
- * the controller detect a new command without deep comparison.
+ * Snapshot exposed to React.
+ *
+ * Composes the scene controller's state (selection, visual state, camera,
+ * lifecycle) with the provider's own resolved graph.
  */
-export interface CameraCommand {
-  readonly version: number;
-  readonly kind: 'fly_to' | 'reset' | 'fit_selection';
-  readonly targetId: SemanticId | null;
-  readonly options: FlyToOptions;
+export interface ProviderSnapshot {
+  readonly visual: SceneVisualState;
+  readonly selectedId: SemanticId | null;
+  readonly hoveredId: SemanticId | null;
+  readonly camera: CameraCommand | null;
+  readonly graph: SpatialModelGraph | null;
+  readonly lifecycle: ModelLifecycleState;
+  readonly revision: number;
 }
 
 /**
@@ -55,23 +62,18 @@ export function isObservableProvider(value: unknown): value is ObservableSpatial
   );
 }
 
-export interface ProviderSnapshot {
-  readonly visual: SceneVisualState;
-  readonly selectedId: SemanticId | null;
-  readonly hoveredId: SemanticId | null;
-  readonly camera: CameraCommand | null;
-  readonly graph: SpatialModelGraph | null;
-  readonly revision: number;
-}
-
 /**
  * Shared implementation of every non-transport concern a scene-graph provider
- * needs: hierarchy queries, relationship lookup, visual state, isolation,
- * camera intents and change notification.
+ * needs: hierarchy queries, relationship lookup, search, and delegation of all
+ * scene state to a single `SceneController`.
  *
  * A concrete provider therefore only has to implement *loading* — which is the
- * part that actually differs between a licensed asset set, a licensed SDK and a
- * future VEO-owned pipeline.
+ * part that actually differs between a licensed asset set, a licensed SDK and
+ * a future VEO-owned pipeline.
+ *
+ * Scene state is NOT duplicated here. Selection, visibility, isolation and
+ * camera intents all live in the controller, so the engine's renderer and the
+ * provider API are two views of one truth rather than two copies of it.
  */
 export abstract class BaseSceneGraphProvider implements SceneGraphProvider {
   readonly rendersIntoVeoScene = true as const;
@@ -79,24 +81,25 @@ export abstract class BaseSceneGraphProvider implements SceneGraphProvider {
   abstract readonly id: string;
   protected abstract readonly capabilities: SpatialProviderCapabilities;
 
+  /** The single owner of scene state. Exposed so the renderer can bind to it. */
+  readonly scene = new SceneController();
+
   protected graph: SpatialModelGraph | null = null;
   protected ready = false;
   protected notReadyReason: string | null = 'Provider has not been initialised.';
 
-  private selectedId: SemanticId | null = null;
-  private hoveredId: SemanticId | null = null;
-  private highlightedIds = new Set<SemanticId>();
-  private hiddenIds = new Set<SemanticId>();
-  private ghostedIds = new Set<SemanticId>();
-  private isolatedId: SemanticId | null = null;
-  private hiddenLayerIds = new Set<string>();
-
-  private cameraCommand: CameraCommand | null = null;
-  private cameraVersion = 0;
-  private revision = 0;
-
-  private listeners = new Set<() => void>();
   private snapshot: ProviderSnapshot | null = null;
+  private lastSceneSnapshot: SceneSnapshot | null = null;
+  private listeners = new Set<() => void>();
+
+  constructor() {
+    // Re-emit controller changes to provider subscribers, and drop the cached
+    // composite snapshot so it is rebuilt from the new scene state.
+    this.scene.subscribe(() => {
+      this.snapshot = null;
+      for (const listener of this.listeners) listener();
+    });
+  }
 
   // ---- subclass responsibilities -------------------------------------------
   abstract initialize(): SpatialResult<SpatialProviderStatus>;
@@ -116,17 +119,31 @@ export abstract class BaseSceneGraphProvider implements SceneGraphProvider {
 
   dispose(): void {
     this.unloadModel();
+    this.scene.dispose();
     this.listeners.clear();
   }
 
   unloadModel(): void {
     this.graph = null;
-    this.restore();
-    this.invalidate();
+    this.scene.dispatchLifecycle({ type: 'unload' });
+  }
+
+  /**
+   * Publish a freshly resolved graph to the controller.
+   *
+   * Called by subclasses once loading succeeds. This is what tells the scene
+   * which objects exist and which layers they belong to.
+   */
+  protected publishGraph(graph: SpatialModelGraph): void {
+    this.graph = graph;
+
+    const layerMembership = new Map<SemanticId, readonly string[]>();
+    for (const [id, object] of graph.objects) layerMembership.set(id, object.layerIds);
+
+    this.scene.setObjects([...graph.objects.keys()], layerMembership);
   }
 
   // ---- React integration ---------------------------------------------------
-  /** Subscribe for `useSyncExternalStore`. Returns an unsubscribe function. */
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => {
@@ -134,42 +151,33 @@ export abstract class BaseSceneGraphProvider implements SceneGraphProvider {
     };
   };
 
-  /** Stable snapshot for `useSyncExternalStore`; only changes on invalidate. */
   getSnapshot = (): ProviderSnapshot => {
-    if (this.snapshot) return this.snapshot;
+    const sceneSnapshot = this.scene.getSnapshot();
 
-    const objectIds = this.graph ? [...this.graph.objects.keys()] : [];
-    const layerMembership = new Map<SemanticId, readonly string[]>();
-    if (this.graph) {
-      for (const [id, object] of this.graph.objects) {
-        layerMembership.set(id, object.layerIds);
-      }
-    }
+    // Rebuild only when the scene actually changed or the graph was replaced.
+    if (this.snapshot && this.lastSceneSnapshot === sceneSnapshot) return this.snapshot;
 
+    this.lastSceneSnapshot = sceneSnapshot;
     this.snapshot = {
-      visual: resolveVisualState({
-        objectIds,
-        selectedId: this.selectedId,
-        hoveredId: this.hoveredId,
-        highlightedIds: this.highlightedIds,
-        hiddenIds: this.hiddenIds,
-        ghostedIds: this.ghostedIds,
-        isolatedId: this.isolatedId,
-        hiddenLayerIds: this.hiddenLayerIds,
-        layerMembership,
-      }),
-      selectedId: this.selectedId,
-      hoveredId: this.hoveredId,
-      camera: this.cameraCommand,
+      visual: sceneSnapshot.visual,
+      selectedId: sceneSnapshot.selectedId,
+      hoveredId: sceneSnapshot.hoveredId,
+      camera: sceneSnapshot.camera,
+      lifecycle: sceneSnapshot.lifecycle,
+      revision: sceneSnapshot.revision,
       graph: this.graph,
-      revision: this.revision,
     };
 
     return this.snapshot;
   };
 
-  protected invalidate(): void {
-    this.revision += 1;
+  /**
+   * Force a snapshot rebuild and notify subscribers.
+   *
+   * For changes outside scene state — provider readiness, for example — which
+   * the controller does not own but consumers still re-read.
+   */
+  protected touch(): void {
     this.snapshot = null;
     for (const listener of this.listeners) listener();
   }
@@ -177,17 +185,13 @@ export abstract class BaseSceneGraphProvider implements SceneGraphProvider {
   // ---- partial loading -----------------------------------------------------
   async loadRegion(regionId: string): SpatialResult<SpatialRegion> {
     const region = this.graph?.regions.find((candidate) => candidate.id === regionId);
-    if (!region) {
-      return { ok: false, error: SpatialError.objectNotFound(regionId) };
-    }
+    if (!region) return { ok: false, error: SpatialError.objectNotFound(regionId) };
     return { ok: true, value: region };
   }
 
   async loadLayer(layerId: string): SpatialResult<SpatialLayer> {
     const layer = this.graph?.layers.find((candidate) => candidate.id === layerId);
-    if (!layer) {
-      return { ok: false, error: SpatialError.objectNotFound(layerId) };
-    }
+    if (!layer) return { ok: false, error: SpatialError.objectNotFound(layerId) };
     return { ok: true, value: layer };
   }
 
@@ -223,10 +227,7 @@ export abstract class BaseSceneGraphProvider implements SceneGraphProvider {
     return this.getObject(semanticId)?.metadata ?? null;
   }
 
-  getRelated(
-    semanticId: SemanticId,
-    kinds?: readonly RelationshipKind[],
-  ): readonly Relationship[] {
+  getRelated(semanticId: SemanticId, kinds?: readonly RelationshipKind[]): readonly Relationship[] {
     if (!this.graph) return [];
     const kindFilter = kinds && kinds.length > 0 ? new Set<string>(kinds) : null;
 
@@ -247,9 +248,7 @@ export abstract class BaseSceneGraphProvider implements SceneGraphProvider {
     const matches: ObjectSummary[] = [];
     for (const object of this.graph.objects.values()) {
       if (matches.length >= limit) break;
-      const haystack = [object.name, object.semanticId, ...object.synonyms]
-        .join(' ')
-        .toLowerCase();
+      const haystack = [object.name, object.semanticId, ...object.synonyms].join(' ').toLowerCase();
       if (haystack.includes(needle)) {
         matches.push({
           semanticId: object.semanticId,
@@ -278,111 +277,58 @@ export abstract class BaseSceneGraphProvider implements SceneGraphProvider {
     ];
   }
 
-  // ---- presentation intents ------------------------------------------------
+  // ---- presentation intents (delegated) ------------------------------------
   select(semanticId: SemanticId | null): void {
-    this.selectedId = semanticId;
-    this.invalidate();
+    this.scene.select(semanticId);
   }
 
   setHovered(semanticId: SemanticId | null): void {
-    if (this.hoveredId === semanticId) return;
-    this.hoveredId = semanticId;
-    this.invalidate();
+    this.scene.setHovered(semanticId);
   }
 
   highlight(semanticIds: readonly SemanticId[]): void {
-    this.highlightedIds = new Set(semanticIds);
-    this.invalidate();
+    this.scene.highlight(semanticIds);
   }
 
   hide(semanticIds: readonly SemanticId[]): void {
-    for (const id of semanticIds) {
-      this.hiddenIds.add(id);
-      this.ghostedIds.delete(id);
-    }
-    this.invalidate();
+    this.scene.hide(semanticIds);
   }
 
   show(semanticIds: readonly SemanticId[]): void {
-    for (const id of semanticIds) {
-      this.hiddenIds.delete(id);
-      this.ghostedIds.delete(id);
-    }
-    this.invalidate();
+    this.scene.show(semanticIds);
   }
 
   ghost(semanticIds: readonly SemanticId[]): void {
-    for (const id of semanticIds) {
-      this.ghostedIds.add(id);
-      this.hiddenIds.delete(id);
-    }
-    this.invalidate();
+    this.scene.ghost(semanticIds);
   }
 
-  /**
-   * Isolate a subtree. Context geometry is ghosted rather than deleted so the
-   * learner keeps their spatial bearings — this is a learning product, and
-   * losing orientation defeats the purpose.
-   */
   isolate(semanticId: SemanticId): void {
     if (!this.graph) return;
-    const { hidden, ghosted } = computeIsolationSets(
-      [...this.graph.objects.keys()],
-      semanticId,
-      this.capabilities.supportsGhosting,
-    );
-    this.isolatedId = semanticId;
-    this.hiddenIds = hidden;
-    this.ghostedIds = ghosted;
-    this.invalidate();
+    this.scene.isolate(semanticId);
   }
 
   restore(): void {
-    this.selectedId = null;
-    this.hoveredId = null;
-    this.highlightedIds = new Set();
-    this.hiddenIds = new Set();
-    this.ghostedIds = new Set();
-    this.isolatedId = null;
-    this.hiddenLayerIds = new Set();
-    this.invalidate();
+    this.scene.restore();
   }
 
   setLayerVisible(layerId: string, visible: boolean): void {
-    if (visible) {
-      this.hiddenLayerIds.delete(layerId);
-    } else {
-      this.hiddenLayerIds.add(layerId);
-    }
-    this.invalidate();
+    this.scene.setLayerVisible(layerId, visible);
   }
 
-  // ---- camera intents ------------------------------------------------------
+  // ---- camera intents (delegated) ------------------------------------------
   flyTo(semanticId: SemanticId, options: FlyToOptions = {}): void {
-    this.cameraVersion += 1;
-    this.cameraCommand = {
-      version: this.cameraVersion,
-      kind: 'fly_to',
-      targetId: semanticId,
-      options,
-    };
-    this.invalidate();
+    this.scene.flyTo(semanticId, options);
   }
 
   resetCamera(options: FlyToOptions = {}): void {
-    this.cameraVersion += 1;
-    this.cameraCommand = { version: this.cameraVersion, kind: 'reset', targetId: null, options };
-    this.invalidate();
+    this.scene.resetCamera(options);
+  }
+
+  fitToModel(options: FlyToOptions = {}): void {
+    this.scene.fitToModel(options);
   }
 
   fitToSelection(options: FlyToOptions = {}): void {
-    this.cameraVersion += 1;
-    this.cameraCommand = {
-      version: this.cameraVersion,
-      kind: 'fit_selection',
-      targetId: this.selectedId,
-      options,
-    };
-    this.invalidate();
+    this.scene.fitToSelection(options);
   }
 }

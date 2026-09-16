@@ -12,6 +12,7 @@ import type {
   Vec3,
 } from '@/types/domain/spatial';
 import type { SpatialError } from './errors';
+import type { SceneController } from './scene-controller';
 import type { FlyToOptions, LoadProgress, ObjectSummary } from './types';
 
 /**
@@ -124,6 +125,13 @@ export interface SpatialProvider {
  */
 export interface SceneGraphProvider extends SpatialProvider {
   readonly rendersIntoVeoScene: true;
+  /**
+   * The single owner of scene state for this provider.
+   *
+   * Exposed so the renderer binds to the same state the provider API mutates,
+   * rather than keeping a second copy that has to be kept in sync.
+   */
+  readonly scene: SceneController;
   /** Resolved URL of the GLB/GLTF asset to mount. */
   getAssetUrl(): string | null;
   /** Vendor mesh name -> VEO semantic id. */
