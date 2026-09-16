@@ -70,9 +70,16 @@ rather than a control that silently does nothing.
 ```bash
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
-npm run test        # vitest
+npm run test        # vitest — unit and component tests
 npm run verify      # all of the above, then a production build
+npm run test:ui     # live browser checks against a running server
+npm run verify:full # verify, then boot a production server and run test:ui
 ```
+
+`test:ui` drives a real Chromium against a production build and asserts what
+source inspection cannot: that every route renders without console errors, that
+the layout holds at 360/390/430/768/1024/1440, that the 3D viewport stays
+dominant, that navigation works, and that nothing fabricated appears on screen.
 
 ## Environment variables
 
@@ -108,9 +115,11 @@ src/
     api/health/         capability + health endpoint
   components/
     ui/                 design-system primitives + loading/empty/error states
-    layout/             app shell, navigation, auth form
-    spatial/            viewport, controls, structure inspector
-    anatomy/            anatomy-specific surfaces
+    layout/             app shell, nav rail, bottom nav, top bar, auth form
+    workspace/          learning workspace: toolbar, context panel, AI bar
+    spatial/            3D stage and its lazy boundary
+    learning/           subject browser, recall modes, library, settings
+    marketing/          landing-page figure
   engine/
     spatial/            DOMAIN-AGNOSTIC provider contract, visual-state reducer
     3d/                 React Three Fiber renderer, camera rig, materials
@@ -126,40 +135,52 @@ src/
   types/domain/         all core domain entities
   config/               env (client-safe + server-only), site config
   hooks/                React bindings to the provider layer
-  tests/                test setup
+  tests/                test setup + design-token guards
+scripts/                verify-ui.mjs — live browser verification
 supabase/migrations/    schema + Row Level Security
 ```
 
 ## Current implementation status
 
 **Gate 1 — Application Foundation: complete and verified.**
+**Gate 2 — Premium Product Shell + Learning Workspace: complete and verified.**
 
 Working today:
 
-- All 10 routes render and are navigable; production build passes.
+- All product routes render and navigate; production build passes.
+- Full design system: overlays with focus trapping, menus, tabs, tooltips,
+  search, cards, panels, badges, avatars and a 30-glyph inline icon set.
+- Application shell with a desktop navigation rail, mobile bottom navigation,
+  search, and an account menu that keeps Settings out of the primary rail.
+- Landing, sign in, sign up, forgot password, reset password and a three-step
+  onboarding flow that persists to the learner's profile.
+- The learning workspace: model switcher, spatial toolbar, dominant viewport,
+  layers panel, context panel with relationship UI and study actions, and a
+  one-row AI study bar.
+- Home, Learn, Recall, Library and Settings, each with honest empty states.
 - Domain model for all 18 core entities, domain-agnostic throughout.
-- VEO semantic identity system (`veo.anatomy.heart.left_ventricle`) with a
-  parser, builder, hierarchy operations and 17 tests.
+- VEO semantic identity (`veo.anatomy.heart.left_ventricle`) with a parser,
+  builder and hierarchy operations.
 - `SpatialProvider` / `AnatomyProvider` abstractions and a **functional**
-  licensed-GLB/GLTF provider: it fetches and validates a manifest, maps vendor
-  mesh names to permanent VEO ids, and drives selection, highlight, ghost,
-  isolate, hide/show and camera framing.
+  licensed-GLB/GLTF provider that validates a manifest and maps vendor mesh
+  names to permanent VEO ids.
 - React Three Fiber renderer: orbit/pan/zoom, animated fly-to, fit-to-selection,
   reset, hover and click selection, material state, WebGL detection.
-- Supabase auth (email/password) via server actions, session refresh and
-  protected routes.
-- Postgres schema and Row Level Security for all core tables.
-- 93 automated tests.
+- Supabase auth with session refresh and protected routes; Postgres schema and
+  Row Level Security for all core tables.
+- 157 automated tests plus 116 live browser checks.
 
 Deliberately **not** present:
 
-- **No synthetic anatomy.** VEO does not generate stand-in geometry from
-  primitives. Anatomy requires licensed assets; until one is configured the
-  product says so.
-- **No fabricated statistics.** The dashboard shows real state or an empty
-  state — never invented progress.
+- **No synthetic anatomy.** VEO does not generate stand-in geometry. Anatomy
+  requires licensed assets; until one is configured the product says so.
+- **No fabricated data.** No invented statistics, testimonials, logos or
+  progress. Where data does not exist, the empty state says so.
+- **No recall algorithm or spaced repetition yet** — Gate 3.
+- **No tutor responses yet** — the abstraction and context builder exist; the
+  server route is Gate 3.
 
-Next: **Gate 2** — see [VEO_BUILD_STATUS.md](./VEO_BUILD_STATUS.md).
+Next: **Gate 3** — see [VEO_BUILD_STATUS.md](./VEO_BUILD_STATUS.md).
 
 ## Note on this repository
 

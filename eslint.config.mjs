@@ -105,6 +105,14 @@ const eslintConfig = [
       'no-console': 'off',
     },
   },
+
+  // Verification scripts are command-line tools; printing is their purpose.
+  {
+    files: ['scripts/**/*.{js,mjs,ts}'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
 ];
 
 export default eslintConfig;

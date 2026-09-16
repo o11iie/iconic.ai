@@ -248,6 +248,98 @@ Treated as correctness, not polish:
 
 ---
 
+## 11. The product shell
+
+Two shells, because two fundamentally different layouts are needed:
+
+| Shell | Used by | Behaviour |
+| --- | --- | --- |
+| `AppShell` | Home, Learn, Recall, Library, Settings | scrolls, pads, page header, optional right aside |
+| `WorkspaceShell` | Explore | fills the viewport, never scrolls, never pads |
+
+That split is the whole layout argument. A workspace built inside a scrolling
+document turns the model into a figure inside a page; VEO's model has to *be*
+the page. `WorkspaceShell` is `h-dvh overflow-hidden`, and the canvas column is
+the only region allowed to grow. This is verified at runtime rather than
+asserted: `scripts/verify-ui.mjs` measures, at 360/768/1440, that the workspace
+fills the screen and the page does not scroll.
+
+Both shells are Server Components that resolve the session once per request.
+Navigation is one rail on desktop and one bottom bar on mobile, each rendering
+each destination exactly once — an earlier version rendered both and hid one
+with CSS, which put every link in the accessibility tree twice.
+
+Settings deliberately lives in the account menu, not the rail. The primary
+navigation is about learning; administration does not belong beside it.
+
+---
+
+## 12. Honesty as a design constraint
+
+Gate 2's hardest rule is that the interface must never imply content exists
+before it does. This is enforced structurally, not by good intentions:
+
+- **`NotConfiguredState` is a first-class component**, distinct from
+  `ErrorState`. Nothing is broken when a key is missing, so it does not look
+  like a failure — and it names the exact environment variable required.
+- **The content catalogue carries status.** `src/data/subjects.ts` gives every
+  category a `contentStatus`, and `src/data/content.test.ts` fails the build if
+  a category claims to be `available` without a model behind it, or if any
+  anatomy category advertises availability while the catalogue still requires a
+  licensed asset.
+- **Dashboards show no statistics.** Every number would be invented until real
+  recall attempts exist. `scripts/verify-ui.mjs` scans the rendered dashboard
+  for percentage and streak patterns and fails if any appear.
+- **The AI bar states its real context.** It says "No structure selected" when
+  nothing is selected rather than implying a focus it does not have.
+
+---
+
+## 13. Motion
+
+Motion is short, eased and purposeful: it explains where something came from.
+Nothing bounces, loops or decorates. The shared vocabulary in
+`components/ui/motion.ts` animates opacity and small translations only, so a
+reduced-motion user losing the transform loses nothing meaningful.
+
+`motionSafe()` strips movement while preserving mount and unmount transitions,
+so `AnimatePresence` keeps working. `prefers-reduced-motion` is read once into
+the UI store and threaded everywhere, including into the 3D camera rig, which
+snaps instead of animating.
+
+Route transitions animate on mount only. Adding an exit transition would delay
+unmount, which makes navigation feel slower — the opposite of premium.
+
+---
+
+## 14. Two silent failures worth remembering
+
+Both were invisible to the compiler, the linter and the test suite, and both
+were caught only by running the application.
+
+**Tailwind v4 removed the `utility-[--custom-var]` shorthand.** A class like
+`bg-[--color-accent]` still compiles and still appears in the output CSS, but
+emits `background-color: --color-accent`, which is not a valid colour, so the
+browser drops it. The application rendered with almost none of its palette,
+inheriting from `body` and the handful of custom `.veo-*` classes — close enough
+to look intentional. Because VEO's tokens live in `@theme`, Tailwind generates
+real utilities for them, and those are the only correct form:
+`bg-accent`, `text-ink-muted`, `border-hairline`.
+Guarded by `src/tests/design-tokens.test.ts`.
+
+**TypeScript interfaces have no implicit index signature; type aliases do.**
+`Database` was declared with `interface`, so it failed supabase-js's
+`Record<string, GenericTable>` constraint — silently, with no error at the
+definition site. The only symptom was that every query builder's argument type
+collapsed to `never`, making all inserts and updates impossible to write. This
+is why Supabase's own generator emits type aliases.
+Guarded by `src/types/database.test.ts`.
+
+The lesson that shaped the rest of Gate 2: a gate is not green because the
+build passes. It is green because the running application was measured.
+
+---
+
 ## Appendix: version pinning rationale
 
 Two pins are not "latest", for concrete compatibility reasons found by checking

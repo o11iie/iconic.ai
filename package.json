@@ -2,7 +2,7 @@
   "name": "veo",
   "version": "0.1.0",
   "private": true,
-  "description": "VEO — Learning you can see. A spatial-learning platform.",
+  "description": "VEO \u2014 Learning you can see. A spatial-learning platform.",
   "engines": {
     "node": ">=20.9.0"
   },
@@ -15,7 +15,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run build"
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "test:ui": "node scripts/verify-ui.mjs",
+    "verify:full": "npm run verify && npm run start:verify",
+    "start:verify": "next start -p 3399 & sleep 4 && node scripts/verify-ui.mjs http://127.0.0.1:3399; kill %1"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",
@@ -48,6 +51,7 @@
     "eslint": "9.39.5",
     "eslint-config-next": "16.3.5",
     "jsdom": "30.0.1",
+    "playwright": "1.63.0",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.70.0",
