@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView } from "react-native";
 import type { RouteProp } from "@react-navigation/native";
 import type { PaywallTrigger, ProductCatalogEntry, SlateProProductId } from "@slate/shared";
@@ -18,6 +18,7 @@ import {
 } from "../../billing/iap";
 import { useAuth } from "../../state/AuthContext";
 import { track } from "../../analytics/analytics";
+import { ErrorState } from "../../components/EmptyState";
 
 type RouteParams = Record<string, object | undefined> & {
   ProUpgrade: { trigger?: PaywallTrigger } | undefined;
@@ -97,11 +98,29 @@ export function ProUpgradeScreen({ route }: Props) {
    * reference value for copy and analytics.
    */
   const [offers, setOffers] = useState<SubscriptionOption[]>([]);
+  // The paywall previously rendered an ActivityIndicator whenever `data` was
+  // null, with no timeout and no retry — so a single failed request left the
+  // one screen that takes money spinning forever with no way out.
+  const [catalogFailed, setCatalogFailed] = useState(false);
+
+  const loadCatalog = useCallback(() => {
+    setCatalogFailed(false);
+    api
+      .get<ProductsResponse>("/billing/products")
+      .then((res) => {
+        setData(res);
+        setCatalogFailed(false);
+      })
+      .catch(() => {
+        setData(null);
+        setCatalogFailed(true);
+      });
+  }, []);
 
   useEffect(() => {
     track("paywall_view", { trigger });
-    api.get<ProductsResponse>("/billing/products").then(setData).catch(() => setData(null));
-  }, [trigger]);
+    loadCatalog();
+  }, [trigger, loadCatalog]);
 
   useEffect(() => {
     let cancelled = false;
@@ -187,7 +206,12 @@ export function ProUpgradeScreen({ route }: Props) {
         Alert.alert("Already subscribed", `${err.message} Use "Restore purchases" to link it to this account.`);
         return;
       }
-      track("purchase_failed", { productId, reason: err instanceof Error ? err.message : "unknown" });
+      track("purchase_failed", {
+        // Bounded: this is the one analytics property that carries free text,
+        // and it originates from a native layer Slate does not control.
+        productId,
+        reason: (err instanceof Error ? err.message : "unknown").slice(0, 80),
+      });
       Alert.alert("Purchase failed", err instanceof Error ? err.message : "Please try again.");
     } finally {
       setPurchasingId(null);
@@ -265,7 +289,12 @@ export function ProUpgradeScreen({ route }: Props) {
         ))}
       </View>
 
-      {!data ? (
+      {catalogFailed ? (
+        <ErrorState
+          message="Slate couldn't load subscription details right now. Your account is unaffected."
+          onRetry={loadCatalog}
+        />
+      ) : !data ? (
         <ActivityIndicator color={colors.pro} style={{ marginTop: spacing.lg }} />
       ) : (
         <>

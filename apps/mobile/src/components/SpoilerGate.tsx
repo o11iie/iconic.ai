@@ -16,7 +16,13 @@ export function SpoilerGate({ containsSpoilers, children }: { containsSpoilers: 
   if (revealed) return <>{children}</>;
 
   return (
-    <TouchableOpacity style={styles.gate} onPress={() => setRevealed(true)}>
+    <TouchableOpacity
+      style={styles.gate}
+      onPress={() => setRevealed(true)}
+      accessibilityRole="button"
+      accessibilityLabel="Contains spoilers. Double tap to reveal."
+      accessibilityHint="Reveals content the author marked as containing spoilers"
+    >
       <Text style={styles.gateText}>⚠️ Contains spoilers — tap to reveal</Text>
     </TouchableOpacity>
   );

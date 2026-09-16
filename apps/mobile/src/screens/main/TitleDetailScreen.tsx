@@ -3,7 +3,7 @@ import { View, Text, ScrollView, Image, TouchableOpacity, StyleSheet, ActivityIn
 import { useFocusEffect, type RouteProp } from "@react-navigation/native";
 import type { CommunityPost, ReactionKind, SeasonDetail, TitleDetail } from "@slate/shared";
 import { api, ApiError } from "../../api/client";
-import { colors } from "../../theme";
+import { colors, MIN_TOUCH_TARGET } from "../../theme";
 import { track } from "../../analytics/analytics";
 import { CommunityPostCard } from "../../components/CommunityPostCard";
 
@@ -16,13 +16,19 @@ function CommunitySection({
 }) {
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // A failed community fetch is not "nobody has posted" — saying so makes an
+  // outage look like an empty room.
+  const [postsFailed, setPostsFailed] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
       api
         .get<{ posts: CommunityPost[] }>(`/community/posts?titleId=${encodeURIComponent(titleId)}`)
-        .then((res) => setPosts(res.posts))
-        .catch(() => setPosts([]))
+        .then((res) => {
+          setPosts(res.posts);
+          setPostsFailed(false);
+        })
+        .catch(() => setPostsFailed(true))
         .finally(() => setIsLoading(false));
     }, [titleId]),
   );
@@ -40,12 +46,19 @@ function CommunitySection({
     <View style={styles.communitySection}>
       <View style={styles.communityHeaderRow}>
         <Text style={styles.sectionTitle}>Community</Text>
-        <TouchableOpacity onPress={() => navigation.navigate("NewPost", { titleId })}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate("NewPost", { titleId })}
+          accessibilityRole="button"
+          accessibilityLabel="Write a new post about this title"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
           <Text style={styles.newPostLink}>+ New post</Text>
         </TouchableOpacity>
       </View>
       {isLoading ? (
         <ActivityIndicator color={colors.accent} style={{ marginVertical: 12 }} />
+      ) : postsFailed ? (
+        <Text style={styles.castText}>Slate couldn&apos;t load the discussion right now.</Text>
       ) : posts.length === 0 ? (
         <Text style={styles.castText}>No posts yet — be the first to start the conversation.</Text>
       ) : (
@@ -91,7 +104,15 @@ function SeasonList({ tvId, seasons }: { tvId: string; seasons: NonNullable<Titl
       <Text style={styles.sectionTitle}>Seasons</Text>
       {seasons.map((season) => (
         <View key={season.seasonNumber}>
-          <TouchableOpacity style={styles.seasonRow} onPress={() => toggleSeason(season.seasonNumber)}>
+          <TouchableOpacity
+            style={styles.seasonRow}
+            onPress={() => toggleSeason(season.seasonNumber)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: expandedSeason === season.seasonNumber }}
+            accessibilityLabel={`${season.name}, ${
+              expandedSeason === season.seasonNumber ? "collapse" : "expand"
+            } episodes`}
+          >
             <Text style={styles.seasonName}>{season.name}</Text>
             <Text style={styles.seasonMeta}>
               {season.episodeCount} episode{season.episodeCount === 1 ? "" : "s"}
@@ -205,15 +226,29 @@ export function TitleDetailScreen({ route, navigation }: Props) {
         {detail.tagline ? <Text style={styles.tagline}>{detail.tagline}</Text> : null}
 
         <View style={styles.actionsRow}>
-          <TouchableOpacity style={[styles.actionButton, isOnWatchlist && styles.actionButtonActive]} onPress={toggleWatchlist}>
+          <TouchableOpacity
+            style={[styles.actionButton, isOnWatchlist && styles.actionButtonActive]}
+            onPress={toggleWatchlist}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isOnWatchlist }}
+            accessibilityLabel={isOnWatchlist ? "Remove from watchlist" : "Add to watchlist"}
+          >
             <Text style={styles.actionText}>{isOnWatchlist ? "On Watchlist" : "+ Watchlist"}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionButton, isFollowing && styles.actionButtonActive]} onPress={toggleFollow}>
+          <TouchableOpacity
+            style={[styles.actionButton, isFollowing && styles.actionButtonActive]}
+            onPress={toggleFollow}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isFollowing }}
+            accessibilityLabel={isFollowing ? "Unfollow this title" : "Follow this title"}
+          >
             <Text style={styles.actionText}>{isFollowing ? "Following" : "+ Follow"}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
             onPress={() => navigation.navigate("AskSlate", { titleId })}
+            accessibilityRole="button"
+            accessibilityLabel="Ask Slate about this title"
           >
             <Text style={styles.actionText}>Ask Slate</Text>
           </TouchableOpacity>
@@ -227,6 +262,10 @@ export function TitleDetailScreen({ route, navigation }: Props) {
               track("trailer_view", { titleId, trailerKey: trailer.key });
               Linking.openURL(`https://www.youtube.com/watch?v=${trailer.key}`);
             }}
+            accessibilityRole="link"
+            accessibilityLabel="Watch trailer on YouTube"
+            accessibilityHint="Opens YouTube outside Slate"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={styles.trailerLink}>▶ Watch trailer</Text>
           </TouchableOpacity>
@@ -281,7 +320,14 @@ const styles = StyleSheet.create({
   meta: { color: colors.accent, fontSize: 14, fontWeight: "600", marginTop: 4 },
   tagline: { color: colors.textMuted, fontStyle: "italic", marginTop: 4 },
   actionsRow: { flexDirection: "row", gap: 10, marginVertical: 18, flexWrap: "wrap" },
-  actionButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 14 },
+  actionButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
+  },
   actionButtonActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   actionText: { color: colors.text, fontWeight: "600", fontSize: 13 },
   overview: { color: colors.text, lineHeight: 21, marginBottom: 12 },

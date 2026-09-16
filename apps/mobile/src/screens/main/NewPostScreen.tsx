@@ -54,6 +54,7 @@ export function NewPostScreen({ route, navigation }: Props) {
             key={k.value}
             style={[styles.kindChip, kind === k.value && styles.kindChipSelected]}
             onPress={() => setKind(k.value)}
+            accessibilityRole="button"
           >
             <Text style={[styles.kindChipText, kind === k.value && styles.kindChipTextSelected]}>{k.label}</Text>
           </TouchableOpacity>
@@ -79,7 +80,9 @@ export function NewPostScreen({ route, navigation }: Props) {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <TouchableOpacity style={styles.submitButton} onPress={submit} disabled={isSubmitting || !body.trim()}>
+      <TouchableOpacity style={styles.submitButton} onPress={submit} disabled={isSubmitting || !body.trim()}
+            accessibilityRole="button"
+          >
         {isSubmitting ? <ActivityIndicator color="#000" /> : <Text style={styles.submitButtonText}>Post</Text>}
       </TouchableOpacity>
     </View>

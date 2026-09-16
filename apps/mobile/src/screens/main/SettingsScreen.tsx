@@ -182,11 +182,33 @@ export function SettingsScreen() {
           </TouchableOpacity>
         ))}
         {supportEmail && (
-          <TouchableOpacity style={styles.linkRow} onPress={() => openLink(`mailto:${supportEmail}`, "Email support")}>
+          <TouchableOpacity style={styles.linkRow} onPress={() => openLink(`mailto:${supportEmail}`, "Email support")}
+            accessibilityRole="button"
+          >
             <Text style={styles.linkText}>Email support</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
         )}
+      </View>
+
+      <Text style={styles.sectionTitle}>Data sources</Text>
+      <View style={styles.card}>
+        {/*
+          TMDB's and IGDB's terms require attribution wherever their data is
+          shown. Slate carried this on its website and store listing but not
+          in the app, which is where the data actually appears.
+        */}
+        <Text style={styles.note}>
+          Film and television information is supplied by TMDB. Slate uses the TMDB API but is not
+          endorsed or certified by TMDB.
+        </Text>
+        <Text style={styles.note}>
+          Game information is supplied by IGDB. Slate is not endorsed or certified by IGDB or Twitch.
+        </Text>
+        <Text style={styles.note}>
+          Release dates are shown at the precision the provider supplies. Where only a month, quarter
+          or year is known, Slate says so rather than guessing a day.
+        </Text>
       </View>
 
       <Text style={styles.sectionTitle}>Blocked accounts</Text>
@@ -258,7 +280,9 @@ export function SettingsScreen() {
                 <Text style={styles.deleteButtonText}>Permanently delete my account</Text>
               )}
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => { setShowDeleteFlow(false); setPassword(""); setDeleteError(null); }}>
+            <TouchableOpacity onPress={() => { setShowDeleteFlow(false); setPassword(""); setDeleteError(null); }}
+            accessibilityRole="button"
+          >
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </>

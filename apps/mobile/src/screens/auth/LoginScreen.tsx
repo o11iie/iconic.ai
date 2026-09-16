@@ -51,11 +51,15 @@ export function LoginScreen({ navigation }: Props) {
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={isSubmitting}>
+      <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={isSubmitting}
+            accessibilityRole="button"
+          >
         {isSubmitting ? <ActivityIndicator color="#000" /> : <Text style={styles.buttonText}>Log In</Text>}
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
+      <TouchableOpacity onPress={() => navigation.navigate("Signup")}
+            accessibilityRole="button"
+          >
         <Text style={styles.link}>New to Slate? Create an account</Text>
       </TouchableOpacity>
     </View>

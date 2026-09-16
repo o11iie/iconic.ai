@@ -39,11 +39,15 @@ export function SignupScreen({ navigation }: Props) {
       <TextInput style={styles.input} placeholder="Password (min 8 characters)" placeholderTextColor={colors.textMuted} secureTextEntry value={password} onChangeText={setPassword} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={isSubmitting}>
+      <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={isSubmitting}
+            accessibilityRole="button"
+          >
         {isSubmitting ? <ActivityIndicator color="#000" /> : <Text style={styles.buttonText}>Create Account</Text>}
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => navigation.navigate("Login")}>
+      <TouchableOpacity onPress={() => navigation.navigate("Login")}
+            accessibilityRole="button"
+          >
         <Text style={styles.link}>Already have an account? Log in</Text>
       </TouchableOpacity>
     </View>

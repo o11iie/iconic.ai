@@ -47,7 +47,9 @@ function Section({
           <TitleCard key={t.id} title={t} onPress={() => onPressTitle(t.id)} />
         ))}
         {state.hasMore && (
-          <TouchableOpacity style={styles.moreCard} onPress={onLoadMore} disabled={state.isLoadingMore}>
+          <TouchableOpacity style={styles.moreCard} onPress={onLoadMore} disabled={state.isLoadingMore}
+            accessibilityRole="button"
+          >
             {state.isLoadingMore ? (
               <ActivityIndicator color={colors.accent} />
             ) : (

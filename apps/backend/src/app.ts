@@ -80,6 +80,16 @@ export function buildApp() {
     }),
   });
 
+  /**
+   * Fastify's default 404 body echoes the framework's own routing format —
+   * `{"message":"Route GET:/api/nope not found"}` — which tells anyone
+   * probing the API what it is built with and reflects the path back. Same
+   * shape as every other Slate error instead.
+   */
+  app.setNotFoundHandler((req, reply) => {
+    return reply.code(404).send({ error: "Not found.", code: "NOT_FOUND" });
+  });
+
   app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, _req, reply) => {
     if (error instanceof ZodError) {
       return reply.code(400).send({ error: "Validation failed", details: error.flatten() });

@@ -4,7 +4,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../../state/AuthContext";
 import { useEntitlement } from "../../state/EntitlementContext";
 import { api } from "../../api/client";
-import { colors } from "../../theme";
+import { colors, MIN_TOUCH_TARGET } from "../../theme";
 import type { ProfileStackParamList } from "../../navigation/types";
 
 type Props = NativeStackScreenProps<ProfileStackParamList, "Profile">;
@@ -50,7 +50,8 @@ function GenrePicker() {
               key={genre}
               style={[styles.chip, isSelected && styles.chipSelected]}
               onPress={() => toggleGenre(genre)}
-            >
+            accessibilityRole="button"
+          >
               <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>{genre}</Text>
             </TouchableOpacity>
           );
@@ -77,7 +78,9 @@ export function ProfileScreen({ navigation }: Props) {
             : "Unlock unlimited follows, watchlist, smart alerts, and more Ask Slate."}
         </Text>
         {!entitlement.isActive && (
-          <TouchableOpacity style={styles.upgradeButton} onPress={() => navigation.navigate("ProUpgrade")}>
+          <TouchableOpacity style={styles.upgradeButton} onPress={() => navigation.navigate("ProUpgrade")}
+            accessibilityRole="button"
+          >
             <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
           </TouchableOpacity>
         )}
@@ -93,7 +96,9 @@ export function ProfileScreen({ navigation }: Props) {
         <Text style={styles.settingsText}>Settings, privacy & account</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+      <TouchableOpacity style={styles.logoutButton} onPress={logout}
+            accessibilityRole="button"
+          >
         <Text style={styles.logoutText}>Log out</Text>
       </TouchableOpacity>
     </View>
@@ -114,7 +119,14 @@ const styles = StyleSheet.create({
   sectionLabel: { color: colors.text, fontSize: 16, fontWeight: "700" },
   sectionHint: { color: colors.textMuted, fontSize: 12, marginTop: 2, marginBottom: 12 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingVertical: 7, paddingHorizontal: 12 },
+  chip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: "center",
+  },
   chipSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
   chipText: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
   chipTextSelected: { color: "#000" },

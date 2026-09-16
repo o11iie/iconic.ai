@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Switch, Alert } from "react-native";
 import type { RouteProp } from "@react-navigation/native";
 import type { CommunityComment, CommunityPost, ReactionKind, ReportReason } from "@slate/shared";
-import { api } from "../../api/client";
+import { api, ApiError } from "../../api/client";
+import { EmptyState, ErrorState } from "../../components/EmptyState";
 import { track } from "../../analytics/analytics";
 import { colors } from "../../theme";
 import { SpoilerGate } from "../../components/SpoilerGate";
@@ -41,19 +42,38 @@ export function PostDetailScreen({ route }: Props) {
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [reportStatus, setReportStatus] = useState<"idle" | "sent">("idle");
   const [isBlocked, setIsBlocked] = useState(false);
+  /**
+   * "still loading", "gone", and "failed" are three different things. This
+   * screen used to render an ActivityIndicator for all of them, so a deleted
+   * post — or one whose author the viewer has blocked, which deliberately
+   * 404s so a deep link can't confirm it exists — left the user on a spinner
+   * that never resolved, with only the back gesture as an escape.
+   */
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "unavailable" | "error">("loading");
 
   async function loadComments() {
     const res = await api.get<{ comments: CommunityComment[] }>(`/community/posts/${postId}/comments`);
     setComments(res.comments);
   }
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoadState("loading");
     api
       .get<{ post: CommunityPost }>(`/community/posts/${postId}`)
-      .then((res) => setPost(res.post))
-      .catch(() => setPost(null));
-    loadComments();
+      .then((res) => {
+        setPost(res.post);
+        setLoadState("ready");
+      })
+      .catch((err) => {
+        setPost(null);
+        setLoadState(err instanceof ApiError && err.statusCode === 404 ? "unavailable" : "error");
+      });
+    loadComments().catch(() => undefined);
   }, [postId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function react(kind: ReactionKind) {
     if (!post) return;
@@ -123,7 +143,16 @@ export function PostDetailScreen({ route }: Props) {
   if (!post) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator color={colors.accent} style={{ marginTop: 60 }} />
+        {loadState === "error" ? (
+          <ErrorState message="Slate couldn't load this post right now." onRetry={load} />
+        ) : loadState === "unavailable" ? (
+          <EmptyState
+            title="This post isn't available"
+            message="It may have been deleted, or it's from someone you've blocked."
+          />
+        ) : (
+          <ActivityIndicator color={colors.accent} style={{ marginTop: 60 }} />
+        )}
       </View>
     );
   }
@@ -137,7 +166,9 @@ export function PostDetailScreen({ route }: Props) {
 
       <View style={styles.reactionRow}>
         {(Object.keys(REACTION_EMOJI) as ReactionKind[]).map((kind) => (
-          <TouchableOpacity key={kind} style={styles.reactionButton} onPress={() => react(kind)}>
+          <TouchableOpacity key={kind} style={styles.reactionButton} onPress={() => react(kind)}
+            accessibilityRole="button"
+          >
             <Text style={styles.reactionText}>
               {REACTION_EMOJI[kind]} {post.reactionCounts[kind] || ""}
             </Text>
@@ -151,14 +182,21 @@ export function PostDetailScreen({ route }: Props) {
         <View style={styles.reportPanel}>
           <Text style={styles.reportPrompt}>Why are you reporting this post?</Text>
           {REPORT_REASONS.map((r) => (
-            <TouchableOpacity key={r.value} style={styles.reportOption} onPress={() => submitReport(r.value)}>
+            <TouchableOpacity key={r.value} style={styles.reportOption} onPress={() => submitReport(r.value)}
+            accessibilityRole="button"
+          >
               <Text style={styles.reportOptionText}>{r.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
       ) : (
         <View style={styles.moderationRow}>
-          <TouchableOpacity onPress={() => setIsReportOpen(true)} accessibilityRole="button">
+          <TouchableOpacity
+            onPress={() => setIsReportOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Report this post"
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
             <Text style={styles.reportLink}>Report</Text>
           </TouchableOpacity>
           {isBlocked ? (
@@ -199,7 +237,9 @@ export function PostDetailScreen({ route }: Props) {
             <Text style={styles.spoilerToggleLabel}>Spoilers</Text>
             <Switch value={commentHasSpoilers} onValueChange={setCommentHasSpoilers} trackColor={{ true: colors.accent }} />
           </View>
-          <TouchableOpacity style={styles.sendButton} onPress={submitComment} disabled={isSubmittingComment || !commentBody.trim()}>
+          <TouchableOpacity style={styles.sendButton} onPress={submitComment} disabled={isSubmittingComment || !commentBody.trim()}
+            accessibilityRole="button"
+          >
             {isSubmittingComment ? <ActivityIndicator color="#000" /> : <Text style={styles.sendButtonText}>Send</Text>}
           </TouchableOpacity>
         </View>
@@ -213,7 +253,7 @@ const styles = StyleSheet.create({
   author: { color: colors.textMuted, fontSize: 13, fontWeight: "600", marginBottom: 8 },
   body: { color: colors.text, fontSize: 16, lineHeight: 23 },
   reactionRow: { flexDirection: "row", gap: 16, marginTop: 16, marginBottom: 12 },
-  reactionButton: { paddingVertical: 4 },
+  reactionButton: { paddingVertical: 4, paddingHorizontal: 4 },
   reactionText: { color: colors.textMuted, fontSize: 14 },
   reportLink: { color: colors.textMuted, fontSize: 12 },
   moderationRow: { flexDirection: "row", gap: 20, marginBottom: 20 },

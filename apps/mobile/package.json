@@ -10,7 +10,8 @@
     "ios": "expo run:ios",
     "eas-build-pre-install": "node scripts/check-release-env.mjs",
     "check-release-env": "node scripts/check-release-env.mjs",
-    "billing:version": "node scripts/resolve-billing-version.mjs --min 8"
+    "billing:version": "node scripts/resolve-billing-version.mjs --min 8",
+    "check-navigation": "node scripts/check-navigation.mjs"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^6.6.1",

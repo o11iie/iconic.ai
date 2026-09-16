@@ -29,7 +29,15 @@ export function CommunityPostCard({
   onReact: (kind: ReactionKind) => void;
 }) {
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={onPress}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={`${KIND_LABEL[post.kind]} by ${post.authorHandle}, ${post.commentCount} ${
+        post.commentCount === 1 ? "comment" : "comments"
+      }`}
+    >
       <View style={styles.headerRow}>
         <Text style={styles.author}>@{post.authorHandle}</Text>
         <View style={styles.kindBadge}>
@@ -45,7 +53,13 @@ export function CommunityPostCard({
 
       <View style={styles.footerRow}>
         {(Object.keys(REACTION_EMOJI) as ReactionKind[]).map((kind) => (
-          <TouchableOpacity key={kind} style={styles.reactionButton} onPress={() => onReact(kind)}>
+          <TouchableOpacity
+            key={kind}
+            style={styles.reactionButton}
+            onPress={() => onReact(kind)}
+            accessibilityRole="button"
+            accessibilityLabel={`React ${kind.toLowerCase()}, ${post.reactionCounts[kind] || 0} so far`}
+          >
             <Text style={styles.reactionText}>
               {REACTION_EMOJI[kind]} {post.reactionCounts[kind] || ""}
             </Text>
@@ -72,7 +86,9 @@ const styles = StyleSheet.create({
   kindBadgeText: { color: colors.accent, fontSize: 10, fontWeight: "700" },
   body: { color: colors.text, fontSize: 14, lineHeight: 20 },
   footerRow: { flexDirection: "row", alignItems: "center", marginTop: 10, gap: 12 },
-  reactionButton: { paddingVertical: 2 },
+  // 44dp of tappable area without a 44dp visual box — reaction chips sit
+  // in a tight row and padding them out would break the card's rhythm.
+  reactionButton: { paddingVertical: 2, paddingHorizontal: 4 },
   reactionText: { color: colors.textMuted, fontSize: 12 },
   commentCount: { color: colors.textMuted, fontSize: 12, marginLeft: "auto" },
 });

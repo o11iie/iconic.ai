@@ -42,6 +42,11 @@ export type MySlateStackParamList = {
   TitleDetail: { titleId: string };
   AskSlate: { titleId?: string } | undefined;
   ProUpgrade: { trigger?: string } | undefined;
+  // TitleDetail offers "+ New post" and opens community posts, so every stack
+  // that can reach TitleDetail must be able to reach these too — otherwise
+  // those taps hit a navigator that has never heard of the route.
+  NewPost: { titleId: string };
+  PostDetail: { postId: string };
 };
 
 export type MainTabParamList = {

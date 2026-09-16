@@ -5,7 +5,7 @@ import type { SlateNotification } from "@slate/shared";
 import { api } from "../../api/client";
 import { colors, spacing, radii, type as typography } from "../../theme";
 import { track } from "../../analytics/analytics";
-import { EmptyState } from "../../components/EmptyState";
+import { EmptyState, ErrorState } from "../../components/EmptyState";
 
 interface Props {
   navigation: { navigate: (screen: string, params?: object) => void };
@@ -25,13 +25,17 @@ function relativeTime(iso: string): string {
 export function NotificationsScreen({ navigation }: Props) {
   const [notifications, setNotifications] = useState<SlateNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [didFail, setDidFail] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const res = await api.get<{ notifications: SlateNotification[] }>("/notifications");
       setNotifications(res.notifications);
+      setDidFail(false);
     } catch {
-      setNotifications([]);
+      // Distinct from "you have no notifications" — saying that when the
+      // request failed hides alerts the user may be waiting on.
+      setDidFail(true);
     } finally {
       setIsLoading(false);
     }
@@ -70,7 +74,9 @@ export function NotificationsScreen({ navigation }: Props) {
       <View style={styles.headerRow}>
         <Text style={styles.header}>Notifications</Text>
         {hasUnread && (
-          <TouchableOpacity onPress={markAllRead}>
+          <TouchableOpacity onPress={markAllRead}
+            accessibilityRole="button"
+          >
             <Text style={styles.markAll}>Mark all read</Text>
           </TouchableOpacity>
         )}
@@ -81,7 +87,9 @@ export function NotificationsScreen({ navigation }: Props) {
         keyExtractor={(n) => n.id}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} tintColor={colors.accent} />}
         renderItem={({ item }) => (
-          <TouchableOpacity style={[styles.row, !item.readAt && styles.rowUnread]} onPress={() => open(item)}>
+          <TouchableOpacity style={[styles.row, !item.readAt && styles.rowUnread]} onPress={() => open(item)}
+            accessibilityRole="button"
+          >
             <View style={styles.rowContent}>
               <Text style={styles.rowTitle}>{item.title}</Text>
               <Text style={styles.rowBody}>{item.body}</Text>
@@ -91,7 +99,15 @@ export function NotificationsScreen({ navigation }: Props) {
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          isLoading ? null : (
+          isLoading ? null : didFail ? (
+            <ErrorState
+              message="Slate couldn't load your notifications right now."
+              onRetry={() => {
+                setIsLoading(true);
+                load();
+              }}
+            />
+          ) : (
             <EmptyState
               title="Nothing yet"
               message="Follow a few titles and Slate will let you know when they're close."

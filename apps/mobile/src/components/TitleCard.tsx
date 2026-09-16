@@ -10,16 +10,26 @@ interface Props {
 
 export function TitleCard({ title, onPress }: Props) {
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={onPress}
+      accessibilityRole="button"
+      // One coherent sentence rather than three separate nodes, so a screen
+      // reader announces "Dune Part Two, movie, in 12 days" instead of
+      // reading the poster, the name and the metadata as unrelated items.
+      accessibilityLabel={`${title.name}, ${title.mediaType.toLowerCase()}, ${
+        title.countdown?.displayLabel ?? title.releaseWindow.label ?? "release date to be announced"
+      }`}
+    >
       {title.posterUrl ? (
-        <Image source={{ uri: title.posterUrl }} style={styles.poster} />
+        <Image source={{ uri: title.posterUrl }} style={styles.poster} accessible={false} />
       ) : (
         <View style={[styles.poster, styles.posterFallback]}>
           <Text style={styles.posterFallbackText}>{title.name.slice(0, 2).toUpperCase()}</Text>
         </View>
       )}
-      <Text numberOfLines={2} style={styles.name}>{title.name}</Text>
-      <Text style={styles.meta}>
+      <Text numberOfLines={2} style={styles.name} accessible={false}>{title.name}</Text>
+      <Text style={styles.meta} accessible={false}>
         {title.mediaType.toUpperCase()} · {title.countdown?.displayLabel ?? title.releaseWindow.label ?? "TBA"}
       </Text>
     </TouchableOpacity>

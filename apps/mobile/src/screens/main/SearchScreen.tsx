@@ -7,7 +7,7 @@ import { track } from "../../analytics/analytics";
 import { colors } from "../../theme";
 import type { SearchStackParamList } from "../../navigation/types";
 import { TitleCard } from "../../components/TitleCard";
-import { EmptyState } from "../../components/EmptyState";
+import { EmptyState, ErrorState } from "../../components/EmptyState";
 
 type Props = NativeStackScreenProps<SearchStackParamList, "Search">;
 
@@ -24,6 +24,9 @@ export function SearchScreen({ navigation }: Props) {
   const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  // "Nothing matched" and "the request failed" look identical to a user
+  // unless they are tracked apart.
+  const [didFail, setDidFail] = useState(false);
   // React 19 requires an explicit initial value for useRef; the undefined
   // case is real here (no timer scheduled yet) and clearTimeout accepts it.
   const debounceHandle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -35,6 +38,7 @@ export function SearchScreen({ navigation }: Props) {
     if (text.trim().length < 2) {
       setResults([]);
       setHasMore(false);
+      setDidFail(false);
       return;
     }
     debounceHandle.current = setTimeout(async () => {
@@ -43,6 +47,7 @@ export function SearchScreen({ navigation }: Props) {
       // Fired on the debounced query that actually runs, not per keystroke.
       track("search", { length: trimmed.length });
       setIsLoading(true);
+      setDidFail(false);
       try {
         const res = await api.get<SearchResponse>(`/search?q=${encodeURIComponent(trimmed)}`);
         if (activeQuery.current !== trimmed) return; // a newer query already started
@@ -50,8 +55,10 @@ export function SearchScreen({ navigation }: Props) {
         setPage(res.page);
         setHasMore(res.hasMore);
       } catch {
+        if (activeQuery.current !== trimmed) return;
         setResults([]);
         setHasMore(false);
+        setDidFail(true);
       } finally {
         setIsLoading(false);
       }
@@ -97,9 +104,14 @@ export function SearchScreen({ navigation }: Props) {
         onEndReached={loadMore}
         ListFooterComponent={isLoadingMore ? <ActivityIndicator color={colors.accent} style={{ marginVertical: 16 }} /> : null}
         ListEmptyComponent={
-          !isLoading && query.length >= 2 ? (
+          isLoading || query.trim().length < 2 ? null : didFail ? (
+            <ErrorState
+              message="Slate couldn't reach the catalogue. Check your connection and try again."
+              onRetry={() => onChangeQuery(query)}
+            />
+          ) : (
             <EmptyState title={`No results for "${query}"`} message="Try a different spelling, or search for a franchise or actor instead." />
-          ) : null
+          )
         }
       />
     </View>

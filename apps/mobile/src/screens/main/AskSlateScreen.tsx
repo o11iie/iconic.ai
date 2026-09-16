@@ -121,7 +121,9 @@ export function AskSlateScreen({ route, navigation }: Props) {
           onChangeText={setInput}
           onSubmitEditing={send}
         />
-        <TouchableOpacity style={styles.sendButton} onPress={send} disabled={isSending}>
+        <TouchableOpacity style={styles.sendButton} onPress={send} disabled={isSending}
+            accessibilityRole="button"
+          >
           {isSending ? <ActivityIndicator color="#000" /> : <Text style={styles.sendButtonText}>Send</Text>}
         </TouchableOpacity>
       </View>
