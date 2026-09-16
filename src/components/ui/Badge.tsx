@@ -4,12 +4,12 @@ import { cn } from '@/lib/cn';
 type Tone = 'neutral' | 'accent' | 'cyan' | 'success' | 'warning' | 'danger';
 
 const TONES: Record<Tone, string> = {
-  neutral: 'bg-[--color-surface-raised] text-[--color-ink-muted] border-[--color-hairline-strong]',
-  accent: 'bg-[--color-accent]/12 text-[--color-accent] border-[--color-accent]/25',
-  cyan: 'bg-[--color-cyan]/12 text-[--color-cyan] border-[--color-cyan]/25',
-  success: 'bg-[--color-success]/12 text-[--color-success] border-[--color-success]/25',
-  warning: 'bg-[--color-warning]/12 text-[--color-warning] border-[--color-warning]/25',
-  danger: 'bg-[--color-danger]/12 text-[--color-danger] border-[--color-danger]/25',
+  neutral: 'bg-surface-raised text-ink-muted border-hairline-strong',
+  accent: 'bg-accent/12 text-accent border-accent/25',
+  cyan: 'bg-cyan/12 text-cyan border-cyan/25',
+  success: 'bg-success/12 text-success border-success/25',
+  warning: 'bg-warning/12 text-warning border-warning/25',
+  danger: 'bg-danger/12 text-danger border-danger/25',
 };
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
@@ -20,8 +20,8 @@ export function Badge({ className, tone = 'neutral', ...props }: BadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5',
-        'text-[11px] font-medium tracking-wide',
+        'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5',
+        'whitespace-nowrap text-[11px] font-medium tracking-wide',
         TONES[tone],
         className,
       )}

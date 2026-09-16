@@ -30,7 +30,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       <label
         htmlFor={inputId}
         className={cn(
-          'text-xs font-medium text-[--color-ink-muted]',
+          'text-xs font-medium text-ink-muted',
           hideLabel && 'veo-sr-only',
         )}
       >
@@ -43,12 +43,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         aria-invalid={error ? true : undefined}
         aria-describedby={cn(hint && hintId, error && errorId) || undefined}
         className={cn(
-          'h-10 w-full rounded-lg border bg-[--color-obsidian] px-3 text-sm text-[--color-ink]',
-          'placeholder:text-[--color-ink-faint]',
+          'h-10 w-full rounded-lg border bg-obsidian px-3 text-sm text-ink',
+          'placeholder:text-ink-faint',
           'transition-colors duration-150',
           error
-            ? 'border-[--color-danger]/60'
-            : 'border-[--color-hairline-strong] hover:border-[--color-ink-faint]',
+            ? 'border-danger/60'
+            : 'border-hairline-strong hover:border-ink-faint',
           'disabled:cursor-not-allowed disabled:opacity-50',
           className,
         )}
@@ -56,13 +56,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       />
 
       {hint && !error ? (
-        <p id={hintId} className="text-xs text-[--color-ink-subtle]">
+        <p id={hintId} className="text-xs text-ink-subtle">
           {hint}
         </p>
       ) : null}
 
       {error ? (
-        <p id={errorId} role="alert" className="text-xs text-[--color-danger]">
+        <p id={errorId} role="alert" className="text-xs text-danger">
           {error}
         </p>
       ) : null}

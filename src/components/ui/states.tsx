@@ -24,9 +24,9 @@ export function LoadingState({
     >
       <span
         aria-hidden="true"
-        className="size-6 animate-spin rounded-full border-2 border-[--color-hairline-strong] border-t-[--color-cyan]"
+        className="size-6 animate-spin rounded-full border-2 border-hairline-strong border-t-cyan"
       />
-      <p className="text-sm text-[--color-ink-muted]">{label}</p>
+      <p className="text-sm text-ink-muted">{label}</p>
     </div>
   );
 }
@@ -47,15 +47,15 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed',
-        'border-[--color-hairline-strong] p-10 text-center',
+        'flex w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed',
+        'border-hairline-strong p-10 text-center',
         className,
       )}
     >
-      {icon ? <div className="text-[--color-ink-faint]">{icon}</div> : null}
-      <h3 className="text-sm font-semibold text-[--color-ink]">{title}</h3>
+      {icon ? <div className="text-ink-faint">{icon}</div> : null}
+      <h3 className="text-sm font-semibold text-ink">{title}</h3>
       {description ? (
-        <p className="max-w-prose text-sm leading-relaxed text-[--color-ink-muted]">{description}</p>
+        <p className="w-full max-w-prose text-sm leading-relaxed text-ink-muted">{description}</p>
       ) : null}
       {action ? <div className="mt-2">{action}</div> : null}
     </div>
@@ -80,24 +80,24 @@ export function ErrorState({
     <div
       role="alert"
       className={cn(
-        'flex flex-col items-start gap-3 rounded-xl border p-5',
-        'border-[--color-danger]/30 bg-[--color-danger]/[0.06]',
+        'flex w-full flex-col items-start gap-3 rounded-xl border p-5',
+        'border-danger/30 bg-danger/[0.06]',
         className,
       )}
     >
       <div className="flex items-center gap-2">
-        <span aria-hidden="true" className="size-1.5 rounded-full bg-[--color-danger]" />
-        <h3 className="text-sm font-semibold text-[--color-ink]">{title}</h3>
+        <span aria-hidden="true" className="size-1.5 rounded-full bg-danger" />
+        <h3 className="text-sm font-semibold text-ink">{title}</h3>
       </div>
       {description ? (
-        <p className="text-sm leading-relaxed text-[--color-ink-muted]">{description}</p>
+        <p className="text-sm leading-relaxed text-ink-muted">{description}</p>
       ) : null}
       {detail ? (
         <details className="w-full">
-          <summary className="cursor-pointer text-xs text-[--color-ink-subtle] hover:text-[--color-ink-muted]">
+          <summary className="cursor-pointer text-xs text-ink-subtle hover:text-ink-muted">
             Technical detail
           </summary>
-          <pre className="mt-2 overflow-x-auto rounded-lg bg-[--color-obsidian] p-3 text-xs leading-relaxed text-[--color-ink-subtle]">
+          <pre className="mt-2 overflow-x-auto rounded-lg bg-obsidian p-3 text-xs leading-relaxed text-ink-subtle">
             {detail}
           </pre>
         </details>
@@ -127,18 +127,18 @@ export function NotConfiguredState({
   return (
     <div
       className={cn(
-        'flex flex-col items-start gap-3 rounded-xl border p-5',
-        'border-[--color-warning]/25 bg-[--color-warning]/[0.05]',
+        'flex w-full flex-col items-start gap-3 rounded-xl border p-5',
+        'border-warning/25 bg-warning/[0.05]',
         className,
       )}
     >
       <div className="flex items-center gap-2">
-        <span aria-hidden="true" className="size-1.5 rounded-full bg-[--color-warning]" />
-        <h3 className="text-sm font-semibold text-[--color-ink]">{title}</h3>
+        <span aria-hidden="true" className="size-1.5 rounded-full bg-warning" />
+        <h3 className="text-sm font-semibold text-ink">{title}</h3>
       </div>
-      <p className="max-w-prose text-sm leading-relaxed text-[--color-ink-muted]">{description}</p>
+      <p className="w-full max-w-prose text-sm leading-relaxed text-ink-muted">{description}</p>
       {requirement ? (
-        <code className="rounded-md bg-[--color-obsidian] px-2 py-1 font-mono text-xs text-[--color-cyan]">
+        <code className="rounded-md bg-obsidian px-2 py-1 font-mono text-xs text-cyan">
           {requirement}
         </code>
       ) : null}
@@ -150,7 +150,7 @@ export function Skeleton({ className }: { readonly className?: string }) {
   return (
     <div
       aria-hidden="true"
-      className={cn('animate-pulse rounded-md bg-[--color-surface-raised]', className)}
+      className={cn('animate-pulse rounded-md bg-surface-raised', className)}
     />
   );
 }

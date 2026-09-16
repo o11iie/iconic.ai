@@ -10,7 +10,10 @@ export function Card({ className, glass = false, ...props }: CardProps) {
     <div
       className={cn(
         glass ? 'veo-glass' : 'veo-panel',
-        'rounded-xl',
+        // `min-w-0`: grid and flex items default to `min-width: auto`, which
+        // lets their min-content size push a column wider than the viewport.
+        // A card must always fit the space it is given.
+        'min-w-0 rounded-xl',
         className,
       )}
       {...props}
@@ -32,9 +35,9 @@ export function CardHeader({
   return (
     <div className={cn('flex items-start justify-between gap-4 p-5 pb-3', className)}>
       <div className="min-w-0">
-        <h3 className="text-sm font-semibold tracking-tight text-[--color-ink]">{title}</h3>
+        <h3 className="text-sm font-semibold tracking-tight text-ink">{title}</h3>
         {description ? (
-          <p className="mt-1 text-sm leading-relaxed text-[--color-ink-muted]">{description}</p>
+          <p className="mt-1 text-sm leading-relaxed text-ink-muted">{description}</p>
         ) : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
