@@ -1,270 +1,358 @@
 # SLATE — Production Configuration Runbook
 
-Everything that has to be configured outside the repository, in the order it
-has to happen.
+Everything that must be configured outside the repository, as a gated
+checklist. Work top to bottom: nothing in a later section matters until the
+earlier ones are done.
 
-**No secret value appears in this document, and none should ever be committed.**
-Where a value is needed, this names the variable, where it comes from, and how
-to confirm it is working — never the value itself.
+**No secret value appears in this document and none should ever be committed.**
+Each item names the variable, where the value comes from, where it belongs,
+whether it is secret, how to confirm it worked, and whether it can be changed
+later.
 
 ---
 
-## 0. Principles this configuration enforces
+## Principles this configuration enforces
 
 1. **No provider credential ever reaches the mobile client.** TMDB, IGDB,
    Twitch, OpenAI and Google Play credentials are backend-only. `EXPO_PUBLIC_*`
-   variables are inlined into the JavaScript bundle and are public by
+   values are inlined into the shipped JavaScript bundle and are public by
    definition — a secret there is a published secret.
-2. **The backend starts without optional credentials and degrades honestly.**
-   Each provider has an `isXConfigured()` guard; a missing key produces a clear
-   "not configured" response, never fabricated data.
+2. **The backend degrades honestly.** Each provider has an `isXConfigured()`
+   guard; a missing key produces an explicit "not configured" response, never
+   fabricated data. Verified: with no TMDB/IGDB key, search returns empty
+   results rather than invented titles; with no OpenAI key, Ask Slate returns
+   503 rather than a made-up answer.
 3. **Entitlement is server-authoritative.** Pro comes from Google's answer to
    `purchases.subscriptionsv2`, never from a client claim.
-4. **Placeholders fail loudly.** `web/verify-config.mjs` and
-   `apps/mobile/scripts/check-release-env.mjs` both exit non-zero rather than
-   let an unconfigured build or site ship.
+4. **Misconfiguration fails loudly.** `web/verify-config.mjs`,
+   `apps/mobile/scripts/check-release-env.mjs` and the backend's own
+   production env validation all refuse rather than starting wrong.
 
 ---
 
-## 1. Backend environment
+## REQUIRED BEFORE BUILD
 
-Set on the backend host. `apps/backend/src/env.ts` is the schema; it validates
-at first access and throws on anything malformed.
+Without these, no usable Android artifact exists.
 
-### Required — the server will not start without these
+- [ ] **Resolve the target-API toolchain** — *not a value, an environment*
+  - Needed: a machine with an Android SDK and unrestricted access to
+    `dl.google.com`, the Gradle Plugin Portal and `api.expo.dev`, plus JDK 17.
+  - Belongs: wherever builds run (a developer machine, CI, or EAS Build).
+  - Secret: no.
+  - Verify: `cd apps/mobile && npx expo prebuild --platform android --clean &&
+    cd android && ./gradlew :app:bundleRelease` produces an `.aab`.
+  - Changeable later: n/a.
+  - Note: the repository is already configured for API 36 — see
+    `SLATE_GATE_3_REPORT.md`. What is missing is a machine that can compile it.
 
-| Variable | Source | Notes |
-| --- | --- | --- |
-| `DATABASE_URL` | Your Postgres provider | Use a dedicated application role, not the superuser. Require TLS |
-| `JWT_ACCESS_SECRET` | Generate: `openssl rand -base64 48` | ≥ 16 chars enforced. Rotating it invalidates all access tokens |
-| `JWT_REFRESH_SECRET` | Generate separately | **Must differ from the access secret.** Rotating it signs everyone out |
+- [ ] **Expo account / EAS access** — `EXPO_TOKEN`
+  - Obtain: expo.dev → account settings → Access tokens.
+  - Belongs: the build environment only.
+  - Secret: **yes**.
+  - Verify: `eas whoami` names your account.
+  - Changeable later: yes; revoke and reissue freely.
 
-### Required for the features that depend on them
+- [ ] **Android upload key**
+  - Obtain: let EAS generate and manage it, or upload your own keystore.
+  - Belongs: EAS credentials, or your own secure storage.
+  - Secret: **yes**.
+  - Verify: `eas credentials` shows a configured Android keystore.
+  - Changeable later: **no** — losing this key means you cannot update the app.
+    Back it up and enrol in Play App Signing.
 
-| Variable | Source | Without it |
-| --- | --- | --- |
-| `TMDB_API_KEY` | themoviedb.org → Settings → API | Film and TV endpoints return "not configured" |
-| `TWITCH_CLIENT_ID` | dev.twitch.tv → register an application | Game endpoints unavailable |
-| `TWITCH_CLIENT_SECRET` | Same application | Same. Slate exchanges these for an IGDB client-credentials token server-side |
-| `OPENAI_API_KEY` | platform.openai.com | Ask Slate returns "not configured" rather than a canned answer |
-| `OPENAI_MODEL` | — | Defaults to `gpt-4o-mini`. Changing it changes cost and answer quality |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | See §3 | Purchases cannot be verified, so **no one can get Pro** |
-| `GOOGLE_PLAY_PACKAGE_NAME` | — | Defaults to `ai.iconic.slate`. Must match the published package |
-| `RTDN_SHARED_SECRET` | Generate: `openssl rand -hex 32` | The RTDN webhook rejects everything (401), so renewals and cancellations never reach Slate |
-| `WEB_ORIGINS` | Your site origin | No browser origin is allowed, so the **web account-deletion page cannot call the API** |
+- [ ] **`EXPO_PUBLIC_API_BASE_URL`** — `https://<api-host>/api`
+  - Obtain: your own deployed API origin.
+  - Belongs: EAS environment variables (plain text; it is not a secret).
+  - Secret: no.
+  - Verify: `EAS_BUILD_PROFILE=production EXPO_PUBLIC_API_BASE_URL=... \
+    pnpm --filter @slate/mobile check-release-env` exits 0.
+  - Changeable later: yes, but only by shipping a new build — it is compiled in.
 
-### Optional
+- [ ] **`EXPO_PUBLIC_WEB_BASE_URL`** — `https://<your-domain>`
+  - Obtain: your own deployed site origin.
+  - Belongs: EAS environment variables.
+  - Secret: no.
+  - Verify: same guard; also the app's Settings screen shows legal links
+    instead of hiding them.
+  - Changeable later: yes, with a new build.
 
-| Variable | Default |
-| --- | --- |
-| `PORT` | `4000` |
-| `NODE_ENV` | `development` — set to `production` |
+- [ ] **`EXPO_PUBLIC_SUPPORT_EMAIL`**
+  - Obtain: a monitored inbox you control.
+  - Belongs: EAS environment variables.
+  - Secret: no.
+  - Verify: "Email support" appears in Settings.
+  - Changeable later: yes, with a new build.
 
-### Verify
-
-```bash
-curl -s https://<api-host>/health
-# {"status":"ok","timestamp":"..."}
-```
-
-Then confirm each provider guard reports configured rather than degraded, by
-exercising one endpoint per provider against the real service.
-
----
-
-## 2. Database
-
-1. Provision Postgres 14+ with TLS and automated backups.
-2. Apply migrations — **never** `prisma db push` in production:
-   ```bash
-   cd apps/backend && pnpm exec prisma migrate deploy
-   ```
-3. Confirm every migration in `apps/backend/prisma/migrations/` is applied.
-4. Note your provider's actual backup retention window and make
-   `web/delete-account.html` match it (it currently states up to 30 days).
-   That statement is a commitment to users.
-
-The application role needs DML on all tables plus DDL for `migrate deploy`. If
-you separate those, run migrations as a migration role and serve traffic as a
-lower-privileged one.
-
----
-
-## 3. Google Play Billing
-
-### 3.1 Service account for purchase verification
-
-1. Play Console → Setup → **API access** → link a Google Cloud project.
-2. In Google Cloud, create a service account. **No project-level roles are
-   needed.**
-3. Create a JSON key and download it once.
-4. Back in Play Console → Users and permissions, invite the service-account
-   email and grant, scoped to this app only:
-   - View app information
-   - **View financial data**
-   - **Manage orders and subscriptions**
-5. Put the JSON into `GOOGLE_SERVICE_ACCOUNT_JSON` as a single-line string, via
-   your host's secret manager. **Never commit it.** If it leaks, revoke the key
-   in Google Cloud immediately — it can read financial data and modify
-   subscriptions.
-6. Permission propagation takes up to ~24 hours. A 401 from the Publisher API
-   right after granting usually means "wait", not "misconfigured".
-
-### 3.2 Subscription products
-
-Play Console → Monetise → Subscriptions. Create exactly these IDs — they are
-enum values in the database schema and cannot drift:
-
-| Product ID | Price | Period |
-| --- | --- | --- |
-| `SLATE_PRO_MONTHLY` | $7.99 | P1M |
-| `SLATE_PRO_YEARLY` | $59.99 | P1Y |
-
-Keep `apps/backend/src/config/products.ts` in step. The 37% / $35.89 / $5.00
-annual-saving figures are derived from these two prices at runtime, so they
-correct themselves — but only if `products.ts` matches Play.
-
-### 3.3 Real-time developer notifications
-
-1. Google Cloud → Pub/Sub → create a topic, e.g. `slate-rtdn`.
-2. Grant `google-play-developer-notifications@system.gserviceaccount.com` the
-   **Pub/Sub Publisher** role on that topic.
-3. Create a **push** subscription with endpoint:
-   ```
-   https://<api-host>/api/billing/rtdn?token=<RTDN_SHARED_SECRET>
-   ```
-4. Play Console → Monetisation setup → paste the topic name.
-5. Verify:
-   ```bash
-   curl -i -X POST https://<api-host>/api/billing/rtdn          # expect 401
-   curl -i -X POST "https://<api-host>/api/billing/rtdn?token=wrong"  # expect 401
-   ```
-   A correct token with a valid Pub/Sub envelope returns 200.
-
-An RTDN for a purchase token Slate has never seen is acknowledged with 200 and
-logged — it must not be retried forever.
-
-### 3.4 Licence testers
-
-Play Console → Setup → **Licence testing**. Add the reviewer demo account and
-your own test accounts so purchases complete without being charged.
+- [ ] **Confirm Play's current minimum target API and Billing Library version**
+  - Obtain: Play Console → the policy banners, and Google's Play Billing
+    deprecation schedule.
+  - Belongs: `apps/mobile/app.json` — `targetSdkVersion` under
+    `expo-build-properties`, and `playBillingSdkVersion` under
+    `./plugins/withPlayBilling`.
+  - Secret: no.
+  - Verify: `npx expo prebuild` then read `android/gradle.properties`.
+  - Changeable later: yes, but **raising the Billing Library may require
+    changing library**: react-native-iap 12.x/13.x pin Billing Library 7.0.0,
+    and a major Billing release removes APIs the installed version was not
+    written against. If Play requires 8+, plan for react-native-iap 14+ (which
+    needs `react-native-nitro-modules` and a purchase-flow migration) and
+    budget a real device test.
 
 ---
 
-## 4. Public web site
+## REQUIRED BEFORE CLOSED TEST
 
-Full detail in `web/README.md`. In short:
+Needed before anyone outside the team installs the app.
 
-1. Fill every value in `web/config.js`.
-2. `node web/verify-config.mjs` — must exit 0.
-3. Deploy `web/` to public HTTPS with **no sign-in wall** in front of the
-   pages. A reviewer must reach the privacy policy and the deletion page
-   without an account and without installing the app.
-4. Set the backend's `WEB_ORIGINS` to that origin, or the deletion form's
-   requests will be blocked by CORS.
-5. Confirm from a browser:
-   - `https://<your-domain>/privacy` loads with no "not configured" banner.
-   - `https://<your-domain>/delete-account` loads and its submit button is
-     **enabled**.
-   - Deleting a throwaway account end to end actually works.
+### Database
 
-The app links to extensionless paths (`/privacy`, `/delete-account`). Most
-static hosts resolve those to the `.html` files automatically; if yours does
-not, add rewrites.
+- [ ] **`DATABASE_URL`**
+  - Obtain: your Postgres 14+ provider. Use a dedicated application role, not
+    the superuser, and require TLS.
+  - Belongs: backend host secret manager.
+  - Secret: **yes**.
+  - Verify: `curl https://<api-host>/ready` returns `"database":"ok"`.
+  - Changeable later: yes; restart the backend to re-pool.
 
----
+- [ ] **Migrations applied**
+  - Run: `cd apps/backend && pnpm exec prisma migrate deploy`. Never
+    `prisma db push` in production.
+  - Verify: `prisma migrate diff --from-schema-datasource prisma/schema.prisma
+    --to-schema-datamodel prisma/schema.prisma --exit-code` exits 0 (no drift).
+  - Changeable later: forward-only; add a new migration.
 
-## 5. Mobile build
+- [ ] **Confirm your provider's real backup retention**
+  - `web/delete-account.html` tells users deleted data may persist in backups
+    for up to 30 days. That is a commitment — change the page if your provider
+    differs.
 
-Full detail in `apps/mobile/ENV.md`.
+### Backend secrets and configuration
 
-Set as EAS environment variables — never committed:
+- [ ] **`JWT_ACCESS_SECRET`** and **`JWT_REFRESH_SECRET`**
+  - Obtain: `openssl rand -base64 48`, twice.
+  - Belongs: backend host secret manager.
+  - Secret: **yes**.
+  - Verify: the server starts. In production it **refuses** to start if the two
+    match, if either is under 32 characters, or if either still contains a
+    placeholder string from `.env.example`.
+  - Changeable later: yes — rotating the access secret invalidates access
+    tokens (clients refresh transparently); rotating the refresh secret signs
+    everyone out.
 
-| Variable | Value |
-| --- | --- |
-| `EXPO_PUBLIC_API_BASE_URL` | `https://<api-host>/api` |
-| `EXPO_PUBLIC_WEB_BASE_URL` | `https://<your-domain>` |
-| `EXPO_PUBLIC_SUPPORT_EMAIL` | Your support address |
+- [ ] **`TRUST_PROXY`**
+  - Obtain: how many reverse proxies sit in front of the API (`1` behind a
+    single load balancer; `false` if directly exposed).
+  - Belongs: backend environment.
+  - Secret: no.
+  - Verify: the request log's `remoteAddress` shows the real client IP, not the
+    balancer's.
+  - Changeable later: yes.
+  - **Why it matters:** the auth rate limit keys on client IP. Left unset
+    behind a balancer, every login attempt on earth shares one budget.
 
-`scripts/check-release-env.mjs` runs as the `eas-build-pre-install` hook and
-fails a `preview` or `production` build when any of these is missing, not
-HTTPS, a reserved placeholder host, or a local address.
+- [ ] **`WEB_ORIGINS`** — `https://<your-domain>`
+  - Obtain: your deployed site origin. Comma-separate several; no trailing
+    slashes.
+  - Belongs: backend environment.
+  - Secret: no.
+  - Verify: `curl -H "Origin: https://<your-domain>" https://<api-host>/health`
+    returns an `access-control-allow-origin` header, and any other origin does
+    not.
+  - Changeable later: yes.
+  - Missed easily: the deletion page loads fine and only fails on submit.
 
-**Before a production build**, resolve the target-API blocker in
-`SLATE_PLAY_COMPLIANCE.md` §1. Building at API 34 wastes a build slot — Play
-rejects it at upload.
-
-### Signing
-
-Let EAS manage the Android keystore, or upload your own. Either way, back up
-the upload key: losing it means you cannot update the app. Enrol in Play App
-Signing.
-
----
-
-## 6. Administrator and moderator accounts
-
-`User.role` defaults to `USER`. There is no self-service promotion and no
-endpoint that grants a role — intentionally. Promote deliberately, by hand:
-
-```sql
-UPDATE "User" SET role = 'ADMIN' WHERE email = '<your admin email>';
-```
-
-- `MODERATOR` — the report queue and content removal (`/admin/reports`).
-- `ADMIN` — the above plus `/admin/stats`.
-
-Keep the admin set small. Every admin route requires a valid access token
-**and** the role.
-
----
-
-## 7. Post-deployment verification
-
-Run against production before announcing anything.
-
-### Health and security
-- [ ] `/health` returns 200.
-- [ ] HTTP redirects to HTTPS; TLS certificate valid.
-- [ ] `curl -H "Origin: https://evil.example" https://<api-host>/health` returns
-      **no** `access-control-allow-origin` header.
-- [ ] `curl -H "Origin: https://<your-domain>" ...` **does** return it.
-- [ ] 11 rapid failed logins return 429, not 500.
-- [ ] `POST /api/billing/rtdn` without the token returns 401.
+- [ ] **`NODE_ENV=production`**
+  - Turns on the configuration refusals above. Without it they do not run.
 
 ### Data providers
+
+- [ ] **`TMDB_API_KEY`** — themoviedb.org → Settings → API (free, instant).
+  Secret: **yes**. Verify: a film search returns real results. Changeable: yes.
+- [ ] **`TWITCH_CLIENT_ID`** / **`TWITCH_CLIENT_SECRET`** —
+  dev.twitch.tv/console/apps (free). Secret: **yes** (the secret; the id is not
+  sensitive but keep both server-side). Verify: a game search returns real
+  results. Changeable: yes.
+- [ ] **`OPENAI_API_KEY`** — platform.openai.com, billing enabled.
+  Secret: **yes**. Verify: Ask Slate answers instead of returning 503
+  `AI_NOT_CONFIGURED`. Changeable: yes.
+- [ ] **`OPENAI_MODEL`** — optional; defaults to `gpt-4o-mini`. Not secret.
+  Changing it changes cost and answer quality.
+
+### Google Play
+
+- [ ] **`GOOGLE_SERVICE_ACCOUNT_JSON`**
+  - Obtain: Play Console → Setup → API access → link a Google Cloud project;
+    create a service account and a JSON key; then Play Console → Users and
+    permissions, invite the service-account email and grant, **scoped to this
+    app**: View app information, View financial data, Manage orders and
+    subscriptions. No project-level Cloud roles are needed.
+  - Belongs: backend host secret manager, as a single-line string.
+  - Secret: **yes, highly** — it can read financial data and modify
+    subscriptions. If it leaks, revoke the key in Google Cloud immediately.
+  - Verify: `/ready` reports `"playBilling":true`, and a licence-tester
+    purchase grants Pro.
+  - Changeable later: yes; create a new key and delete the old one.
+  - Note: permission propagation takes up to ~24 hours. A 401 from the
+    Publisher API right after granting usually means "wait", not
+    "misconfigured".
+
+- [ ] **Subscription products** — exactly these IDs, which are enum values in
+  the database schema and cannot drift:
+
+  | Product ID | Price | Period |
+  | --- | --- | --- |
+  | `SLATE_PRO_MONTHLY` | $7.99 | P1M |
+  | `SLATE_PRO_YEARLY` | $59.99 | P1Y |
+
+  Keep `apps/backend/src/config/products.ts` in step. The 37% / $35.89 /
+  $5.00 annual-saving figures are derived from these two prices at runtime, so
+  they correct themselves — but only if `products.ts` matches Play.
+  Each product needs a **base plan**; the app requires an offer token, which
+  only exists once a base plan is published.
+
+- [ ] **`RTDN_SHARED_SECRET`**
+  - Obtain: `openssl rand -hex 32`.
+  - Belongs: backend environment, and the Pub/Sub push endpoint URL.
+  - Secret: **yes**.
+  - Setup: Google Cloud → Pub/Sub → create a topic; grant
+    `google-play-developer-notifications@system.gserviceaccount.com` the
+    Pub/Sub Publisher role on it; create a **push** subscription with endpoint
+    `https://<api-host>/api/billing/rtdn?token=<secret>`; paste the topic name
+    into Play Console → Monetisation setup.
+  - Verify: `curl -i -X POST https://<api-host>/api/billing/rtdn` returns 401,
+    and the same with the correct token and a valid envelope returns 200.
+  - Changeable later: yes — update the Pub/Sub push endpoint in the same
+    change, or renewals stop arriving.
+
+- [ ] **Licence testers** — Play Console → Setup → Licence testing. Add the
+  reviewer demo account and your own test accounts so purchases complete
+  without being charged.
+
+### Public web site
+
+- [ ] **Fill `web/config.js`** — `legalEntity`, `contactEmail`,
+  `copyrightEmail`, `apiBaseUrl`, `siteBaseUrl`, `jurisdiction`,
+  `effectiveDate`. None are secret; all are legally meaningful.
+  Verify: `node web/verify-config.mjs` exits 0.
+  Changeable later: yes, by redeploying the static site.
+
+- [ ] **Deploy `web/` to public HTTPS with no sign-in wall.** A reviewer must
+  reach the privacy policy and the deletion page without an account and
+  without installing the app.
+  Verify: both URLs load in a private browser window with no "not configured"
+  banner, and the deletion form's submit button is enabled.
+
+### Operations
+
+- [ ] **Run the backend as `node dist/server.js`, not through a package
+  manager.** pnpm does not forward SIGTERM to its grandchild, so graceful
+  shutdown never fires and every deploy drops in-flight requests — including
+  half-applied account deletions and purchase verifications.
+- [ ] **Schedule the notification sweep** — `POST
+  /api/notifications/sweep-release-alerts` with an admin token, roughly hourly.
+  It is idempotent (verified: 4 notifications, then 0, then 0 on repeat runs),
+  so over-calling is harmless, but nothing calls it automatically.
+- [ ] **Promote an admin account** — there is no self-service path, by design:
+  `UPDATE "User" SET role = 'ADMIN' WHERE email = '<your admin email>';`
+  `MODERATOR` gets the report queue; `ADMIN` also gets `/admin/stats`.
+- [ ] **Point liveness at `/health` and readiness at `/ready`.** They are
+  different questions: `/health` does no I/O so a database blip never gets
+  healthy instances killed; `/ready` checks the database and returns 503 so a
+  rolling deploy waits for an instance that can actually serve.
+
+---
+
+## REQUIRED BEFORE PRODUCTION
+
+- [ ] **Real device QA passed** — see the matrix in `SLATE_DEVICE_QA.md`. In
+  particular a real Play purchase, restore, and both account-deletion paths.
+  Nothing in this repository has ever run on an Android device.
+- [ ] **Play Console → App access**: demo account credentials
+  (`SLATE_PLAY_REVIEWER_GUIDE.md`). Slate is entirely account-gated; without
+  these a reviewer sees a login screen and nothing else.
+- [ ] **Data safety form** completed from `SLATE_DATA_SAFETY_AUDIT.md`.
+- [ ] **Privacy policy URL** and **account-deletion URL** entered.
+- [ ] **Content rating questionnaire** answered from the app's real behaviour
+  (`SLATE_PLAY_COMPLIANCE.md` §3.14).
+- [ ] **Target audience** 13+, not Families. **Contains ads: No.**
+- [ ] **Store listing** from `SLATE_PLAY_STORE_LISTING.md`.
+- [ ] **Store graphics**: 512×512 icon and 1024×500 feature graphic produced,
+  and screenshots captured from the real running app
+  (`SLATE_PLAY_STORE_SCREENSHOTS.md`). The in-bundle icon and splash are valid
+  PNGs at the right dimensions but are placeholder artwork.
+- [ ] **Post-deployment verification** (below) run against production.
+
+### Post-deployment verification
+
+Health and security
+- [ ] `/health` 200; `/ready` 200 with `"database":"ok"`.
+- [ ] HTTP redirects to HTTPS; certificate valid.
+- [ ] A foreign `Origin` gets no `access-control-allow-origin`; your own does.
+- [ ] 11 rapid failed logins return 429, not 500.
+- [ ] `POST /api/billing/rtdn` without the token returns 401.
+- [ ] An oversized request body returns 413.
+
+Data providers
 - [ ] A film search returns real TMDB results.
 - [ ] A game search returns real IGDB results.
-- [ ] Ask Slate returns a real answer and enforces the daily limit.
+- [ ] Ask Slate answers and enforces the 5/day free limit.
 
-### Billing
-- [ ] A licence-tester account completes a purchase.
+Billing
+- [ ] A licence-tester account completes a purchase of each product.
 - [ ] Pro appears **only after** server verification.
-- [ ] Flipping the entitlement row to `EXPIRED` immediately removes Pro.
+- [ ] Setting the entitlement row to `EXPIRED` immediately removes Pro.
 - [ ] Cancelling in Play produces an RTDN that Slate processes.
+- [ ] Restore on a reinstall recovers Pro.
+- [ ] Submitting a token already linked to another account returns 409.
 
-### Account deletion — the Play-critical path
-- [ ] In-app deletion completes and the account cannot log in again.
+Account deletion
+- [ ] In-app deletion completes; the account cannot log in again.
 - [ ] Web deletion completes from a browser with no app installed.
 - [ ] A wrong password is refused (403, `REAUTH_FAILED`).
 - [ ] Another user's replies on a deleted user's post still exist.
 - [ ] A user with an active subscription is told to cancel in Play.
 
-### Community safety
+Community safety
 - [ ] Reporting reaches the moderation queue.
 - [ ] Blocking hides that user's posts and comments immediately.
 - [ ] A bystander's view is unchanged by someone else's block.
-- [ ] Unblocking restores visibility.
 
 ---
 
-## 8. Secret handling
+## OPTIONAL
+
+- [ ] **`playStoreUrl`** in `web/config.js` — fill in after publishing.
+- [ ] **Push notifications** — *not built.* Slate delivers notifications
+  in-app only. Adding push requires `expo-notifications`, an FCM project and
+  `google-services.json`, a device-token table, and the `POST_NOTIFICATIONS`
+  runtime permission. It also **changes the Data safety declaration** (a push
+  token is a new identifier) and the privacy policy, both of which currently
+  state that no push token is collected. Do not enable it without updating
+  `SLATE_DATA_SAFETY_AUDIT.md`, `web/privacy.html` and the store listing
+  together, and do not claim it works until a real device receives a real
+  notification.
+- [ ] **AdMob** — *not built.* `AdProvider`/`AdSlot` exist with Pro
+  suppression enforced, and `NoOpAdProvider` renders nothing. Wiring a real
+  network changes the Data safety answers (advertising ID, sharing) and the
+  store listing's ads flag at the same time. Not a launch blocker.
+- [ ] **Error tracking / APM** — none installed. Adding a crash reporter
+  changes the "App info and performance" Data safety section.
+- [ ] **Row Level Security** — not applicable as built. No untrusted client
+  holds a database credential; every read and write goes through the
+  authenticated API, and isolation is enforced there (17 cross-user checks
+  verified, including IDOR and a JWT with a forged `role: ADMIN` claim). RLS
+  becomes **mandatory** if you ever let the mobile app talk to Postgres
+  directly, e.g. via a Supabase client SDK.
+
+---
+
+## Secret handling
 
 | Rule | Why |
 | --- | --- |
 | Never commit `.env` | `apps/backend/.env` is gitignored and must stay that way |
 | Never put a secret in `EXPO_PUBLIC_*` | Metro inlines it into the shipped bundle |
-| Use the host's secret manager | Not a `.env` file on disk, and not CI plaintext |
+| Use the host's secret manager | Not a `.env` file on disk, not CI plaintext |
 | Rotate on suspicion | Play service-account key and `RTDN_SHARED_SECRET` first — they touch money |
 | Separate staging and production credentials | A staging leak must not reach production data |
 | Log the absence of a secret, never its value | The provider guards already do this |
@@ -278,22 +366,3 @@ Rotation effects, so nobody is surprised:
 | `RTDN_SHARED_SECRET` | Update the Pub/Sub push endpoint in the same change, or renewals stop arriving |
 | Play service-account key | Purchase verification fails until the new key is deployed — nobody can obtain or refresh Pro |
 | `DATABASE_URL` password | Restart the backend to re-pool |
-
----
-
-## 9. Configuration order
-
-Dependencies, so nothing is done twice:
-
-1. Database → migrations applied.
-2. Backend env (secrets, `DATABASE_URL`, JWT secrets) → `/health` green.
-3. Provider credentials → search and Ask Slate verified live.
-4. Deploy the web site → set `WEB_ORIGINS` → web deletion verified end to end.
-5. Play Console: package, subscription products, service account, RTDN,
-   licence testers.
-6. **Resolve the target-API blocker.**
-7. EAS environment variables → production build (the guard passes).
-8. Upload the AAB; complete Data safety, content rating, App access and the
-   store listing.
-9. Internal testing track → run §7 on the real build.
-10. Promote to production.

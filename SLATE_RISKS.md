@@ -19,6 +19,78 @@ These cannot be resolved by writing more code. Each blocks a specific, real part
 
 None of the above were skipped or stubbed out with fake data — every integration point (TMDB client, IGDB client, OpenAI provider, Play Billing verification) is written against each provider's real, documented API contract and fails loudly/gracefully (503 with a clear error code) rather than fabricating a response when the credential is missing.
 
+## Gate 3 risks (added Gate 3)
+
+### Blocking
+
+1. **No Android artifact can be produced in this environment.** Four
+   independent causes, each verified by attempting it: no `EXPO_TOKEN`;
+   `api.expo.dev` returns 403 CONNECT; local Gradle cannot resolve plugins
+   because `dl.google.com` and the Gradle Plugin Portal are policy-denied and
+   the JDK 17 toolchain provisioner gets 403 (only JDK 21 installed); and no
+   Android SDK exists here, distributed as it is only from the blocked Google
+   hosts. **Not a code problem** — the repository is configured and validated
+   at API 36. Needs a build machine or an EAS account.
+
+2. **Play Billing Library version is unconfirmed and may not be a one-line
+   change.** Slate pins 7.0.0 (react-native-iap 12.x's own tested version).
+   Google raises the enforced minimum roughly annually. The version is now a
+   single reviewable value in `app.json`, but a Billing major the installed
+   library was not written against may not compile — and nothing here can
+   compile to find out. If Play requires 8+, the tested path is
+   react-native-iap 14+, which needs `react-native-nitro-modules`, a
+   purchase-flow migration and a real device test. **Confirm before planning
+   the build.**
+
+3. **The Android purchase flow has never executed.** The offer-token fix is
+   correct per react-native-iap's own types and documentation, but it is a
+   native path. Until device test #27 passes, "billable" is unproven.
+
+### Accepted trade-offs worth re-examining
+
+4. **New Architecture is disabled.** Chosen so react-native-iap 12.16.4 runs
+   on the architecture it was built for, since the interop alternative cannot
+   be verified here. Expo SDK 55 removes the old architecture, so a
+   New-Arch-native billing library is required before that upgrade. This is a
+   one-release reprieve, not a resolution.
+
+5. **`TRUST_PROXY` defaults to `false`.** Safe, but it means an operator who
+   deploys behind a load balancer and forgets it gets a collapsed auth rate
+   limit — the failure is silent. The runbook calls it out; consider making
+   production refuse to start without an explicit value if this bites.
+
+6. **Analytics event names differ from the Gate 3 vocabulary**
+   (`ai_open` for `ask_slate_open`, `purchase_completed` for
+   `purchase_success`, and five more). Same events, existing names kept rather
+   than churning every call site. Anyone building dashboards needs the mapping
+   in `SLATE_GATE_3_REPORT.md`.
+
+7. **`ADVANCED_JOURNEY` has no client path.** The backend gate and the paywall
+   headline both exist, but no mobile screen saves a journey, so the trigger
+   cannot fire from the app today. Feature work, not a defect — but it means
+   one of the five required trigger codes is unreachable in the shipped app.
+
+8. **`versionCode` is 1 in `app.json`** while `eas.json` uses
+   `appVersionSource: "remote"` with `autoIncrement`. EAS is authoritative and
+   the local value is inert. Harmless, but do not read it as truth.
+
+### Still true from earlier gates
+
+9. **Zero on-device QA.** Unchanged and now the dominant risk.
+   `SLATE_DEVICE_QA.md` is ready to execute the moment an artifact exists.
+10. **Push notifications not built** — CONFIGURATION REQUIRED. Enabling it
+    changes the Data Safety declaration (a push token is a new identifier) and
+    the privacy policy, which must be updated in the same change.
+11. **Store graphics missing** — no 512×512 icon, no feature graphic, no
+    screenshots; screenshots additionally depend on risk 1.
+12. **No error tracking or APM.** Adding one changes the Data Safety "App info
+    and performance" section.
+13. **Row Level Security is not used**, and correctly so as built: no
+    untrusted client holds a database credential, and isolation is enforced in
+    the API (17 cross-user checks verified). RLS becomes **mandatory** if the
+    mobile app is ever pointed at Postgres directly, e.g. via a Supabase
+    client SDK.
+
 ## Gate 2 compliance risks (added Gate 2)
 
 ### Blocking submission

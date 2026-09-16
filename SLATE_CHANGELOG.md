@@ -2,6 +2,112 @@
 
 This tracks implementation decisions as Slate is built, in the order they were made. See `SLATE_RISKS.md` for open risks and missing credentials, and `SLATE_RELEASE_READINESS.md` (added before release) for ship/no-ship status.
 
+## Gate 3 — Production Infrastructure, Android Build & Billing
+
+**The target-API blocker is gone.** Gate 0 and Gate 2 both recorded the Expo
+SDK 54 upgrade as impossible here because `api.expo.dev` returns 403 and
+`expo install --fix` needs it. Right about the API, wrong about the
+conclusion: `registry.npmjs.org` is reachable, and the manifest that
+`expo install --fix` consults — `bundledNativeModules.json` — ships inside the
+`expo` npm package. Every Expo-managed dependency was pinned from SDK
+54.0.37's own manifest, and `expo-doctor` independently confirms it with
+"packages match versions required by installed Expo SDK" passing (16/18; both
+failures are network-policy artifacts).
+
+Slate now generates **compileSdk/targetSdk 36** on AGP 8.11.0, Kotlin 2.1.20,
+Gradle 8.14.3. SDK 54 was chosen because it is the *smallest* SDK that reaches
+API 36 — established from the packages, not memory: RN 0.79.6 (SDK 53) caps at
+35, RN 0.81.5 (SDK 54) is 36. One code change was needed for React 19:
+`useRef` now requires an explicit initial value.
+
+**No AAB exists and none is claimed.** Four independent reasons, each verified
+by attempting it: no `EXPO_TOKEN`; `api.expo.dev` 403; local Gradle cannot
+resolve plugins because `dl.google.com` and the Gradle Plugin Portal are
+policy-denied and the JDK 17 toolchain provisioner gets 403; and there is no
+Android SDK here at all.
+
+**New Architecture is deliberately off.** react-native-iap 12.16.4 has no
+`codegenConfig`, no TurboModule sources, no New Arch markers — a legacy-bridge
+module by inspection, not assumption. Billing is the release-critical
+subsystem; it runs on the architecture it was built for rather than on an
+interop layer nothing here can compile to test.
+
+**Four defects that would have reached users.**
+
+*A stolen purchase token granted Pro.* `/billing/verify-purchase` accepted any
+token from any authenticated caller, asked Google "is this real and active?",
+and granted Pro to whoever asked. Demonstrated against the real database: the
+`(purchaseToken, rawStatus)` constraint blocks the naive replay, but any state
+Slate has not yet recorded reopens the window — ACTIVE → IN_GRACE_PERIOD is
+enough. One paid subscription, unlimited accounts, and non-deterministic RTDN
+routing because notifications match on the token alone. Tokens are now bound
+to one account for life.
+
+*The Android purchase flow could not have worked.* `requestSubscription` was
+called without `subscriptionOffers`, and react-native-iap's own types say "in
+order to purchase a new subscription, every sku must have a selected
+offerToken" — since Play Billing 5 a subscription SKU is a container of base
+plans and a purchase must name one. Rewrote product discovery to fetch offer
+tokens and Play's localized prices, and separated cancelled (a normal choice,
+not an error dialog), pending (Google has the payment but hasn't completed it)
+and already-owned (restore, don't re-buy).
+
+*The auth rate limit was defeated behind a load balancer.* It keys on
+`req.ip`, but Fastify only reads `X-Forwarded-For` when told how far to trust
+it — so every login attempt on earth shared one budget. Added `TRUST_PROXY`,
+defaulting to false because trusting the header blindly lets a client forge
+its own source address.
+
+*A third of the analytics funnel was fiction.* Six required events were
+declared in `AnalyticsEventName` and emitted by no `track()` call anywhere:
+search, countdown_view, ai_open, community_post, community_comment,
+community_reaction. The type said instrumented; it wasn't measurable. Also
+added `purchase_cancelled` (backing out of the Play sheet was recorded as a
+failure, making checkout conversion meaningless) and `purchase_pending`.
+
+**Two concurrency bugs, the second found by the test written for the first.**
+Pub/Sub delivers at-least-once and in parallel: `purchaseEvent.create` raced
+its own guard, so the loser threw and the webhook 500d, making Google
+redeliver forever. Fixing that exposed the same shape one level up —
+`entitlement.upsert` is not atomic against a concurrent insert, so a
+subscription's *first* notification could 500 identically.
+
+**`AI_LIMIT` was a dead trigger.** It existed in the union and the Pro screen
+had a headline written for it, but the AI route returned 429 with no `trigger`
+field, so Ask Slate showed a notice and stopped. The moment a user hits the
+daily limit is the moment Pro is worth something, and it was a dead end.
+
+**Measured, not assumed.** `EXPLAIN` over every hot path found one real gap:
+`Entitlement.latestPurchaseToken` was unindexed, so every renewal notification
+Google sends did a sequential scan over the entitlements table — planner cost
+943 vs 8.31 at 50k subscribers. Every other hot path was already covered.
+
+**Production operability.** Added `/ready` (checks the database, 503 when it
+can't serve) alongside `/health` (no I/O, so a database blip never kills
+healthy instances). Added graceful shutdown — without it every rolling deploy
+dropped in-flight requests, including half-applied account deletions. Added
+five production configuration refusals: identical JWT secrets, `.env.example`
+placeholders, short secrets, a localhost database, a plaintext origin. All
+five verified to refuse; a correct configuration verified to start.
+
+Also lifted the Play Billing Library version out of `node_modules` into
+`app.json` via a config plugin, so a number Google enforces a hard minimum on
+is one reviewable value rather than a dependency internal. Pinned at
+react-native-iap's own tested 7.0.0 rather than silently raised — a Billing
+major the installed library wasn't written against may not compile, and
+nothing here can compile to find out.
+
+**Push notifications remain CONFIGURATION REQUIRED, deliberately.** Adding
+them would introduce a permission and a Data Safety identifier, invalidating
+Gate 2's verified declarations, for a feature no device here can test.
+
+61/61 tests (20 billing tests added), typecheck ×3, lint, prebuild, and 60+
+live checks against real Postgres all pass. Verdict: **YELLOW** — nothing is
+blocked on code, only on a machine that can compile Android.
+
+New documents: `SLATE_GATE_3_REPORT.md`, `SLATE_DEVICE_QA.md`.
+`SLATE_PRODUCTION_CONFIGURATION.md` rewritten as a gated checklist.
+
 ## Gate 2 — Google Play Compliance & Submission Readiness
 
 Compliance pass, not a feature pass. Everything below was added because Play
