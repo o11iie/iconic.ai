@@ -11,13 +11,29 @@
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-interface TableShape<Row, Insert, Update> {
+/**
+ * NOTE: every type in this file is a `type` alias, never an `interface`.
+ *
+ * TypeScript gives type aliases an implicit index signature but not
+ * interfaces, so an interface is not assignable to `Record<string, ...>`.
+ * supabase-js constrains its schema generic to
+ * `{ Tables: Record<string, GenericTable> }`; declaring these as interfaces
+ * silently fails that constraint and collapses every query builder's argument
+ * to `never`. Supabase's own type generator emits type aliases for exactly
+ * this reason.
+ *
+ * Shape supabase-js expects for each table. `Relationships` is required by the
+ * client's type inference even when a table declares no embedded joins —
+ * omitting it collapses query builders to `never`.
+ */
+type TableShape<Row, Insert, Update> = {
   Row: Row;
   Insert: Insert;
   Update: Update;
+  Relationships: [];
 }
 
-export interface ProfileRow {
+export type ProfileRow = {
   id: string;
   user_id: string;
   display_name: string | null;
@@ -33,7 +49,7 @@ export interface ProfileRow {
   updated_at: string;
 }
 
-export interface SubjectRow {
+export type SubjectRow = {
   id: string;
   domain: string;
   slug: string;
@@ -48,7 +64,7 @@ export interface SubjectRow {
   updated_at: string;
 }
 
-export interface SpatialModelRow {
+export type SpatialModelRow = {
   id: string;
   domain: string;
   subject_id: string | null;
@@ -65,7 +81,7 @@ export interface SpatialModelRow {
   updated_at: string;
 }
 
-export interface SpatialObjectRow {
+export type SpatialObjectRow = {
   id: string;
   model_id: string;
   semantic_id: string;
@@ -82,7 +98,7 @@ export interface SpatialObjectRow {
   metadata: Json;
 }
 
-export interface RelationshipRow {
+export type RelationshipRow = {
   id: string;
   model_id: string | null;
   source_id: string;
@@ -95,7 +111,7 @@ export interface RelationshipRow {
   created_at: string;
 }
 
-export interface CourseRow {
+export type CourseRow = {
   id: string;
   subject_id: string;
   owner_id: string | null;
@@ -110,7 +126,7 @@ export interface CourseRow {
   updated_at: string;
 }
 
-export interface LearningMaterialRow {
+export type LearningMaterialRow = {
   id: string;
   owner_id: string;
   subject_id: string | null;
@@ -126,7 +142,7 @@ export interface LearningMaterialRow {
   updated_at: string;
 }
 
-export interface QuestionRow {
+export type QuestionRow = {
   id: string;
   owner_id: string | null;
   subject_id: string | null;
@@ -146,7 +162,7 @@ export interface QuestionRow {
   updated_at: string;
 }
 
-export interface FlashcardRow {
+export type FlashcardRow = {
   id: string;
   owner_id: string;
   subject_id: string | null;
@@ -162,7 +178,7 @@ export interface FlashcardRow {
   updated_at: string;
 }
 
-export interface LearningSessionRow {
+export type LearningSessionRow = {
   id: string;
   user_id: string;
   subject_id: string | null;
@@ -176,7 +192,7 @@ export interface LearningSessionRow {
   metadata: Json;
 }
 
-export interface RecallAttemptRow {
+export type RecallAttemptRow = {
   id: string;
   user_id: string;
   session_id: string | null;
@@ -190,7 +206,7 @@ export interface RecallAttemptRow {
   response: Json;
 }
 
-export interface MemoryStateRow {
+export type MemoryStateRow = {
   id: string;
   user_id: string;
   concept_id: string;
@@ -204,7 +220,7 @@ export interface MemoryStateRow {
   retrievability: number | null;
 }
 
-export interface NoteRow {
+export type NoteRow = {
   id: string;
   owner_id: string;
   subject_id: string | null;
@@ -217,7 +233,7 @@ export interface NoteRow {
   updated_at: string;
 }
 
-export interface SubscriptionRow {
+export type SubscriptionRow = {
   id: string;
   user_id: string;
   tier: 'free' | 'plus' | 'pro' | 'institution';
@@ -238,7 +254,7 @@ type Generated = 'id' | 'created_at' | 'updated_at';
 type InsertOf<Row> = Omit<Row, Generated> & Partial<Pick<Row, Extract<Generated, keyof Row>>>;
 type UpdateOf<Row> = Partial<Row>;
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       profiles: TableShape<ProfileRow, InsertOf<ProfileRow>, UpdateOf<ProfileRow>>;
@@ -256,9 +272,13 @@ export interface Database {
       notes: TableShape<NoteRow, InsertOf<NoteRow>, UpdateOf<NoteRow>>;
       subscriptions: TableShape<SubscriptionRow, InsertOf<SubscriptionRow>, UpdateOf<SubscriptionRow>>;
     };
-    Views: Record<never, never>;
-    Functions: Record<never, never>;
-    Enums: Record<never, never>;
-    CompositeTypes: Record<never, never>;
+    // `{ [_ in never]: never }` is the empty-record form supabase-js's type
+    // inference accepts; `Record<never, never>` is not assignable to the
+    // index-signature shape it expects, which silently collapses every query
+    // builder to `never`.
+    Views: { [_ in never]: never };
+    Functions: { [_ in never]: never };
+    Enums: { [_ in never]: never };
+    CompositeTypes: { [_ in never]: never };
   };
 }
