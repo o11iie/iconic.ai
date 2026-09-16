@@ -30,7 +30,7 @@ export function Logo({
         <circle cx="12" cy="12" r="2.6" fill="var(--color-accent)" />
       </svg>
       {showWordmark ? (
-        <span className="text-[15px] font-semibold tracking-[0.18em] text-[--color-ink]">VEO</span>
+        <span className="text-[15px] font-semibold tracking-[0.18em] text-ink">VEO</span>
       ) : null}
       <span className="veo-sr-only">VEO — learning you can see</span>
     </span>

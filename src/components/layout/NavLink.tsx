@@ -25,8 +25,8 @@ export function NavLink({
       className={cn(
         'group flex flex-col gap-0.5 rounded-lg px-3 py-2 transition-colors duration-150',
         active
-          ? 'bg-[--color-surface-raised] text-[--color-ink]'
-          : 'text-[--color-ink-muted] hover:bg-[--color-surface]/60 hover:text-[--color-ink]',
+          ? 'bg-surface-raised text-ink'
+          : 'text-ink-muted hover:bg-surface/60 hover:text-ink',
       )}
     >
       <span className="flex items-center gap-2 text-sm font-medium">
@@ -34,13 +34,13 @@ export function NavLink({
           aria-hidden="true"
           className={cn(
             'size-1 rounded-full transition-colors',
-            active ? 'bg-[--color-cyan]' : 'bg-transparent group-hover:bg-[--color-ink-faint]',
+            active ? 'bg-cyan' : 'bg-transparent group-hover:bg-ink-faint',
           )}
         />
         {label}
       </span>
       {description ? (
-        <span className="pl-3 text-[11px] leading-snug text-[--color-ink-faint]">{description}</span>
+        <span className="pl-3 text-[11px] leading-snug text-ink-faint">{description}</span>
       ) : null}
     </Link>
   );

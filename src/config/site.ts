@@ -14,52 +14,75 @@ export interface NavItem {
   readonly href: string;
   readonly label: string;
   readonly description: string;
+  /** Icon name from the VEO icon set. */
+  readonly icon: string;
   /** Which stage of the VEO learning loop this surface serves. */
   readonly loopStages: readonly string[];
+  /** Carries the active model in the URL so navigating away and back resumes it. */
+  readonly preservesSpatialContext?: boolean;
 }
 
-/** Primary application navigation, in learning-loop order. */
+/**
+ * Primary navigation, in learning-loop order.
+ *
+ * Settings is deliberately absent: it lives in the account menu so the primary
+ * navigation stays about learning rather than administration.
+ */
 export const APP_NAV: readonly NavItem[] = [
   {
     href: '/dashboard',
-    label: 'Dashboard',
-    description: 'Where you are across every subject.',
+    label: 'Home',
+    description: 'What to do next.',
+    icon: 'home',
     loopStages: ['review'],
-  },
-  {
-    href: '/explore',
-    label: 'Explore',
-    description: 'See and manipulate spatial models.',
-    loopStages: ['explore', 'connect'],
   },
   {
     href: '/learn',
     label: 'Learn',
-    description: 'Work through structured material with the tutor.',
+    description: 'Browse subjects and material.',
+    icon: 'learn',
     loopStages: ['understand', 'structure', 'ask'],
+  },
+  {
+    href: '/explore',
+    label: 'Explore',
+    description: 'See and manipulate models.',
+    icon: 'explore',
+    loopStages: ['explore', 'connect'],
+    preservesSpatialContext: true,
   },
   {
     href: '/recall',
     label: 'Recall',
-    description: 'Active recall and spaced repetition.',
+    description: 'Retrieve it from memory.',
+    icon: 'recall',
     loopStages: ['recall', 'apply', 'remember'],
   },
   {
     href: '/library',
     label: 'Library',
-    description: 'Your uploaded material and generated study sets.',
+    description: 'Your saved work.',
+    icon: 'library',
     loopStages: ['upload'],
   },
 ];
 
+/** Reachable from the account menu, not the primary rail. */
 export const SECONDARY_NAV: readonly NavItem[] = [
   {
     href: '/settings',
     label: 'Settings',
-    description: 'Account, appearance and learning preferences.',
+    description: 'Account and preferences.',
+    icon: 'settings',
     loopStages: [],
   },
 ];
+
+/** Legal links shown on auth screens and in the footer. */
+export const LEGAL_LINKS = [
+  { href: '/legal/terms', label: 'Terms' },
+  { href: '/legal/privacy', label: 'Privacy' },
+] as const;
 
 /** The canonical VEO learning loop, used by the dashboard and docs. */
 export const LEARNING_LOOP: readonly { stage: string; label: string; summary: string }[] = [
