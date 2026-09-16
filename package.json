@@ -18,7 +18,8 @@
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
     "test:ui": "node scripts/verify-ui.mjs",
     "verify:full": "npm run verify && npm run start:verify",
-    "start:verify": "next start -p 3399 & sleep 4 && node scripts/verify-ui.mjs http://127.0.0.1:3399; kill %1"
+    "start:verify": "next start -p 3399 & sleep 4 && node scripts/verify-ui.mjs http://127.0.0.1:3399; kill %1",
+    "test:engine": "node scripts/verify-engine.mjs"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",

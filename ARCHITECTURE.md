@@ -340,6 +340,190 @@ build passes. It is green because the running application was measured.
 
 ---
 
+## 15. The spatial engine
+
+The engine is a core product subsystem, not a visualisation widget. It is the
+thing VEO sells, so it is built to the same standard as the domain model.
+
+### Layering
+
+```
+SpatialModel (domain data)
+      │
+      ▼
+SceneController ──── owns selection, visibility, camera intents, lifecycle
+      │                 · single source of truth
+      ▼                 · React binds via useSyncExternalStore
+SpatialObjectRegistry ── semantic id ⇄ scene node
+      │
+      ▼
+SpatialSceneRoot ─── registration, raycasting, materials, disposal
+      │
+      ▼
+Renderer (R3F / three.js)
+```
+
+Dependencies point one way. The renderer never learns that an object is a
+heart, a femur, a turbine or a molecule — it deals in `Object3D` and semantic
+ids, and everything above it deals in domain types.
+
+### One owner for scene state
+
+`SceneController` owns selection, hover, highlight, visibility, isolation,
+layer visibility, camera intents and model lifecycle. There is exactly one
+implementation of these rules.
+
+`BaseSceneGraphProvider` *delegates* to a controller rather than keeping a
+parallel copy, and the renderer binds to the same controller. The provider API
+and the viewport are therefore two views of one truth, not two copies that have
+to be kept in sync. The viewer store keeps only session concerns — which model
+is open, which tool is active — and receives the selected id through a single
+one-way sync so non-3D surfaces can read it.
+
+### Object registry and semantic resolution
+
+A raycast hits a mesh; a learner selects a *structure*. `SpatialObjectRegistry`
+is the only place that knows the mapping.
+
+`resolveSelectable` walks from the hit node **upward** and returns the FIRST
+tagged ancestor. That ordering is the whole rule: when a selectable child sits
+inside a tagged group, the child wins. Returning the outermost match instead
+would mean every click selected the entire model — the classic failure mode of
+naive scene picking.
+
+The registry also refuses to resolve identities it does not hold, so a stale
+tag left on a node from a previous model cannot resolve to something that no
+longer exists.
+
+It is written against a minimal structural `SceneNode` rather than
+`THREE.Object3D`, so every resolution rule is unit-tested without a WebGL
+context.
+
+### Model lifecycle
+
+```
+idle ──load──▶ loading ──loaded──▶ loaded ──unload──▶ idle
+                 │                    │
+                 └──fail──▶ failed ◀──┘
+                              │
+                       dispose│ (from any phase)
+                              ▼
+                           disposed
+```
+
+A pure reducer, so the hardest case — a learner switching models mid-download —
+is reasoned about and tested without a network.
+
+`generation` is the load-bearing field. It increments on every load, unload and
+dispose, and an async result carrying a stale generation is discarded. Without
+it, switching from a slow model to a fast one lets the slow response land last
+and replace the model the learner actually asked for.
+
+### Materials: one override per mesh, never per change
+
+The naive approach is to clone a material whenever visual state changes. That
+is what makes viewers degrade over a session: every hover allocates a material,
+nothing disposes them until unmount, and a minute of pointer movement leaves
+hundreds of orphaned GPU resources behind.
+
+`MaterialStateManager` creates **at most one** override material per mesh,
+lazily, and mutates that single instance on subsequent changes. Restoring is a
+reference swap back to the authored material, which is never mutated. Repeated
+selection changes therefore cannot accumulate corruption, and disposal is
+bounded and complete. A test drives 200 state changes and asserts the override
+count stays at one.
+
+Authored materials are disposed by the scene's own pass, not by the manager —
+disposing them there would break a material shared with another mesh.
+
+### Disposal
+
+three.js does not garbage-collect GPU resources. `disposeObject3D` walks every
+material slot and every texture-bearing uniform, disposes each shared material
+exactly once, detaches the root and empties it. `countResources` makes "no leak
+on model replacement" a measurable claim: the browser verification replaces the
+scene four times and asserts the renderer's own `gl.info.memory.geometries`
+does not grow.
+
+### Camera
+
+Zoom limits are derived from the model's own extent rather than hard-coded, so
+one rig serves a molecule and a cathedral. Framing resolves through
+`bounds.ts`, which measures the **selectable content** rather than the whole
+root — a scene routinely contains grids, axes, lights and helper nodes, and
+framing the root sizes the view to the largest helper while leaving the model
+small in the middle of it.
+
+Transitions run entirely inside `useFrame` and mutate the camera directly.
+Driving a camera tween through React state would re-render the tree every
+frame, which is the most common performance mistake in R3F applications.
+
+`reset` returns to the considered opening view — a three-quarter framing from
+slightly above — rather than merely re-fitting from wherever the learner
+happens to be orbiting.
+
+### Interaction
+
+Selection happens on pointer-**up**, and only when the pointer moved less than
+6px since pointer-down. Selecting on click alone means every camera orbit that
+ends over a structure changes the selection, which is the single most
+irritating bug in 3D viewers. Orbit mode suppresses hover and selection
+entirely.
+
+### Rendering policy
+
+Deliberately absent: bloom, depth of field, colour grading, vignettes and
+screen-space effects. VEO renders scientific content, so a learner must be able
+to trust that what they see is the model's colour and shape rather than a
+post-process interpretation of it.
+
+`NeutralToneMapping` at exposure 1 compresses highlights without shifting hue;
+ACES Filmic, the usual default, warms mid-tones in a way that changes perceived
+material colour. Device pixel ratio is capped at 2 — the highest-value
+performance decision in the renderer, since a 3x display renders 9x the
+fragments — and harder on low-core devices, where exceeding the GPU budget
+causes a context loss rather than a slowdown. The frame loop is on demand:
+a static model has no reason to redraw at 60fps.
+
+### The diagnostic scene
+
+`VEO SPATIAL ENGINE TEST` is a calibration rig: four abstract primitives named
+Node A–D under the reserved `veo.diagnostic` namespace, plus a grid and axes.
+
+`diagnostic` is deliberately **not** a knowledge domain, so nothing in the
+learning catalogue can reference these ids, and a test asserts this. It is
+labelled on screen wherever it is mounted, gated behind
+`NEXT_PUBLIC_ENABLE_PIPELINE_DIAGNOSTIC`, and never appears on the normal
+workspace — also asserted in the browser run.
+
+It is built imperatively and handed to `SpatialSceneRoot` exactly as a loaded
+GLTF scene is, so it takes the same registration, interaction, material and
+disposal path. Verifying the engine against a scene that bypassed the
+production path would prove nothing.
+
+VEO does not substitute generated geometry for licensed subject models. A model
+made of primitives would look complete while teaching nothing true. This scene
+exists so engineers can verify the engine, and it says so.
+
+### Known limitations
+
+- **No licensed subject asset has been rendered.** The GLTF path is implemented
+  and unit-tested against a stubbed manifest, but has not been exercised
+  against a real licensed asset, because none exists yet. Draco and KTX2
+  decoders are declared in the manifest schema but not yet wired.
+- **Ghost, isolate, peel and dissect** exist in the visual-state model and are
+  resolved correctly, but only `visible` / `hidden` / `ghosted` are driven by
+  the interface today. Isolation is disabled for the diagnostic scene.
+- **The canvas is `aria-hidden`.** Arbitrary 3D geometry cannot be navigated by
+  a screen reader, and claiming otherwise would be a false promise. The
+  surrounding interface carries the information: camera controls are real
+  focusable buttons, and selection is announced through a live region.
+- **Instancing and LOD are not implemented.** Neither is needed at current
+  scene complexity, and both would be premature before a real asset sets the
+  performance budget.
+
+---
+
 ## Appendix: version pinning rationale
 
 Two pins are not "latest", for concrete compatibility reasons found by checking

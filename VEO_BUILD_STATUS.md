@@ -6,53 +6,97 @@ _Last updated: 2026-09-16_
 
 ## Current phase
 
-**Phase 1 — Platform Foundation & Product Shell**
+**Phase 3 — Core Spatial Engine**
 
 ## Current gate
 
-**Gate 2 — Premium Product Shell + Learning Workspace → GREEN (verified)**
+**Gate 5 — Core Spatial / 3D Engine → GREEN (verified)**
 **Gate 1 — Application Foundation → GREEN (no regression)**
+**Gate 2 — Premium Product Shell → GREEN (no regression)**
 
-Every criterion below was verified by executing the application, not by reading
-the source. Live checks were run against a production build in a real browser.
+Every criterion below was verified by driving the engine in a real browser and
+reading its actual state — camera pose, GPU resource counts, registry contents,
+selection and material state — not by inspecting source or the DOM.
 
-| # | Gate 2 criterion | Status |
-| --- | --- | --- |
-| 1 | Landing page complete | GREEN |
-| 2 | Login complete | GREEN |
-| 3 | Signup complete | GREEN |
-| 4 | Onboarding complete | GREEN |
-| 5 | Dashboard complete | GREEN |
-| 6 | Learn experience complete | GREEN |
-| 7 | Explore experience complete | GREEN |
-| 8 | Recall shell complete | GREEN |
-| 9 | Library complete | GREEN |
-| 10 | Settings complete | GREEN |
-| 11 | Global navigation complete | GREEN |
-| 12 | Mobile navigation complete | GREEN |
-| 13 | Learning workspace implemented | GREEN |
-| 14 | 3D viewport visually dominant | GREEN — measured at 3 breakpoints |
-| 15 | Context panel implemented | GREEN |
-| 16 | AI Study panel implemented | GREEN |
-| 17 | Relationship UI implemented | GREEN |
-| 18 | Loading states implemented | GREEN |
-| 19 | Empty states implemented | GREEN |
-| 20 | Error states implemented | GREEN |
-| 21 | Responsive breakpoints verified | GREEN — 360/390/430/768/1024/1440 |
-| 22 | Accessibility baseline verified | GREEN |
-| 23 | TypeScript | PASS — 0 errors |
-| 24 | ESLint | PASS — 0 errors, 0 warnings |
-| 25 | Tests | PASS — 157/157 |
-| 26 | Production build | PASS — 17 routes |
-| 27 | Route verification | PASS — 14 routes, all 200 |
-| 28 | No critical console/runtime errors | PASS — 0 across all routes |
-| 29 | No fake anatomy | PASS — asserted in tests and at runtime |
-| 30 | No fabricated data | PASS — asserted in tests and at runtime |
-| 31 | Gate 1 remains GREEN | PASS — all Gate 1 tests still pass |
+| # | Gate 5 criterion | Status | Evidence |
+| --- | --- | --- | --- |
+| 1 | Production R3F scene operational | GREEN | canvas initialises, GPU geometry live |
+| 2 | Camera rig operational | GREEN | pose read from the running engine |
+| 3 | Orbit operational | GREEN | drag moves camera, distance preserved |
+| 4 | Pan operational | GREEN | right-drag moves the camera target |
+| 5 | Zoom operational | GREEN | wheel changes distance, stays in limits |
+| 6 | Reset operational | GREEN | target returns to model centre |
+| 7 | Fit-to-model operational | GREEN | frames selectable content |
+| 8 | Fit-to-selection operational | GREEN | reframes on the selected node |
+| 9 | Model lifecycle operational | GREEN | 14 unit tests incl. generation guarding |
+| 10 | Object registry operational | GREEN | 4 nodes registered from live scene |
+| 11 | Semantic resolution operational | GREEN | nearest-ancestor rule, 12 unit tests |
+| 12 | Pointer interaction operational | GREEN | click selects through real raycast |
+| 13 | Selection operational | GREEN | exactly one selection at a time |
+| 14 | Highlighting operational | GREEN | applies, clears, no residue |
+| 15 | Visibility foundation operational | GREEN | visible/hidden/ghosted resolved |
+| 16 | Scene disposal operational | GREEN | geometries, materials, textures freed |
+| 17 | No known memory leak | GREEN | GPU geometry flat across 4 replacements |
+| 18 | Mobile viewport verified | GREEN | 360/390/430/768, drag responds |
+| 19 | Desktop viewport verified | GREEN | 1440, no overflow, no page scroll |
+| 20 | WebGL/model error states verified | GREEN | unavailable + context-loss paths |
+| 21 | No fake anatomy used | GREEN | asserted in tests and at runtime |
+| 22 | Diagnostic scene clearly labelled | GREEN | on-screen label asserted in browser |
+| 23 | Existing /explore preserved | GREEN | Gate 2 suite 116/116 |
+| 24 | Gate 1 tests pass | GREEN | 92/92 |
+| 25 | Gate 2 tests pass | GREEN | 73/73 |
+| 26 | New Gate 5 tests pass | GREEN | 77 new unit tests |
+| 27 | TypeScript | PASS | 0 errors |
+| 28 | ESLint | PASS | 0 errors, 0 warnings |
+| 29 | Production build | PASS | 18 routes |
+| 30 | Live browser verification | PASS | 54 engine checks, 0 failures |
+| 31 | No critical console errors | PASS | 0 across desktop and 4 mobile sizes |
+| 32 | Documentation updated | PASS | ARCHITECTURE.md §15 |
+| 33 | Git commit created | PASS | see history |
 
 ---
 
 ## Completed
+
+### Gate 5 — core spatial engine
+
+**Engine core.** `SceneController` is the single owner of scene state —
+selection, hover, highlight, visibility, isolation, layers, camera intents and
+lifecycle. `BaseSceneGraphProvider` now delegates to it rather than keeping a
+parallel copy, so the provider API and the renderer are two views of one truth.
+`SpatialObjectRegistry` maps scene nodes to semantic identity, resolving a hit
+to its NEAREST tagged ancestor so a selectable child wins over its group.
+`modelLifecycleReducer` is a pure state machine whose `generation` field
+discards results from superseded loads.
+
+**Renderer.** Neutral tone mapping at exposure 1, sRGB output, DPR capped at 2
+(1.5 on low-core devices), antialiasing dropped once resolution does the same
+job, on-demand frame loop, and WebGL context-loss handling with an honest
+recovery path.
+
+**Materials.** `MaterialStateManager` allocates at most ONE override material
+per mesh and mutates it in place, replacing the previous clone-per-change
+approach that leaked a material on every hover. Authored materials are never
+mutated; restoring is a reference swap.
+
+**Disposal.** `disposeObject3D` walks every material slot and texture-bearing
+uniform, disposes shared materials exactly once, and detaches the root.
+
+**Camera.** Zoom limits derived from model extent, three-quarter initial
+framing, fit-to-model and fit-to-selection measured from selectable content
+rather than the whole root, transitions driven in `useFrame` with zero React
+re-renders, touch configured for one-finger orbit and two-finger pinch/pan.
+
+**Interaction.** Selection on pointer-up within a 6px slop, so orbiting never
+changes the selection. Orbit mode suppresses hover and selection.
+
+**Diagnostic scene.** `VEO SPATIAL ENGINE TEST` — four abstract primitives
+under the reserved `veo.diagnostic` namespace, which is deliberately not a
+knowledge domain. Built imperatively and handed to the same scene root as a
+loaded GLTF, so it exercises the production path.
+
+**Accessibility.** The canvas is `aria-hidden`; camera controls are real
+focusable buttons outside it, and selection is announced through a live region.
 
 ### Gate 2 — product shell
 
@@ -142,123 +186,144 @@ OpenAI, Stripe, OAuth providers.
 | --- | --- |
 | `npm run typecheck` | **PASS** — 0 errors |
 | `npm run lint` | **PASS** — 0 errors, 0 warnings |
-| `npm run test` | **PASS** — 157 passed / 157 total, 14 files |
-| `npm run build` | **PASS** — 17 routes |
-| `npm run test:ui` | **PASS** — 116 live browser checks, 0 failures |
+| `npm run test` | **PASS** — 242 passed / 242 total, 18 files |
+| `npm run build` | **PASS** — 18 routes |
+| `npm run test:engine` | **PASS** — 54 live engine checks, 0 failures |
+| `npm run test:ui` | **PASS** — 116 live UI checks, 0 failures |
 
-### Unit coverage by area
+### Gate 5 unit coverage
 
 | File | Tests | Covers |
 | --- | ---: | --- |
-| `lib/semantic-id.test.ts` | 17 | parsing, hierarchy, normalisation |
-| `engine/spatial/visual-state.test.ts` | 14 | precedence, isolation, ghosting, layers |
-| `engine/3d/camera/camera-math.test.ts` | 12 | framing, FOV, aspect, easing |
-| `anatomy/providers/gltf-anatomy-provider.test.ts` | 14 | full provider lifecycle |
-| `anatomy/mapping/manifest.test.ts` | 9 | schema + integrity rules |
-| `store/stores.test.ts` | 12 | all four stores |
-| `lib/stripe/entitlements.test.ts` | 6 | tier mapping, lapse revocation |
-| `components/ui/components.test.tsx` | 9 | base primitives + accessibility |
-| `components/ui/primitives.test.tsx` | 18 | overlays, menu, tabs, tooltip, search |
-| `components/workspace/workspace.test.tsx` | 21 | context panel, relationships, AI bar, toolbar, layers |
-| `data/content.test.ts` | 11 | content-honesty guards |
-| `config/navigation.test.ts` | 9 | nav structure and route protection |
-| `types/database.test.ts` | 2 | Supabase schema type integrity |
-| `tests/design-tokens.test.ts` | 3 | Tailwind v4 token correctness |
+| `engine/spatial/object-registry.test.ts` | 12 | semantic resolution, nearest-ancestor rule, stale tags |
+| `engine/spatial/model-lifecycle.test.ts` | 14 | every transition, generation guarding, terminal disposal |
+| `engine/spatial/scene-controller.test.ts` | 20 | selection, visibility, isolation, replacement, camera intents |
+| `engine/3d/engine.test.ts` | 31 | materials, disposal, renderer policy, pointer rules, bounds, diagnostic scene |
+| `engine/3d/camera/camera-math.test.ts` | +8 | zoom limits, initial framing, box guards |
 
-### Live browser verification (`npm run test:ui`)
+Totals: **242 unit tests across 18 files** (Gate 1: 92, Gate 2: 73, Gate 5: 77).
 
-Runs a production build in Chromium and asserts what source inspection cannot:
+### Live engine verification (`npm run test:engine`)
+
+Drives a production build in Chromium and reads engine state through a
+diagnostic debug bridge, so each claim is about what the engine actually did:
 
 | Group | Checks |
 | --- | ---: |
-| Routes render, no console errors | 44 |
-| Responsive breakpoints (6 sizes × 5 routes + nav) | 36 |
-| 3D viewport is visually dominant | 6 |
-| Navigation | 7 |
-| Accessibility baseline | 9 |
-| No fabricated content | 3 |
-| **Total** | **116 passed, 0 failed** |
+| Page, canvas, diagnostic scene | 8 |
+| Camera responds / orbit | 2 |
+| Zoom | 2 |
+| Pan | 1 |
+| Reset | 2 |
+| Targeting, selection, highlight | 9 |
+| Fit-to-selection and model replacement | 7 |
+| Console and layout | 3 |
+| Mobile viewport (4 sizes) | 16 |
+| Honest state without a licensed asset | 2 |
+| **Total** | **54 passed, 0 failed** |
 
-Breakpoints verified: **360, 390, 430, 768, 1024, 1440**. At every size: no
-horizontal overflow, primary navigation visible, and on `/explore` the
-workspace fills the screen without scrolling the page.
+The memory claim is measured, not asserted: the scene is replaced four times
+and the renderer's own `gl.info.memory.geometries` is required not to grow.
 
 ---
 
-## Issues found and fixed during Gate 2
+## Performance findings
 
-Six real defects, all caught by execution rather than review:
+- **Device pixel ratio is the dominant cost.** A 3x display renders nine times
+  the fragments of a 1x one. Capping at 2 (1.5 on devices reporting four or
+  fewer cores) is the single highest-value renderer decision, and on low-memory
+  devices it is the difference between a slowdown and a lost WebGL context.
+- **Camera tweens must never touch React.** Transitions run inside `useFrame`
+  and mutate the camera directly; driving them through state would re-render
+  the tree every frame.
+- **Material churn was the real leak.** Cloning a material per visual-state
+  change allocated one GPU material per hover. Reusing a single override per
+  mesh removed it entirely — measured at 200 state changes producing exactly
+  one override.
+- **On-demand rendering keeps idle frames idle.** `MaterialStateManager.apply`
+  reports whether anything actually changed, so an unchanged visual state does
+  not request a frame.
+- **Snapshot stability matters.** `SceneController.getSnapshot` returns the
+  same object until something changes, and re-selecting the current selection
+  does not notify — otherwise every no-op selection would cost a render.
 
-1. **Every colour utility in the application was emitting invalid CSS.**
-   Tailwind v4 removed the v3 `bg-[--custom-var]` shorthand. Classes like
-   `bg-[--color-accent]` still compiled, but emitted
-   `background-color: --color-accent`, which browsers drop. There was no build
-   error, lint error or type error — the interface simply rendered without most
-   of its colour, inheriting from `body`. All 369 occurrences across 50 files
-   were rewritten to Tailwind v4's generated theme utilities (`bg-accent`,
-   `text-ink-muted`, `border-hairline`). Guarded by
-   `src/tests/design-tokens.test.ts`.
+---
 
-2. **The Supabase typed client accepted no writes at all.** `Database` was
-   declared with `interface`. TypeScript gives type aliases an implicit index
-   signature but not interfaces, so the schema silently failed supabase-js's
-   `Record<string, GenericTable>` constraint and every query builder's argument
-   collapsed to `never`. This was a latent Gate 1 defect, invisible until Gate 2
-   wrote the first row. Converted to type aliases; guarded by
-   `src/types/database.test.ts`.
+## Issues found and fixed during Gate 5
 
-3. **Horizontal overflow on mobile (285px on `/dashboard`).** Grid and flex
-   items default to `min-width: auto`, so a card was sized by its content's
-   min-content rather than its column. Fixed systemically with `min-w-0` on
-   `Card` and `Panel`, plus `whitespace-nowrap shrink-0` on `Badge` and a
-   width-bounded description in the state components.
+1. **Grid and axes helpers inflated the model bounds**, so fit-to-model framed
+   the helper rather than the content and left the model small in the middle of
+   the viewport. Bounds are now measured across *selectable* objects, falling
+   back to the root — which also fixes framing for any licensed asset that
+   ships lights, cameras or helper nodes inside its scene.
+2. **`setState` inside effects** in three components would have caused
+   cascading renders. The scene root's forced re-render was redundant once the
+   controller notified subscribers; the stage now derives the loaded root from
+   the URL it came from rather than clearing it after the fact; and the
+   workspace opens its mobile drawer from a controller subscription rather than
+   by reacting to rendered state.
+3. **Camera control labels wrapped onto two lines** in the viewport toolbar.
+4. **Double-mounted diagnostic group.** The first draft rendered the diagnostic
+   primitive both in its own component and in the scene root. Resolved by
+   making the diagnostic a pure builder, which also ensures it takes the same
+   code path as a loaded asset.
 
-4. **The navigation rail rendered every destination twice**, hiding one copy
-   with CSS — putting every link in the accessibility tree twice. Rewritten to
-   render each link once with the label visually hidden below `xl`.
+### Verified, not changed
 
-5. **The AI notice consumed a third of the mobile screen**, squeezing the
-   viewport into a thumbnail and violating viewport dominance. Redesigned the
-   study bar to a single compact row.
+Two browser assertions failed initially and turned out to be wrong about the
+engine rather than finding a defect:
 
-6. **A signed-out visitor saw a "?" avatar**, which reads as a broken image.
-   Replaced with a "Sign in" affordance.
+- **Selection surviving a same-scene reload is correct.** Losing the learner's
+  selection on every reload would be hostile. What matters is that it is not a
+  *dangling* reference, so the assertion now proves the surviving id still
+  resolves in the rebuilt registry and its highlight re-applied to the new
+  geometry.
+- **A structure under the cursor is legitimately `hovered`, not residue.** The
+  check now parks the pointer off-canvas first, and additionally asserts that
+  hover clears when the pointer leaves.
 
-Also fixed: the Segmented control could not shrink and overflowed Settings at
-360px; there was no favicon, producing a 404 on every page load.
+---
 
-### A deliberate decision recorded
+## Blocked
 
-`/explore` is intentionally **not** behind authentication. The workspace is
-VEO's product demonstration, the landing page's "Explore VEO" call to action
-must not hit a login wall, and it exposes no personal data. This is now
-documented in `src/lib/supabase/middleware.ts` and asserted in
-`src/config/navigation.test.ts` so it cannot change silently.
+**One external dependency, unchanged since Gate 1:**
+
+- **Licensed anatomy assets are not available in this environment.** The
+  engine, provider, manifest contract, registry, renderer, camera and disposal
+  are complete and verified, but no licensed GLB/GLTF asset set is configured,
+  so no subject geometry can be displayed.
+
+  This is a **content/licensing blocker, not an engineering one**. VEO does not
+  substitute procedurally generated geometry for licensed subject models. The
+  GLTF loading path is implemented and unit-tested against a stubbed manifest;
+  it has not been exercised against a real licensed asset because none exists.
+
+  *To unblock:* publish a licensed asset set plus its `manifest.json` and set
+  `NEXT_PUBLIC_SPATIAL_ASSET_BASE_URL`. No code change is required.
+
+**Not blockers, simply unconfigured** (each reports itself in the UI): Supabase,
+OpenAI, Stripe, OAuth providers.
 
 ---
 
 ## Next action
 
-**Gate 3.** Gate 2 is GREEN, so this gate is now open. Gate 2 deliberately
-stopped short of: the recall algorithm, spaced repetition, tutor responses,
-question and flashcard generation, dissection and exploded view, and licensed
-anatomy asset integration.
+**Gate 6.** Gate 5 is GREEN, so this gate is now open. Gate 5 deliberately
+stopped short of: AI tutoring, active recall, spaced repetition, dissection and
+exploded view, and licensed anatomy asset integration.
 
-Proposed Gate 3 scope, in order:
+To run the engine verification locally:
 
-1. **Connect a Supabase project.** Apply both migrations, regenerate
-   `src/types/database.ts` from the live schema, and verify RLS with a two-user
-   test proving one account cannot read another's rows.
-2. **Persist the learning loop.** Sessions on entering and leaving the
-   workspace; notes and saved models from the context panel actions.
-3. **Tutor responses.** Wire `AIStudyPanel` to a server route using the existing
-   `LLMClient` abstraction and `buildTutorMessages` context builder.
-4. **Recall generation and scheduling.** Question and flashcard generation, then
-   the scheduler over `memory_states` — which already stores scheduler inputs
-   rather than only a due date.
-5. **Licensed anatomy asset integration.** *Blocked on licensing.*
+```bash
+# The diagnostic scene is gated; enable it for engineering verification only.
+echo 'NEXT_PUBLIC_ENABLE_PIPELINE_DIAGNOSTIC=true' >> .env.local
+npm run build && npm start &
+npm run test:engine
+```
 
-**Decision still required from you:** the licensing route for anatomy content —
+**Decision still required from you:** the licensing route for subject content —
 license an SDK, license a GLB/GLTF asset set, or commission VEO-owned models.
 The provider layer supports all three; only the SDK path carries a code cost,
-and the abstraction for it already exists.
+and the abstraction for it already exists. This is now the critical path: the
+engine is complete and every remaining gate builds on content it cannot yet
+display.

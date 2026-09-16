@@ -72,8 +72,21 @@ npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
 npm run test        # vitest — unit and component tests
 npm run verify      # all of the above, then a production build
-npm run test:ui     # live browser checks against a running server
+npm run test:ui     # live browser checks of the product shell
+npm run test:engine # live browser checks of the spatial engine
 npm run verify:full # verify, then boot a production server and run test:ui
+```
+
+`test:engine` drives the spatial engine in Chromium and reads its actual state
+— camera pose, GPU resource counts, registry contents, selection and material
+state — asserting that orbit moves the camera, that selection reaches the
+scene, and that replacing a model frees its GPU memory. It needs the diagnostic
+scene enabled:
+
+```bash
+echo 'NEXT_PUBLIC_ENABLE_PIPELINE_DIAGNOSTIC=true' >> .env.local
+npm run build && npm start &
+npm run test:engine
 ```
 
 `test:ui` drives a real Chromium against a production build and asserts what
@@ -121,9 +134,15 @@ src/
     learning/           subject browser, recall modes, library, settings
     marketing/          landing-page figure
   engine/
-    spatial/            DOMAIN-AGNOSTIC provider contract, visual-state reducer
-    3d/                 React Three Fiber renderer, camera rig, materials
-      diagnostics/      isolated render-pipeline calibration object
+    spatial/            DOMAIN-AGNOSTIC contracts + scene state
+      scene-controller.ts   single owner of selection, visibility, camera, lifecycle
+      object-registry.ts    semantic id <-> scene node resolution
+      model-lifecycle.ts    load/replace/dispose state machine
+    3d/                 renderer, camera rig, materials, disposal
+      renderer/         colour management, tone mapping, DPR policy
+      scene/            scene root, GLTF loader
+      interaction/      pointer and raycast rules
+      diagnostics/      labelled VEO SPATIAL ENGINE TEST scene
   anatomy/
     taxonomy.ts         systems, regions, relationship vocabulary
     providers/          AnatomyProvider + licensed GLB/GLTF implementation
@@ -144,31 +163,29 @@ supabase/migrations/    schema + Row Level Security
 
 **Gate 1 — Application Foundation: complete and verified.**
 **Gate 2 — Premium Product Shell + Learning Workspace: complete and verified.**
+**Gate 5 — Core Spatial / 3D Engine: complete and verified.**
 
 Working today:
 
-- All product routes render and navigate; production build passes.
-- Full design system: overlays with focus trapping, menus, tabs, tooltips,
-  search, cards, panels, badges, avatars and a 30-glyph inline icon set.
-- Application shell with a desktop navigation rail, mobile bottom navigation,
-  search, and an account menu that keeps Settings out of the primary rail.
-- Landing, sign in, sign up, forgot password, reset password and a three-step
-  onboarding flow that persists to the learner's profile.
-- The learning workspace: model switcher, spatial toolbar, dominant viewport,
-  layers panel, context panel with relationship UI and study actions, and a
-  one-row AI study bar.
-- Home, Learn, Recall, Library and Settings, each with honest empty states.
-- Domain model for all 18 core entities, domain-agnostic throughout.
-- VEO semantic identity (`veo.anatomy.heart.left_ventricle`) with a parser,
-  builder and hierarchy operations.
-- `SpatialProvider` / `AnatomyProvider` abstractions and a **functional**
-  licensed-GLB/GLTF provider that validates a manifest and maps vendor mesh
-  names to permanent VEO ids.
-- React Three Fiber renderer: orbit/pan/zoom, animated fly-to, fit-to-selection,
-  reset, hover and click selection, material state, WebGL detection.
+- A production spatial engine: registry-backed semantic selection, model
+  lifecycle with generation guarding, leak-free disposal, model-derived zoom
+  limits, fit-to-model and fit-to-selection from real scene bounds, and
+  material state that never corrupts an asset's authored appearance.
+- Orbit, pan, zoom, reset and animated fly-to, verified in a real browser at
+  desktop and four mobile widths.
+- Full design system, application shell, landing, authentication, onboarding,
+  Home, Learn, Recall, Library and Settings.
+- The learning workspace with model switcher, spatial toolbar, dominant
+  viewport, layers panel, context panel with relationship UI, and a one-row
+  AI study bar.
+- Domain model for all 18 core entities, domain-agnostic throughout, with VEO
+  semantic identity (`veo.anatomy.heart.left_ventricle`).
+- `SpatialProvider` / `AnatomyProvider` abstractions and a functional licensed
+  GLB/GLTF provider that validates a manifest and maps vendor mesh names onto
+  permanent VEO identity.
 - Supabase auth with session refresh and protected routes; Postgres schema and
   Row Level Security for all core tables.
-- 157 automated tests plus 116 live browser checks.
+- 242 automated tests plus 170 live browser checks.
 
 Deliberately **not** present:
 
@@ -176,11 +193,13 @@ Deliberately **not** present:
   requires licensed assets; until one is configured the product says so.
 - **No fabricated data.** No invented statistics, testimonials, logos or
   progress. Where data does not exist, the empty state says so.
-- **No recall algorithm or spaced repetition yet** — Gate 3.
+- **No recall algorithm or spaced repetition yet.**
 - **No tutor responses yet** — the abstraction and context builder exist; the
-  server route is Gate 3.
+  server route comes later.
+- **No dissection or exploded view yet** — the visual-state model supports
+  them; the interface does not drive them.
 
-Next: **Gate 3** — see [VEO_BUILD_STATUS.md](./VEO_BUILD_STATUS.md).
+Next: **Gate 6** — see [VEO_BUILD_STATUS.md](./VEO_BUILD_STATUS.md).
 
 ## Note on this repository
 
