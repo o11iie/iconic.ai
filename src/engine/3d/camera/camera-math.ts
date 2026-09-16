@@ -103,3 +103,94 @@ export function unionBox(a: BoundingBox, b: BoundingBox): BoundingBox {
     max: [Math.max(a.max[0], b.max[0]), Math.max(a.max[1], b.max[1]), Math.max(a.max[2], b.max[2])],
   };
 }
+
+/**
+ * Zoom limits derived from the model itself.
+ *
+ * Hard-coded min/max distances only work for one model size. A molecule and a
+ * cathedral need wildly different limits, so both are expressed as multiples
+ * of the model's own extent:
+ *
+ *   min — close enough to inspect a small feature, far enough that the near
+ *         plane does not clip through the surface
+ *   max — far enough to see the whole thing with room around it, near enough
+ *         that the model never becomes an unusable speck
+ */
+export function zoomLimitsFor(
+  extent: number,
+  fovDegrees = 45,
+  aspect = 1,
+): { min: number; max: number } {
+  const safeExtent = Number.isFinite(extent) && extent > 0 ? extent : 1;
+  const fitted = fitDistance(safeExtent, fovDegrees, 1, aspect);
+
+  return {
+    min: Math.max(safeExtent * 0.05, 1e-3),
+    max: fitted * 6,
+  };
+}
+
+/** Clamp a distance into the model's zoom range. */
+export function clampDistance(distance: number, limits: { min: number; max: number }): number {
+  if (!Number.isFinite(distance)) return limits.min;
+  return Math.min(Math.max(distance, limits.min), limits.max);
+}
+
+/**
+ * The opening view.
+ *
+ * A three-quarter view from slightly above reads as a considered presentation
+ * rather than an accidental one, and it reveals depth immediately — a
+ * straight-on axis view makes a 3D model look like a picture of itself.
+ */
+export function initialFraming(
+  box: BoundingBox,
+  fovDegrees = 45,
+  aspect = 1,
+  padding = 1.6,
+): { position: Vec3; target: Vec3 } {
+  const target = boxCenter(box);
+  const distance = fitDistance(boxMaxExtent(box), fovDegrees, padding, aspect);
+
+  // Normalised three-quarter direction: right, above, and in front.
+  const dir: Vec3 = [0.55, 0.42, 0.72];
+  const length = Math.hypot(dir[0], dir[1], dir[2]);
+
+  return {
+    target,
+    position: [
+      target[0] + (dir[0] / length) * distance,
+      target[1] + (dir[1] / length) * distance,
+      target[2] + (dir[2] / length) * distance,
+    ],
+  };
+}
+
+/** True when a box has real volume; guards fitting against degenerate input. */
+export function isUsableBox(box: BoundingBox | null): box is BoundingBox {
+  if (!box) return false;
+  const [x, y, z] = boxSize(box);
+  return (
+    Number.isFinite(x) &&
+    Number.isFinite(y) &&
+    Number.isFinite(z) &&
+    Math.max(x, y, z) > 1e-6
+  );
+}
+
+/**
+ * Expand a box by a uniform margin.
+ *
+ * Framing a structure exactly to its bounds leaves it touching the edge of the
+ * viewport, which reads as cramped. A small margin makes framing feel composed.
+ */
+export function expandBox(box: BoundingBox, factor: number): BoundingBox {
+  const center = boxCenter(box);
+  const [sx, sy, sz] = boxSize(box);
+  const half: Vec3 = [(sx * factor) / 2, (sy * factor) / 2, (sz * factor) / 2];
+
+  return {
+    min: [center[0] - half[0], center[1] - half[1], center[2] - half[2]],
+    max: [center[0] + half[0], center[1] + half[1], center[2] + half[2]],
+  };
+}
