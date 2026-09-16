@@ -1,64 +1,48 @@
 import type { Metadata } from 'next';
 import { AppShell } from '@/components/layout/AppShell';
+import { RecallModes } from '@/components/learning/RecallModes';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
-import { ButtonLink } from '@/components/ui/Button';
-import { EmptyState } from '@/components/ui/states';
-import { Badge } from '@/components/ui/Badge';
-import { RECALL_MODES } from '@/store/learning-store';
+import { Icon } from '@/components/ui/Icon';
+import { EmptyState, NotConfiguredState } from '@/components/ui/states';
+import { capabilities } from '@/config/env';
 
 export const metadata: Metadata = { title: 'Recall' };
 
-const MODE_LABELS: Record<string, string> = {
-  flashcards: 'Flashcards',
-  questions: 'Questions',
-  spatial_identify: 'Identify in 3D',
-  mixed: 'Mixed',
-};
-
 /**
- * RECALL — retrieval practice and spaced repetition.
+ * RECALL — retrieval practice.
  *
- * `spatial_identify` is the mode that only VEO can offer: the prompt is a
- * question and the answer is a structure you click in the model. It is
- * represented in the domain types (`QuestionKind`) and scheduled through
- * `memory_states` against semantic ids.
+ * Gate 2 delivers the interface and state architecture. Scheduling is
+ * deliberately not implemented here: the `memory_states` table already stores
+ * scheduler inputs rather than only a due date, so the algorithm can be added
+ * later without discarding any learner history.
  */
 export default function RecallPage() {
   return (
     <AppShell
       title="Recall"
-      subtitle="Retrieve it from memory, not from the page. VEO schedules each concept to return just before you would forget it."
+      subtitle="Retrieve it from memory, not from the page. Choose how you want to be tested."
     >
       <div className="flex flex-col gap-5">
-        <Card>
-          <CardHeader
-            title="Recall modes"
-            description="How you want to be tested. Each mode writes to the same memory model."
+        {capabilities.supabase ? null : (
+          <NotConfiguredState
+            title="No database connected"
+            description="Recall history and scheduling live in Supabase. Until a project is attached, VEO cannot build a real review queue and will not invent one."
+            requirement="NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY"
           />
-          <CardBody>
-            <ul className="flex flex-wrap gap-2">
-              {RECALL_MODES.map((mode) => (
-                <li key={mode}>
-                  <Badge tone={mode === 'spatial_identify' ? 'cyan' : 'neutral'}>
-                    {MODE_LABELS[mode] ?? mode}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          </CardBody>
-        </Card>
+        )}
+
+        <RecallModes />
 
         <Card>
-          <CardHeader title="Today's queue" description="Concepts due for review." />
+          <CardHeader
+            title="Review schedule"
+            description="When each concept is due to come back."
+          />
           <CardBody>
             <EmptyState
-              title="Nothing due yet"
-              description="Your review queue is built from real recall attempts. It stays empty until you have studied something — VEO will not seed it with placeholder cards."
-              action={
-                <ButtonLink href="/explore" size="sm">
-                  Start exploring
-                </ButtonLink>
-              }
+              title="No review schedule yet"
+              description="VEO stores how well you recalled each concept, not just whether you saw it, and uses that to decide when to bring it back."
+              icon={<Icon name="clock" size={22} />}
             />
           </CardBody>
         </Card>

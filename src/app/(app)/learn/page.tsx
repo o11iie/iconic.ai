@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { AppShell } from '@/components/layout/AppShell';
+import { SubjectBrowser } from '@/components/learning/SubjectBrowser';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { ButtonLink } from '@/components/ui/Button';
+import { Icon } from '@/components/ui/Icon';
 import { EmptyState, NotConfiguredState } from '@/components/ui/states';
 import { serverCapabilities } from '@/config/env.server';
 
@@ -10,9 +12,9 @@ export const metadata: Metadata = { title: 'Learn' };
 /**
  * LEARN — understand, structure, ask.
  *
- * The AI tutor is abstracted behind `src/ai` and reached only through server
- * routes, so the key never touches the browser. Until a key is configured this
- * page says so rather than offering a chat box that silently fails.
+ * Discovery of subjects, categories and material. The catalogue is honest
+ * about what exists: categories awaiting licensed assets are shown so the
+ * roadmap is visible, but are marked and cannot be opened.
  */
 export default function LearnPage() {
   const ai = serverCapabilities().openai;
@@ -20,30 +22,30 @@ export default function LearnPage() {
   return (
     <AppShell
       title="Learn"
-      subtitle="Work through material concept by concept, with a tutor that can see the same model you are looking at."
+      subtitle="Browse what VEO teaches. Open a subject to see its categories and the models behind them."
     >
       <div className="flex flex-col gap-5">
         {ai ? null : (
           <NotConfiguredState
             title="AI tutor is not configured"
-            description="The tutor is implemented behind a provider abstraction and called only from VEO server routes, so your key is never exposed to the browser. Add a key to enable it."
+            description="Course generation and the tutor run behind a provider abstraction, called only from VEO server routes so your key is never exposed to the browser."
             requirement="OPENAI_API_KEY"
           />
         )}
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <SubjectBrowser />
+
+        <div className="grid gap-4 lg:grid-cols-2">
           <Card>
-            <CardHeader
-              title="Your courses"
-              description="Structured paths through a subject."
-            />
+            <CardHeader title="Your courses" description="Structured paths through a subject." />
             <CardBody>
               <EmptyState
                 title="No courses yet"
-                description="Courses are generated from your material, or published by VEO for a subject."
+                description="Courses are generated from your own material, or published by VEO for a subject."
+                icon={<Icon name="learn" size={22} />}
                 action={
-                  <ButtonLink href="/library" size="sm" variant="secondary">
-                    Go to library
+                  <ButtonLink href="/library" variant="secondary" size="sm">
+                    Add material
                   </ButtonLink>
                 }
               />
@@ -58,7 +60,8 @@ export default function LearnPage() {
             <CardBody>
               <EmptyState
                 title="Nothing structured yet"
-                description="Upload material and VEO extracts concepts, then links them to structures in the spatial model."
+                description="Upload material and VEO extracts its concepts, then links them to structures in the spatial model."
+                icon={<Icon name="link" size={22} />}
               />
             </CardBody>
           </Card>

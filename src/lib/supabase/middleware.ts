@@ -17,7 +17,16 @@ import type { Database } from '@/types/database';
  * the database is. Middleware only decides what page to render.
  */
 
-/** Routes that require an authenticated user. */
+/**
+ * Routes that require an authenticated user.
+ *
+ * `/explore` is deliberately absent. The workspace is VEO's product
+ * demonstration: a signed-out visitor arriving from the landing page's
+ * "Explore VEO" call to action should reach it, and it exposes no personal
+ * data — with no session there is nothing to load beyond the public model
+ * catalogue, and the viewport reports its real state either way. Saving,
+ * notes and recall all live behind the protected routes below.
+ */
 export const PROTECTED_PREFIXES = [
   '/dashboard',
   '/learn',
