@@ -39,6 +39,21 @@ const clientSchema = z.object({
     .optional()
     .or(z.literal('').transform(() => undefined)),
   NEXT_PUBLIC_ANATOMY_PROVIDER: z.string().trim().min(1).default('gltf-asset'),
+  /**
+   * Comma-separated Supabase OAuth providers enabled for this deployment,
+   * e.g. "google,github". Empty means password auth only — the sign-in screen
+   * then omits the social section entirely rather than showing dead buttons.
+   */
+  NEXT_PUBLIC_OAUTH_PROVIDERS: z
+    .string()
+    .trim()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((entry) => entry.trim().toLowerCase())
+        .filter(Boolean),
+    ),
   NEXT_PUBLIC_SPATIAL_ASSET_BASE_URL: optionalUrl,
   NEXT_PUBLIC_ENABLE_PIPELINE_DIAGNOSTIC: z
     .enum(['true', 'false'])
@@ -55,6 +70,7 @@ function readClientEnv(): ClientEnv {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
     NEXT_PUBLIC_ANATOMY_PROVIDER: process.env.NEXT_PUBLIC_ANATOMY_PROVIDER,
+    NEXT_PUBLIC_OAUTH_PROVIDERS: process.env.NEXT_PUBLIC_OAUTH_PROVIDERS,
     NEXT_PUBLIC_SPATIAL_ASSET_BASE_URL: process.env.NEXT_PUBLIC_SPATIAL_ASSET_BASE_URL,
     NEXT_PUBLIC_ENABLE_PIPELINE_DIAGNOSTIC: process.env.NEXT_PUBLIC_ENABLE_PIPELINE_DIAGNOSTIC,
   });
@@ -88,6 +104,8 @@ export const capabilities = {
   spatialAssets: Boolean(env.NEXT_PUBLIC_SPATIAL_ASSET_BASE_URL),
   /** The isolated, explicitly non-anatomical render-pipeline check is enabled. */
   pipelineDiagnostic: env.NEXT_PUBLIC_ENABLE_PIPELINE_DIAGNOSTIC,
+  /** At least one OAuth provider is configured in Supabase for this deployment. */
+  oauth: env.NEXT_PUBLIC_OAUTH_PROVIDERS.length > 0,
 } as const;
 
 export type Capability = keyof typeof capabilities;

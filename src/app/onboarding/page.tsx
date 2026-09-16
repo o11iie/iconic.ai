@@ -1,85 +1,38 @@
 import type { Metadata } from 'next';
-import { AppShell } from '@/components/layout/AppShell';
-import { Card, CardBody, CardHeader } from '@/components/ui/Card';
-import { ButtonLink } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import { KNOWLEDGE_DOMAINS } from '@/types/domain/primitives';
-import { LEARNING_LEVELS } from '@/types/domain/user';
+import Link from 'next/link';
+import { OnboardingFlow } from '@/components/layout/OnboardingFlow';
+import { Logo } from '@/components/layout/Logo';
+import { capabilities } from '@/config/env';
+import { getServerUser } from '@/lib/supabase/server';
+import { SITE } from '@/config/site';
 
-export const metadata: Metadata = { title: 'Get started' };
+export const metadata: Metadata = { title: 'Set up VEO' };
 
-const DOMAIN_LABELS: Record<string, string> = {
-  anatomy: 'Anatomy',
-  health_sciences: 'Health Sciences',
-  engineering: 'Engineering',
-  chemistry: 'Chemistry',
-  physics: 'Physics',
-  architecture: 'Architecture',
-  computing: 'Computing',
-  earth_sciences: 'Earth Sciences',
-  astrophysics: 'Astrophysics',
-};
+export default async function OnboardingPage() {
+  const user = capabilities.supabase ? await getServerUser() : null;
+  const defaultName =
+    (user?.user_metadata?.display_name as string | undefined) ??
+    user?.email?.split('@')[0] ??
+    '';
 
-/**
- * Onboarding.
- *
- * Collects the two things that actually change what VEO shows a learner:
- * which domains they care about and what level they are working at. Both map
- * directly onto `profiles.interests` and `profiles.level`.
- *
- * Persisting these requires a connected database; the form is wired in the
- * next gate, and this page states that plainly rather than pretending to save.
- */
-export default function OnboardingPage() {
   return (
-    <AppShell
-      title="Set up VEO"
-      subtitle="Two questions, so VEO starts you in the right place."
-    >
-      <div className="flex max-w-3xl flex-col gap-5">
-        <Card>
-          <CardHeader
-            title="What do you want to learn?"
-            description="Anatomy is the flagship experience. Other domains use the same spatial engine as their licensed content is published."
-          />
-          <CardBody>
-            <ul className="flex flex-wrap gap-2">
-              {KNOWLEDGE_DOMAINS.map((domain) => (
-                <li key={domain}>
-                  <Badge tone={domain === 'anatomy' ? 'accent' : 'neutral'}>
-                    {DOMAIN_LABELS[domain] ?? domain}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          </CardBody>
-        </Card>
+    <div className="relative min-h-dvh">
+      <div aria-hidden="true" className="veo-grid-backdrop pointer-events-none absolute inset-0 h-[50vh]" />
 
-        <Card>
-          <CardHeader
-            title="What level are you working at?"
-            description="Sets the default depth of explanations and the difficulty of generated recall material."
-          />
-          <CardBody>
-            <ul className="flex flex-wrap gap-2">
-              {LEARNING_LEVELS.map((level) => (
-                <li key={level}>
-                  <Badge>{level}</Badge>
-                </li>
-              ))}
-            </ul>
-          </CardBody>
-        </Card>
+      <div className="relative mx-auto flex w-full max-w-lg flex-col px-5 sm:px-6">
+        <header className="flex h-16 items-center sm:h-20">
+          <Link href="/" className="rounded-md" aria-label={`${SITE.name} home`}>
+            <Logo />
+          </Link>
+        </header>
 
-        <div className="flex flex-wrap gap-2">
-          <ButtonLink href="/explore" size="lg">
-            Start with anatomy
-          </ButtonLink>
-          <ButtonLink href="/dashboard" variant="secondary" size="lg">
-            Go to dashboard
-          </ButtonLink>
-        </div>
+        <main id="veo-main" className="py-4 pb-20">
+          <p className="mb-8 text-xs uppercase tracking-[0.1em] text-ink-faint">
+            Setting up
+          </p>
+          <OnboardingFlow defaultName={defaultName} canPersist={capabilities.supabase} />
+        </main>
       </div>
-    </AppShell>
+    </div>
   );
 }
