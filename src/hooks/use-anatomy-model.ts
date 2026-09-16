@@ -7,6 +7,8 @@ import {
   isObservableProvider,
   type ProviderSnapshot,
 } from '@/engine/spatial/base-provider';
+import { isSceneGraphProvider } from '@/engine/spatial/provider';
+import type { SceneController } from '@/engine/spatial/scene-controller';
 import type { SpatialError } from '@/engine/spatial/errors';
 import { IDLE_PROGRESS, type LoadProgress } from '@/engine/spatial/types';
 import type { SemanticId } from '@/lib/semantic-id';
@@ -24,6 +26,14 @@ export type ModelStatus = 'idle' | 'initialising' | 'not_configured' | 'loading'
 
 export interface AnatomyModelResult {
   readonly provider: AnatomyProvider | null;
+  /**
+   * The provider's scene controller, when it renders into VEO's own scene.
+   *
+   * Surfaced here rather than reached for through the provider so the
+   * renderer binds to a typed handle, and so an SDK-backed provider that owns
+   * its renderer correctly returns null.
+   */
+  readonly controller: SceneController | null;
   readonly status: ModelStatus;
   readonly snapshot: ProviderSnapshot | null;
   readonly progress: LoadProgress;
@@ -135,8 +145,11 @@ export function useAnatomyModel(modelRef: string | null): AnatomyModelResult {
         })
       : null;
 
+  const controller = provider && isSceneGraphProvider(provider) ? provider.scene : null;
+
   return {
     provider,
+    controller,
     status,
     snapshot,
     progress,
