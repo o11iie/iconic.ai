@@ -19,6 +19,28 @@ These cannot be resolved by writing more code. Each blocks a specific, real part
 
 None of the above were skipped or stubbed out with fake data — every integration point (TMDB client, IGDB client, OpenAI provider, Play Billing verification) is written against each provider's real, documented API contract and fails loudly/gracefully (503 with a clear error code) rather than fabricating a response when the credential is missing.
 
+## Gate 5 risks (added Gate 5)
+
+### Blocking
+1. **No build environment, and now also no device.** Gate 3.5's blocker was
+   denied hosts — liftable by a config change. Gate 5 additionally needs
+   physical Android hardware, and this machine has zero USB buses. That is the
+   absence of hardware, not a policy, and nothing done from inside this
+   environment will change it.
+
+### Accepted trade-offs
+2. **Release signing remains the Expo template default.** Patching it would
+   mean hardcoding a keystore path this repository cannot know, and would
+   break the EAS path, which injects credentials its own way. Mitigated
+   instead by `verify-aab.mjs`, which fails on a debug-signed artifact.
+3. **`verify-aab.mjs` cannot read targetSdk, versionCode or versionName.**
+   Those live in the protobuf-encoded manifest and need `bundletool`. The
+   script prints the commands rather than guessing, and must not be treated as
+   a complete Part 5 inspection.
+4. **The DB-backed suite fails rather than skips when `DATABASE_URL` is set
+   but the database is down.** Surfaced when Postgres stopped mid-gate
+   (`1 failed | 20 skipped`). Defensible for CI, but easy to misread.
+
 ## Gate 4 risks (added Gate 4)
 
 ### Blocking

@@ -2,6 +2,53 @@
 
 This tracks implementation decisions as Slate is built, in the order they were made. See `SLATE_RISKS.md` for open risks and missing credentials, and `SLATE_RELEASE_READINESS.md` (added before release) for ship/no-ship status.
 
+## Gate 5 — Production AAB Attempt
+
+**No AAB was produced and no device test was run.** Both build paths were
+probed once and abandoned, per the gate's instruction not to fight blocked
+infrastructure.
+
+EAS is impossible: `EXPO_TOKEN` unset, `api.expo.dev` and `expo.dev` both
+403 at the network gateway. Local is impossible: no JDK 17 (only 21, and RN
+0.81's Gradle plugin declares a `languageVersion=17` toolchain), no Android
+SDK, `dl.google.com` policy-denied. Of the Android toolchain — adb, aapt,
+aapt2, bundletool, apksigner, zipalign, sdkmanager, avdmanager, emulator —
+none is installed; only `keytool` exists, because it ships with the JDK.
+
+The device requirement is categorical rather than environmental: `/dev/bus/usb`
+contains zero USB buses. No Android hardware is attached and none can be, so
+Part 6 was unexecutable even given an artifact. This is a different kind of
+blocker from Gate 3.5's denied hosts — that could be lifted by a config
+change, this cannot.
+
+**What the gate contributed instead.** Part 5 is a twelve-point inspection
+that has to happen on the real artifact. Since an AAB is a zip, most of what
+matters can be checked without an Android SDK, so `scripts/verify-aab.mjs`
+now does it: confirms the file is an app bundle, confirms it is signed and
+**not** with the public Android debug key, greps the shipped JS bundle for
+OpenAI keys, private keys, `service_role`, localhost, emulator loopback,
+reserved placeholder hosts and cleartext endpoints, and flags any permission
+outside the expected three. It prints the exact `bundletool` and `apksigner`
+commands for what it cannot check rather than implying coverage it lacks.
+
+This closes the debug-signing trap flagged in Gate 4: `expo prebuild` emits
+Expo's template default where the *release* build type uses
+`signingConfigs.debug`, and a local `bundleRelease` without configured signing
+produces a debug-signed artifact that looks completely normal.
+
+**The script failed its own first test.** It reported a debug-signed bundle as
+"release (non-debug key)" — a false PASS on the single check it exists to
+perform. `keytool -printcert -file` cannot parse a raw extracted PKCS#7 block,
+and the code fell through to the success branch. Fixed to use `-jarfile` and
+to fail closed: a signing check that cannot read the signature now reports
+failure, never success. Found only by building four synthetic fixtures
+(debug-signed, release-signed clean, secrets-and-rogue-permissions, unsigned)
+and confirming each produced the right verdict.
+
+Product code is untouched. 68/68 tests, typecheck ×3, lint, navigation guard
+and billing guard all still pass. Verdict **RED** — the gate's scale reserves
+GREEN and YELLOW for an artifact that exists.
+
 ## Gate 4 — Final Product QA & Release Hardening
 
 A quality gate, not a feature gate. Everything below was found by auditing the

@@ -11,7 +11,8 @@
     "eas-build-pre-install": "node scripts/check-release-env.mjs",
     "check-release-env": "node scripts/check-release-env.mjs",
     "billing:version": "node scripts/resolve-billing-version.mjs --min 8",
-    "check-navigation": "node scripts/check-navigation.mjs"
+    "check-navigation": "node scripts/check-navigation.mjs",
+    "verify-aab": "node scripts/verify-aab.mjs"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^6.6.1",
