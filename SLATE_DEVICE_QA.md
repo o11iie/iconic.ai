@@ -67,6 +67,23 @@ been built, installed or exercised. This matrix is what closes that gap.
 | 34 | Background / foreground | State preserved; entitlement refreshed on resume | P1 |
 | 35 | Android back navigation | Back never strands the user; back from a root tab exits rather than looping | P1 |
 
+## Changed again in Gate 3.5 — read before running
+
+The billing stack was replaced, not tweaked. Tests #27–#29 now exercise
+react-native-iap 14 on Play Billing 8.3.0, through a rewritten, event-based
+purchase flow, on the React Native New Architecture. None of it has been
+compiled natively.
+
+Additional checks for this build:
+
+| # | Test | Also verify |
+| --- | --- | --- |
+| 1 | Fresh install | The app launches at all. New Architecture is newly enabled; a crash citing Nitro, JSI or TurboModules points there |
+| 27 | Play purchase | The Play sheet opens with the correct localized price; a **renewal** extends expiry rather than being ignored (the Gate 3.5 fix — visible only across a billing period or a test-track short renewal) |
+| 28 | Restore | A suspended subscription reports "payment needs attention" rather than silently restoring nothing |
+| 29 | Pro entitlement | Pro appears only after server verification, and the purchase is acknowledged — an unacknowledged purchase is auto-refunded by Google after three days |
+| — | Dependency tree | `./gradlew :app:dependencies \| grep billingclient` shows `billing-ktx:8.3.0` |
+
 ## Tests this build's specific changes make worth extra attention
 
 Gate 3 changed code that could not be compiled here. These are the places to

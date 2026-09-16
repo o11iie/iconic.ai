@@ -19,6 +19,45 @@ These cannot be resolved by writing more code. Each blocks a specific, real part
 
 None of the above were skipped or stubbed out with fake data — every integration point (TMDB client, IGDB client, OpenAI provider, Play Billing verification) is written against each provider's real, documented API contract and fails loudly/gracefully (503 with a clear error code) rather than fabricating a response when the credential is missing.
 
+## Gate 3.5 risks (added Gate 3.5)
+
+### Blocking
+
+1. **No build environment.** Three independent causes here, each verified: no
+   JDK 17 (RN 0.81 requires it; only 21 is installed, and the foojay
+   auto-provisioner is 403-blocked), no Android SDK, and `dl.google.com`
+   policy-denied — where AGP, androidx and the Play Billing artifacts live,
+   none of which are mirrored on Maven Central. Not a code problem.
+
+2. **The billing migration's native build is unverified.** The first build
+   carries three simultaneous unverified native changes: react-native-iap 14,
+   `react-native-nitro-modules`, and `newArchEnabled=true`. TypeScript
+   validates every JavaScript call against the library's real declarations
+   (confirmed non-vacuous by four deliberate errors), but says nothing about
+   whether Nitro codegen, the New Architecture and openiap-google compile
+   together. If the first build fails, those are the three suspects in order.
+
+### Accepted trade-offs worth re-examining
+
+3. **Billing 8.3.0 expires 31 August 2028.** Moving to Billing 9 means
+   react-native-iap 15+, a library upgrade rather than a version bump.
+   `pnpm --filter @slate/mobile billing:version --min 9` is the check.
+
+4. **The Billing version is no longer visible in this repository.** Since
+   react-native-iap 14 it arrives transitively from `openiap-google`. The
+   `billing:version` script exists precisely because nothing in the source
+   tree states it, but it depends on Maven Central being reachable — confirm
+   with `./gradlew :app:dependencies` on the first real build.
+
+5. **New Architecture is now on.** This is the supported Expo SDK 54 default
+   and required by Nitro, but it is a different runtime from everything Slate
+   was written against in Gates 1–3. Watch for render or navigation
+   regressions in device QA, not just billing ones.
+
+6. **`withPlayBilling` was removed.** Anyone looking for a pinned Billing
+   version in `app.json` will not find one. That is intentional and documented,
+   but it is a change in where the answer lives.
+
 ## Gate 3 risks (added Gate 3)
 
 ### Blocking

@@ -34,16 +34,38 @@ later.
 
 Without these, no usable Android artifact exists.
 
-- [ ] **Resolve the target-API toolchain** — *not a value, an environment*
-  - Needed: a machine with an Android SDK and unrestricted access to
-    `dl.google.com`, the Gradle Plugin Portal and `api.expo.dev`, plus JDK 17.
-  - Belongs: wherever builds run (a developer machine, CI, or EAS Build).
-  - Secret: no.
+- [ ] **A build environment** — *not a value, a machine*
+  - Needed, exactly:
+    - **JDK 17.** Expo SDK 54 / React Native 0.81's Gradle plugin declares a
+      toolchain of `languageVersion=17`. JDK 21 alone is **not** accepted —
+      the build fails with "Cannot find a Java installation matching
+      {languageVersion=17}".
+    - **Android SDK Platform 36** and **Build Tools 36.0.0**.
+    - **NDK 27.1.12297006** (the version React Native 0.81.5 pins).
+    - Gradle 8.14.3 — the wrapper downloads it; needs `services.gradle.org`.
+    - Network access to **`dl.google.com`** (AGP, androidx, and the Play
+      Billing artifacts, which are Google-Maven-only and not mirrored on
+      Maven Central), **`plugins.gradle.org`** and **`repo1.maven.org`**.
+    - Or, instead of all of the above: an **EAS** account with a linked
+      project and `EXPO_TOKEN`.
+  - Belongs: wherever builds run — a developer machine, CI, or EAS Build.
+  - Secret: `EXPO_TOKEN` yes; the rest no.
   - Verify: `cd apps/mobile && npx expo prebuild --platform android --clean &&
     cd android && ./gradlew :app:bundleRelease` produces an `.aab`.
   - Changeable later: n/a.
-  - Note: the repository is already configured for API 36 — see
-    `SLATE_GATE_3_REPORT.md`. What is missing is a machine that can compile it.
+  - Note: the repository is already configured for API 36 and prebuilds
+    cleanly — see `SLATE_GATE_3_5_REPORT.md`. What is missing is a machine
+    that can compile it.
+
+- [ ] **On the first build, confirm the Billing Library in the real dependency
+      tree**
+  - Run: `cd apps/mobile/android && ./gradlew :app:dependencies | grep billingclient`
+  - Expect: `com.android.billingclient:billing-ktx:8.3.0`, arriving via
+    `io.github.hyochan.openiap:openiap-google:1.3.28`.
+  - `pnpm --filter @slate/mobile billing:version` predicts this from the
+    published POMs without a toolchain, but Gradle is the authority — confirm
+    they agree.
+  - Secret: no. Changeable later: yes, by moving react-native-iap version.
 
 - [ ] **Expo account / EAS access** — `EXPO_TOKEN`
   - Obtain: expo.dev → account settings → Access tokens.
@@ -86,17 +108,18 @@ Without these, no usable Android artifact exists.
 - [ ] **Confirm Play's current minimum target API and Billing Library version**
   - Obtain: Play Console → the policy banners, and Google's Play Billing
     deprecation schedule.
-  - Belongs: `apps/mobile/app.json` — `targetSdkVersion` under
-    `expo-build-properties`, and `playBillingSdkVersion` under
-    `./plugins/withPlayBilling`.
+  - Belongs: `targetSdkVersion` in `apps/mobile/app.json` under
+    `expo-build-properties`. The Billing version is **not** set in this repo —
+    it arrives transitively from `openiap-google`, so changing it means moving
+    the `react-native-iap` version.
   - Secret: no.
-  - Verify: `npx expo prebuild` then read `android/gradle.properties`.
-  - Changeable later: yes, but **raising the Billing Library may require
-    changing library**: react-native-iap 12.x/13.x pin Billing Library 7.0.0,
-    and a major Billing release removes APIs the installed version was not
-    written against. If Play requires 8+, plan for react-native-iap 14+ (which
-    needs `react-native-nitro-modules` and a purchase-flow migration) and
-    budget a real device test.
+  - Verify: `npx expo prebuild` then read `android/gradle.properties` for the
+    SDK levels; `pnpm --filter @slate/mobile billing:version` for Billing.
+  - Current state: target API **36**, Billing **8.3.0**. Billing 8's deadline
+    is 31 August 2027 and Billing 9's is 31 August 2028.
+  - Changeable later: yes, but moving to Billing 9 means **react-native-iap
+    15+**, which is a library upgrade rather than a version bump. Budget a real
+    device test for it.
 
 ---
 

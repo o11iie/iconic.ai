@@ -2,6 +2,84 @@
 
 This tracks implementation decisions as Slate is built, in the order they were made. See `SLATE_RISKS.md` for open risks and missing credentials, and `SLATE_RELEASE_READINESS.md` (added before release) for ship/no-ship status.
 
+## Gate 3.5 — Billing 8 Migration & First Build Attempt
+
+**Billing 7 was already non-compliant.** Its new-app deadline was 31 August
+2026; this work happened on 16 September. The pinned 7.0.0 was not a future
+risk, it was a shipped-blocked state.
+
+**react-native-iap 12 could not be lifted to Billing 8**, established from its
+own source rather than release notes: `RNIapModule.kt` *imports*
+`PurchaseHistoryRecord` and `QueryPurchaseHistoryParams`, calls
+`queryPurchaseHistoryAsync`, and builds the client with the no-argument
+`enablePendingPurchases()` — all removed in Billing 8. Because two are
+imports, the Kotlin does not compile, which is exactly why Gate 3 declined to
+override the version blind. 13.x carries the same code and the same 7.0.0 pin.
+
+**Migrated to react-native-iap 14.7.20**, traced through real artifacts rather
+than assumed: `openiap-versions.json` → `openiap-google:1.3.28` → Maven
+Central POM → `com.android.billingclient:billing-ktx:8.3.0`. Not 15.x or 16.x,
+which resolve to Billing 9.1.0 — that deadline is 2028, and taking it now
+would be upgrading two years past the requirement.
+
+`pnpm --filter @slate/mobile billing:version` walks that chain and fails below
+major 8. Verified it reports 8.3.0 and verified it fails when asked for 9 — a
+guard that cannot fail is not a guard. It replaces the Gate 3 `withPlayBilling`
+plugin, which wrote a Gradle property react-native-iap 14 no longer reads;
+keeping it would have made the version look pinned here when it is not.
+
+**The purchase flow is rewritten.** react-native-iap 14's API is a redesign:
+`requestPurchase` is event-based, with results on
+`purchaseUpdatedListener`/`purchaseErrorListener`. Wrapped back into a promise
+with listener cleanup, a product-id guard (Play replays other SKUs on connect)
+and a timeout. Now also handles `isSuspendedAndroid` — Billing 8.1+ reports a
+subscription whose payment failed, and Play is explicit that entitlements must
+not be granted for it. Acknowledgement happens only *after* backend
+verification: telling Google the goods were delivered should follow
+establishing the purchase is genuine.
+
+**New Architecture re-enabled.** Nitro is JSI-based and its codegen only runs
+with `newArchEnabled=true`. Gate 3 disabled it precisely because
+react-native-iap 12 was a legacy bridge module; that reason is gone, and this
+returns to Expo SDK 54's default.
+
+**The worst bug in the project, found by this gate's own test.** Writing the
+required ACTIVE → IN_GRACE_PERIOD → ACTIVE case made it fail, and the cause
+was far wider than grace periods. The deduplication key was
+`(purchaseToken, rawStatus)`, which assumes a subscription never revisits a
+state. Subscriptions do nothing else — **every renewal reports ACTIVE again**
+— so the second month's notification looked like a duplicate and was
+discarded. `expiresAt` stayed pinned to the first period and one cycle later
+the user dropped to Free. **Every subscriber would have lost Pro after one
+billing period while Google kept charging them.** Confirmed directly: expiry
+2026-10-16 before the renewal, 2026-10-16 after.
+
+Fixed at the root. Writing Google's current answer is idempotent by nature, so
+the entitlement update is now unconditional and deduplication is left to the
+audit log, where it belongs. `PurchaseEvent` gains the reported expiry and
+keys on `(purchaseToken, rawStatus, expiresAt)` — a redelivered message
+carries the identical expiry, a renewal moves it. Non-nullable on purpose,
+since Postgres treats NULLs as distinct.
+
+**Security preserved and extended.** Token-to-account binding holds through
+every state Google can report — a stolen token replayed as IN_GRACE_PERIOD,
+ON_HOLD, CANCELED, EXPIRED, PENDING or UNSPECIFIED is rejected, the attacker
+gets no entitlement row at all, and exactly one entitlement ever holds a
+token. Ownership also survives the original owner's own expiry, the window
+where a stale token would otherwise look unclaimed. 20/20 billing scenarios,
+8/8 live RTDN scenarios.
+
+**Still no AAB.** Both paths attempted this gate, not carried over: `eas build`
+needs an account (`EXPO_TOKEN` unset, `api.expo.dev` 403); local Gradle now
+fails on the JDK toolchain — only JDK 21 is installed, RN 0.81 requires 17,
+and the foojay provisioner is 403-blocked — with no Android SDK and
+`dl.google.com` denied behind that. The Gradle Plugin Portal did open up since
+Gate 3, moving the failure one step later.
+
+68/68 tests, typecheck ×3, lint, prebuild, expo-doctor 16/18 (both failures
+network policy). Verdict: **RED** — the gate's scale reserves GREEN and YELLOW
+for a build that exists.
+
 ## Gate 3 — Production Infrastructure, Android Build & Billing
 
 **The target-API blocker is gone.** Gate 0 and Gate 2 both recorded the Expo
