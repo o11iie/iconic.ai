@@ -1,17 +1,22 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { AppShell } from '@/components/layout/AppShell';
-import { AnatomyExplorer } from '@/components/anatomy/AnatomyExplorer';
-import { Badge } from '@/components/ui/Badge';
+import { WorkspaceShell } from '@/components/layout/WorkspaceShell';
+import { LearningWorkspace } from '@/components/workspace/LearningWorkspace';
+import { LoadingState } from '@/components/ui/states';
 import { capabilities } from '@/config/env';
+import { serverCapabilities } from '@/config/env.server';
 
 export const metadata: Metadata = { title: 'Explore' };
 
 /**
- * EXPLORE — the spatial surface of the learning loop.
+ * EXPLORE — the learning workspace.
+ *
+ * This is VEO's primary screen. The spatial viewport is the hero: the shell
+ * does not scroll, does not pad, and gives every pixel it can to the model.
  *
  * `?diagnostic=1` mounts the render-pipeline diagnostic instead of a model.
  * That path is gated behind NEXT_PUBLIC_ENABLE_PIPELINE_DIAGNOSTIC and is
- * clearly labelled in the viewport as a non-anatomical calibration object.
+ * labelled in the viewport as a non-anatomical calibration object.
  */
 export default async function ExplorePage({
   searchParams,
@@ -20,20 +25,19 @@ export default async function ExplorePage({
 }) {
   const params = await searchParams;
   const diagnostic = capabilities.pipelineDiagnostic && params.diagnostic === '1';
+  const aiConfigured = serverCapabilities().openai;
 
   return (
-    <AppShell
-      title="Explore"
-      subtitle="See it, turn it, take it apart. Selection, isolation and camera framing all work against permanent VEO semantic identity, not vendor mesh names."
-      actions={
-        diagnostic ? (
-          <Badge tone="warning">Pipeline diagnostic</Badge>
-        ) : (
-          <Badge tone="cyan">Anatomy</Badge>
-        )
-      }
-    >
-      <AnatomyExplorer diagnostic={diagnostic} />
-    </AppShell>
+    <WorkspaceShell>
+      <Suspense
+        fallback={
+          <div className="grid flex-1 place-items-center">
+            <LoadingState label="Opening workspace" />
+          </div>
+        }
+      >
+        <LearningWorkspace diagnostic={diagnostic} aiConfigured={aiConfigured} />
+      </Suspense>
+    </WorkspaceShell>
   );
 }

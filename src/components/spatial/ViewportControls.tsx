@@ -100,8 +100,8 @@ export function ViewportControls({
             'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150',
             'disabled:cursor-not-allowed disabled:opacity-40',
             control.pressed
-              ? 'bg-[--color-accent]/18 text-[--color-accent]'
-              : 'text-[--color-ink-muted] hover:bg-[--color-surface-raised] hover:text-[--color-ink]',
+              ? 'bg-accent/18 text-accent'
+              : 'text-ink-muted hover:bg-surface-raised hover:text-ink',
           )}
         >
           {control.label}

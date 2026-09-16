@@ -13,6 +13,7 @@ export type VisualState = (typeof VISUAL_STATES)[number];
 /** What a pointer interaction means right now. */
 export const INTERACTION_MODES = [
   'inspect', // hover + select to learn
+  'orbit', // camera only; pointer never changes selection
   'isolate', // click removes everything else
   'annotate', // click drops a pin
   'measure', // future: distance between structures
