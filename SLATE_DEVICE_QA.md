@@ -67,7 +67,23 @@ been built, installed or exercised. This matrix is what closes that gap.
 | 34 | Background / foreground | State preserved; entitlement refreshed on resume | P1 |
 | 35 | Android back navigation | Back never strands the user; back from a root tab exits rather than looping | P1 |
 
-## Changed again in Gate 3.5 — read before running
+## Changed again in Gate 4 — read before running
+
+Gate 4 fixed a broken workflow and six misleading failure states. Verify these
+specifically, because they were wrong until this commit:
+
+| # | Test | Verify specifically |
+| --- | --- | --- |
+| — | **My Slate → title → "+ New post"** | Opens the composer. This did nothing at all before Gate 4 — the route was never registered. Same for tapping a community post from My Slate |
+| 12/13 | Watchlist | Shows skeletons on first open, **not** a flash of "Your watchlist is empty". Pull-to-refresh works. In airplane mode it says Slate couldn't load it, not that the list is empty |
+| 6 | Search | In airplane mode shows a retry error, **not** "No results for X" |
+| 25 | Notifications | In airplane mode shows an error, not "Nothing yet" |
+| 26 | Pro paywall | With the API unreachable, shows an error with Try again — **not** a spinner that never resolves |
+| 24 | Block | Open a blocked author's post by deep link: shows "This post isn't available", not a permanent spinner |
+| — | Settings | Shows TMDB and IGDB attribution under Data sources |
+| — | Accessibility | Turn on TalkBack: every button announces a role; a title card reads as one sentence |
+
+## Changed in Gate 3.5 — read before running
 
 The billing stack was replaced, not tweaked. Tests #27–#29 now exercise
 react-native-iap 14 on Play Billing 8.3.0, through a rewritten, event-based

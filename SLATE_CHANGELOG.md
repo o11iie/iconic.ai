@@ -2,6 +2,79 @@
 
 This tracks implementation decisions as Slate is built, in the order they were made. See `SLATE_RISKS.md` for open risks and missing credentials, and `SLATE_RELEASE_READINESS.md` (added before release) for ship/no-ship status.
 
+## Gate 4 — Final Product QA & Release Hardening
+
+A quality gate, not a feature gate. Everything below was found by auditing the
+product as a new user would meet it, then fixed.
+
+**A workflow that could not complete.** `MySlateStack` registered
+`TitleDetail` but not `NewPost` or `PostDetail`, so from the My Slate tab —
+open a title, tap "+ New post" or any community post — React Navigation had
+nowhere to go. Three taps from a main tab into a dead button. The identical
+bug was fixed for Search and Watchlist in Gate 1; My Slate arrived later and
+missed it. Since it has now been found by inspection twice,
+`scripts/check-navigation.mjs` cross-references every `navigate()` target
+against its stack's registered routes and fails when one is unreachable —
+React Navigation cannot catch this at compile time when a screen is reused
+across stacks.
+
+**Six screens told users their data was gone.** No screen distinguished
+"empty" from "failed". `ErrorState` already existed and Home and My Slate used
+it correctly; Watchlist, Search, Notifications, Post detail, Pro upgrade and
+the Title detail community section did not. Watchlist was worst: no loading
+state at all, so the empty state flashed on every open, and a failed request
+said "Your watchlist is empty" — telling people their saved titles had
+vanished.
+
+**Two screens could spin forever.** The Pro upgrade screen rendered an
+`ActivityIndicator` whenever the catalogue was null, with no timeout and no
+retry: one failed request left the only screen that takes money with no
+content and no way out. Post detail did the same, and it was reachable
+normally — Gate 2 makes a blocked author's post 404 so a deep link cannot
+confirm it exists, and that 404 produced a permanent spinner.
+
+**Attribution was missing where the data actually appears.** TMDB and IGDB
+require attribution wherever their data is shown. Slate carried it on the
+website and in the store listing but not in the app. Gate 2 recorded
+attribution as "preserved" on the strength of the web pages alone; that was
+incomplete, and it is now in Settings alongside the legal links.
+
+**The conversion event was the one most likely to be lost.** `flushAnalytics`
+was exported and never called. Events batch on a 10-second timer, so
+backgrounding or killing the app dropped up to ten seconds of them — and
+`purchase_completed` usually fires immediately before the user leaves. Now
+flushed on `AppState` background.
+
+**Accessibility.** 28 interactive elements had no `accessibilityRole`,
+including `TitleCard`, `CommunityPostCard` and `SpoilerGate` — the three
+most-tapped surfaces in the app. All 47 touchables now have roles; TitleCard
+announces one coherent sentence instead of three unrelated nodes; toggles
+expose `accessibilityState`. Touch targets below the 44dp the theme already
+declared now use `minHeight`, or `hitSlop` where a 44dp box would distort the
+layout.
+
+**404 responses** no longer echo Fastify's routing format, which told anyone
+probing the API what it is built with and reflected the path back.
+
+**Verified live, not assumed:** a 45-step user journey from signup to account
+deletion, 17 cross-user isolation checks, the full blocking scenario, 8 RTDN
+scenarios, CORS, rate limits, the 413 body cap, and `EXPLAIN` over every hot
+query. The Gate 3 RTDN index and Gate 3.5 dedupe key are both present, and the
+composite key was confirmed at 50k rows to serve the purchase-token ownership
+lookup on the money path (planner cost 1093 → 8.43).
+
+Two apparent test failures during this gate traced to my own harness — a wrong
+endpoint and a bodyless DELETE sent with a JSON content-type — and the harness
+was corrected rather than the assertion.
+
+68/68 tests, typecheck ×3, lint, prebuild, navigation guard, billing guard.
+Verdict **YELLOW**: no P0 or P1 outstanding, but nothing here has run on an
+Android device, and that is a different kind of unknown from a known defect.
+
+Documented but deliberately not built, per the freeze: a share-countdown
+action, per-title spoiler override UI, and a retry affordance on the Ask Slate
+error notice.
+
 ## Gate 3.5 — Billing 8 Migration & First Build Attempt
 
 **Billing 7 was already non-compliant.** Its new-app deadline was 31 August

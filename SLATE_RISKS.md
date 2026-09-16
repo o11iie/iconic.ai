@@ -19,6 +19,35 @@ These cannot be resolved by writing more code. Each blocks a specific, real part
 
 None of the above were skipped or stubbed out with fake data — every integration point (TMDB client, IGDB client, OpenAI provider, Play Billing verification) is written against each provider's real, documented API contract and fails loudly/gracefully (503 with a clear error code) rather than fabricating a response when the credential is missing.
 
+## Gate 4 risks (added Gate 4)
+
+### Blocking
+1. **Still no Android build, and therefore no device QA.** Unchanged from Gate
+   3.5 and now the only thing between Slate and a release decision. Every
+   Gate 4 finding came from live backend exercise or code audit; neither
+   observes rendering, gestures, memory or the native billing path.
+
+### Accepted trade-offs
+2. **Post comments render unbounded** — `.map()` inside a ScrollView. Fine for
+   typical threads; a post with hundreds of comments renders all of them.
+   Converting to a FlatList means restructuring the screen, which is more risk
+   than the problem during a freeze.
+3. **Analytics can double-count on a client timeout.** A request that succeeds
+   server-side but times out client-side is requeued. Affects analytics
+   accuracy only — never entitlement, which is server-authoritative.
+4. **Watch Journeys have no client entry point.** The backend gate and the
+   paywall headline both exist, so `ADVANCED_JOURNEY` is currently unreachable
+   from the app. Feature work, deliberately not done under the freeze.
+5. **Release signing is the Expo template default** (`signingConfigs.debug`
+   for the release build type). EAS replaces it at build time; a local
+   `./gradlew bundleRelease` without configured signing produces a
+   debug-signed AAB that Play rejects at upload. Documented as an operator
+   action rather than patched, since patching it would hardcode a keystore
+   path this repository cannot know.
+6. **`versionCode` is 1 in `app.json`** while `eas.json` uses remote
+   versioning. EAS is authoritative and the local value is inert, but it reads
+   as truth and is not.
+
 ## Gate 3.5 risks (added Gate 3.5)
 
 ### Blocking
