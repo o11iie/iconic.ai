@@ -131,11 +131,20 @@ export async function applyVerifiedPurchase(
 
   const entitlement = await ensureEntitlement(userId);
 
-  const alreadyProcessed = await prisma.purchaseEvent.findUnique({
-    where: { purchaseToken_rawStatus: { purchaseToken, rawStatus: purchase.subscriptionState } },
-  });
-  if (alreadyProcessed) return; // idempotent: this exact (token, status) pair was already applied
-
+  // The entitlement is always written to whatever Google currently reports.
+  //
+  // This used to be skipped whenever a (token, status) pair had been seen
+  // before, which looked like deduplication and was in fact data loss: a
+  // subscription reports ACTIVE again on every single renewal, so the second
+  // month's notification was discarded, expiresAt stayed pinned to the first
+  // period, and a paying subscriber silently lost Pro while still being
+  // charged. The same bug froze anyone whose payment failed and recovered
+  // (IN_GRACE_PERIOD -> ACTIVE) at GRACE_PERIOD forever.
+  //
+  // Writing Google's current answer is idempotent by nature — setting the
+  // same status and expiry twice is indistinguishable from doing it once — so
+  // no guard is needed here at all. Deduplication belongs only on the audit
+  // log, which is append-only and therefore genuinely needs it.
   try {
     await prisma.$transaction([
       prisma.entitlement.update({
@@ -155,16 +164,19 @@ export async function applyVerifiedPurchase(
           purchaseToken,
           productId: lineItem.productId as SlateProProduct,
           rawStatus: purchase.subscriptionState,
+          expiresAt,
         },
       }),
     ]);
   } catch (err) {
-    // The findUnique above is check-then-act, and Pub/Sub delivers
-    // at-least-once — two copies of one notification can arrive in
-    // parallel, both pass the check, and the loser trips the unique
-    // constraint. That is the idempotency guard working, not a failure:
-    // swallowing it keeps the webhook returning 200 instead of 500, which
-    // is what stops Google retrying the same notification forever.
+    // A duplicate audit row means this exact notification — same token, same
+    // status, same expiry — has already been applied. Pub/Sub delivers
+    // at-least-once, so that is expected traffic, not a fault. Swallowing it
+    // keeps the webhook returning 200 rather than 500, which is what stops
+    // Google redelivering the same message forever.
+    //
+    // The entitlement write is in the same transaction and rolls back with
+    // it, which is correct: it would have written the values already there.
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return;
     throw err;
   }

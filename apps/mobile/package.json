@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "ios": "expo run:ios",
     "eas-build-pre-install": "node scripts/check-release-env.mjs",
-    "check-release-env": "node scripts/check-release-env.mjs"
+    "check-release-env": "node scripts/check-release-env.mjs",
+    "billing:version": "node scripts/resolve-billing-version.mjs --min 8"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^6.6.1",
@@ -24,7 +25,8 @@
     "expo-system-ui": "~6.0.9",
     "react": "19.1.0",
     "react-native": "0.81.5",
-    "react-native-iap": "^12.15.6",
+    "react-native-iap": "14.7.20",
+    "react-native-nitro-modules": "^0.35.0",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0"
   },

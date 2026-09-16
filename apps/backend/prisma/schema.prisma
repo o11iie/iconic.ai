@@ -318,7 +318,20 @@ model Entitlement {
 }
 
 // Immutable audit log of every purchase/notification received from Google
-// Play, keyed by purchase token, so webhook/RTDN processing is idempotent.
+// Play, and the deduplication key for at-least-once RTDN delivery.
+//
+// The key includes the expiry, not just (token, status). A subscription
+// returns to the same state constantly — every renewal reports ACTIVE again,
+// and a recovered payment goes IN_GRACE_PERIOD -> ACTIVE — so keying on
+// (token, status) alone treats a renewal as a duplicate and drops it. That
+// left paying subscribers stuck at their first expiry date and silently
+// losing Pro one billing period after they paid.
+//
+// The expiry is what distinguishes a genuinely new notification from a
+// redelivery of one already seen: Pub/Sub redelivering the same message
+// carries the same expiry, while a renewal or a grace-period recovery moves
+// it. Non-nullable on purpose — in Postgres NULLs are distinct, so a nullable
+// column would silently disable deduplication.
 model PurchaseEvent {
   id              String   @id @default(cuid())
   entitlementId   String
@@ -326,9 +339,10 @@ model PurchaseEvent {
   purchaseToken   String
   productId       SlateProProduct
   rawStatus       String   // raw Play Developer API / RTDN status for audit
+  expiresAt       DateTime // the expiry Google reported with this notification
   processedAt     DateTime @default(now())
 
-  @@unique([purchaseToken, rawStatus])
+  @@unique([purchaseToken, rawStatus, expiresAt])
   @@index([entitlementId])
 }
 

@@ -67,17 +67,11 @@
             "usesCleartextTraffic": false
           }
         }
-      ],
-      [
-        "./plugins/withPlayBilling",
-        {
-          "playBillingSdkVersion": "7.0.0"
-        }
       ]
     ],
     "extra": {
       "apiBaseUrl": "http://10.0.2.2:4000/api"
     },
-    "newArchEnabled": false
+    "newArchEnabled": true
   }
 }

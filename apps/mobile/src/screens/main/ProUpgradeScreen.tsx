@@ -9,6 +9,7 @@ import {
   AlreadyOwnedError,
   PurchaseCancelledError,
   type SubscriptionOption,
+  completePurchase,
   endIap,
   fetchSubscriptionOptions,
   getExistingPurchases,
@@ -143,11 +144,27 @@ export function ProUpgradeScreen({ route }: Props) {
       // The account id is passed to Play so a purchase can be traced back to
       // the Slate account that made it. Entitlement still comes from the
       // server's own verification, never from this callback.
-      const { purchaseToken, isPending } = await purchaseSubscription(offer, user?.id);
-      await api.post("/billing/verify-purchase", { productId, purchaseToken });
+      const result = await purchaseSubscription(offer, user?.id);
+      await api.post("/billing/verify-purchase", {
+        productId,
+        purchaseToken: result.purchaseToken,
+      });
+
+      // Only now: acknowledging tells Google the goods were delivered, and
+      // that claim should follow verification, not precede it. Play
+      // auto-refunds anything unacknowledged after three days.
+      await completePurchase(result).catch(() => undefined);
       await refresh();
 
-      if (isPending) {
+      if (result.isSuspended) {
+        // Billing 8.1+: the subscription exists but payment failed. Play is
+        // explicit that entitlements must not be granted in this state.
+        track("purchase_failed", { productId, reason: "suspended" });
+        Alert.alert(
+          "Payment needs attention",
+          "Google Play couldn't take payment for this subscription. Fix your payment method in the Play Store and Slate Pro will unlock automatically.",
+        );
+      } else if (result.isPending) {
         // Google has the purchase but has not completed it. Saying "you're
         // Pro" here would be a lie the server correctly refuses to back.
         track("purchase_pending", { productId, trigger });
@@ -186,11 +203,15 @@ export function ProUpgradeScreen({ route }: Props) {
       let claimedByAnother = false;
 
       for (const p of purchases) {
+        // A suspended subscription is not an entitlement to restore; Play
+        // needs the payment method fixed first.
+        if (p.isSuspended) continue;
         try {
           await api.post("/billing/verify-purchase", {
             productId: p.productId,
             purchaseToken: p.purchaseToken,
           });
+          await completePurchase(p).catch(() => undefined);
           linked++;
         } catch (err) {
           // A purchase belonging to a different Slate account is a real
