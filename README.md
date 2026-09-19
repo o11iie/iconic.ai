@@ -72,21 +72,31 @@ npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
 npm run test        # vitest — unit and component tests
 npm run verify      # all of the above, then a production build
-npm run test:ui     # live browser checks of the product shell
-npm run test:engine # live browser checks of the spatial engine
-npm run verify:full # verify, then boot a production server and run test:ui
+npm run test:ui        # live browser checks of the product shell
+npm run test:engine    # live browser checks of the spatial engine
+npm run test:semantics # live browser checks of semantic object interaction
+npm run test:browser   # all three, in order
+npm run verify:full    # verify, then boot a production server and run test:ui
 ```
 
 `test:engine` drives the spatial engine in Chromium and reads its actual state
 — camera pose, GPU resource counts, registry contents, selection and material
 state — asserting that orbit moves the camera, that selection reaches the
-scene, and that replacing a model frees its GPU memory. It needs the diagnostic
-scene enabled:
+scene, and that replacing a model frees its GPU memory.
+
+`test:semantics` goes a layer up: that pointer, touch and keyboard input
+resolve to semantic objects, that the interface is driven by those objects
+rather than by meshes, that an id from a URL is validated against the loaded
+model, and that a render node held across a model replacement resolves to
+nothing. Screen positions are discovered by moving the pointer and asking the
+engine what is under it, so no assertion depends on hard-coded geometry.
+
+Both need the diagnostic scene enabled:
 
 ```bash
 echo 'NEXT_PUBLIC_ENABLE_PIPELINE_DIAGNOSTIC=true' >> .env.local
 npm run build && npm start &
-npm run test:engine
+npm run test:browser
 ```
 
 `test:ui` drives a real Chromium against a production build and asserts what
@@ -138,6 +148,8 @@ src/
       scene-controller.ts   single owner of selection, visibility, camera, lifecycle
       object-registry.ts    semantic id <-> scene node resolution
       model-lifecycle.ts    load/replace/dispose state machine
+      search.ts             weighted spatial search index
+      annotations.ts        labels and pins anchored to semantic objects
     3d/                 renderer, camera rig, materials, disposal
       renderer/         colour management, tone mapping, DPR policy
       scene/            scene root, GLTF loader
@@ -155,7 +167,7 @@ src/
   config/               env (client-safe + server-only), site config
   hooks/                React bindings to the provider layer
   tests/                test setup + design-token guards
-scripts/                verify-ui.mjs — live browser verification
+scripts/                verify-ui / verify-engine / verify-semantics — live browser verification
 supabase/migrations/    schema + Row Level Security
 ```
 
@@ -164,9 +176,15 @@ supabase/migrations/    schema + Row Level Security
 **Gate 1 — Application Foundation: complete and verified.**
 **Gate 2 — Premium Product Shell + Learning Workspace: complete and verified.**
 **Gate 5 — Core Spatial / 3D Engine: complete and verified.**
+**Gate 6 — Spatial Intelligence + Object Interaction: complete and verified.**
 
 Working today:
 
+- A semantic object layer: structures, not meshes, drive selection, the context
+  panel, hierarchy and breadcrumb, related structures, search, camera targeting
+  and labels. A structure the model declares but does not render is still
+  navigable, searchable and framable; a render node held across a model
+  replacement resolves to nothing.
 - A production spatial engine: registry-backed semantic selection, model
   lifecycle with generation guarding, leak-free disposal, model-derived zoom
   limits, fit-to-model and fit-to-selection from real scene bounds, and
@@ -176,8 +194,8 @@ Working today:
 - Full design system, application shell, landing, authentication, onboarding,
   Home, Learn, Recall, Library and Settings.
 - The learning workspace with model switcher, spatial toolbar, dominant
-  viewport, layers panel, context panel with relationship UI, and a one-row
-  AI study bar.
+  viewport, layers panel, spatial search, hierarchy breadcrumb, context panel
+  with relationship UI, keyboard shortcuts, and a one-row AI study bar.
 - Domain model for all 18 core entities, domain-agnostic throughout, with VEO
   semantic identity (`veo.anatomy.heart.left_ventricle`).
 - `SpatialProvider` / `AnatomyProvider` abstractions and a functional licensed
@@ -185,7 +203,7 @@ Working today:
   permanent VEO identity.
 - Supabase auth with session refresh and protected routes; Postgres schema and
   Row Level Security for all core tables.
-- 242 automated tests plus 170 live browser checks.
+- 297 automated tests plus 250 live browser checks.
 
 Deliberately **not** present:
 
@@ -199,7 +217,7 @@ Deliberately **not** present:
 - **No dissection or exploded view yet** — the visual-state model supports
   them; the interface does not drive them.
 
-Next: **Gate 6** — see [VEO_BUILD_STATUS.md](./VEO_BUILD_STATUS.md).
+Next: **Gate 7** — see [VEO_BUILD_STATUS.md](./VEO_BUILD_STATUS.md).
 
 ## Note on this repository
 

@@ -1,6 +1,6 @@
 # VEO — Build Status
 
-_Last updated: 2026-09-16_
+_Last updated: 2026-09-19_
 
 ---
 
@@ -10,53 +10,87 @@ _Last updated: 2026-09-16_
 
 ## Current gate
 
-**Gate 5 — Core Spatial / 3D Engine → GREEN (verified)**
-**Gate 1 — Application Foundation → GREEN (no regression)**
+**Gate 6 — Spatial Intelligence + Object Interaction → GREEN (verified)**
+**Gate 5 — Core Spatial / 3D Engine → GREEN (no regression)**
 **Gate 2 — Premium Product Shell → GREEN (no regression)**
+**Gate 1 — Application Foundation → GREEN (no regression)**
 
-Every criterion below was verified by driving the engine in a real browser and
-reading its actual state — camera pose, GPU resource counts, registry contents,
-selection and material state — not by inspecting source or the DOM.
+Gate 6 was verified the way it demanded: unit tests, a production build, and a
+real browser driving real pointer, touch and keyboard input against the running
+engine. Every claim below is backed by an assertion that reads engine or DOM
+state, not by source inspection.
 
-| # | Gate 5 criterion | Status | Evidence |
+| # | Gate 6 criterion | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | Production R3F scene operational | GREEN | canvas initialises, GPU geometry live |
-| 2 | Camera rig operational | GREEN | pose read from the running engine |
-| 3 | Orbit operational | GREEN | drag moves camera, distance preserved |
-| 4 | Pan operational | GREEN | right-drag moves the camera target |
-| 5 | Zoom operational | GREEN | wheel changes distance, stays in limits |
-| 6 | Reset operational | GREEN | target returns to model centre |
-| 7 | Fit-to-model operational | GREEN | frames selectable content |
-| 8 | Fit-to-selection operational | GREEN | reframes on the selected node |
-| 9 | Model lifecycle operational | GREEN | 14 unit tests incl. generation guarding |
-| 10 | Object registry operational | GREEN | 4 nodes registered from live scene |
-| 11 | Semantic resolution operational | GREEN | nearest-ancestor rule, 12 unit tests |
-| 12 | Pointer interaction operational | GREEN | click selects through real raycast |
-| 13 | Selection operational | GREEN | exactly one selection at a time |
-| 14 | Highlighting operational | GREEN | applies, clears, no residue |
-| 15 | Visibility foundation operational | GREEN | visible/hidden/ghosted resolved |
-| 16 | Scene disposal operational | GREEN | geometries, materials, textures freed |
-| 17 | No known memory leak | GREEN | GPU geometry flat across 4 replacements |
-| 18 | Mobile viewport verified | GREEN | 360/390/430/768, drag responds |
-| 19 | Desktop viewport verified | GREEN | 1440, no overflow, no page scroll |
-| 20 | WebGL/model error states verified | GREEN | unavailable + context-loss paths |
-| 21 | No fake anatomy used | GREEN | asserted in tests and at runtime |
-| 22 | Diagnostic scene clearly labelled | GREEN | on-screen label asserted in browser |
-| 23 | Existing /explore preserved | GREEN | Gate 2 suite 116/116 |
-| 24 | Gate 1 tests pass | GREEN | 92/92 |
-| 25 | Gate 2 tests pass | GREEN | 73/73 |
-| 26 | New Gate 5 tests pass | GREEN | 77 new unit tests |
-| 27 | TypeScript | PASS | 0 errors |
-| 28 | ESLint | PASS | 0 errors, 0 warnings |
-| 29 | Production build | PASS | 18 routes |
-| 30 | Live browser verification | PASS | 54 engine checks, 0 failures |
-| 31 | No critical console errors | PASS | 0 across desktop and 4 mobile sizes |
-| 32 | Documentation updated | PASS | ARCHITECTURE.md §15 |
-| 33 | Git commit created | PASS | see history |
+| 1 | Semantic object registry operational | GREEN | 4 render nodes bound to a 7-object model |
+| 2 | Raycast → semantic resolution operational | GREEN | pointer probing resolves 4 distinct objects |
+| 3 | Selection states correct | GREEN | one selection, one hover, at all times |
+| 4 | Hover restrained | GREEN | 8 moves inside one object publish no new state |
+| 5 | Selection visualisation preserves materials | GREEN | ≤1 override per mesh, never cumulative |
+| 6 | Context panel driven by real object state | GREEN | renders descriptor-only facts (`region`, `kind`) |
+| 7 | Object hierarchy operational | GREEN | ancestors nearest-first to the model root |
+| 8 | Generic breadcrumb renderer | GREEN | navigates to a grouping structure in-browser |
+| 9 | Related structures via Relationship model | GREEN | resolvable targets only, 6 unit tests |
+| 10 | Camera targeting operational | GREEN | focus/fit/reset move the camera, verified by pose |
+| 11 | Object bounds API operational | GREEN | camera targets the centre the API reports |
+| 12 | Label foundation operational | GREEN | priority + budget, anchored to objects |
+| 13 | Pin foundation operational | GREEN | id/semanticId/position/title/type, pruned per model |
+| 14 | Spatial search foundation operational | GREEN | name, id, synonym, system, region |
+| 15 | Keyboard interaction operational | GREEN | Escape / R / F, never over a text field |
+| 16 | Mobile uses the same pipeline | GREEN | tap selects the same object at 360/390/430 |
+| 17 | Stale object references cannot resolve | GREEN | node held across replacement resolves to null |
+| 18 | Selection integrity under mutation | GREEN | hiding the selection invalidates it |
+| 19 | URL identifiers are not trusted | GREEN | foreign and malformed ids both refused |
+| 20 | No second registry or selection system | GREEN | one controller, one registry, one graph entry point |
+| 21 | No fake anatomy | GREEN | asserted over the whole diagnostic graph |
+| 22 | Diagnostic objects are not called anatomy | GREEN | `veo.diagnostic.*`, labelled in-viewport |
+| 23 | TypeScript | PASS | 0 errors |
+| 24 | ESLint | PASS | 0 errors, 0 warnings |
+| 25 | Unit tests | PASS | 297 passed / 297, 19 files |
+| 26 | Production build | PASS | 18 routes |
+| 27 | Gate 6 browser verification | PASS | 80 checks, 0 failures |
+| 28 | Gate 5 regression | PASS | 54 checks, 0 failures |
+| 29 | Gate 2 regression | PASS | 116 checks, 0 failures |
+| 30 | No console errors | PASS | 0 across desktop and 3 mobile widths |
+| 31 | Documentation updated | PASS | ARCHITECTURE.md §16 |
+| 32 | Git commit created | PASS | see history |
 
 ---
 
 ## Completed
+
+### Gate 6 — spatial intelligence and object interaction
+
+**The semantic object is the source of truth.** A rendered mesh is an
+implementation detail of one model; the `SpatialObject` is what the learner
+selects, what the panel describes, what search finds and what the camera
+frames.
+
+- **Semantic object registry** (`engine/spatial/object-registry.ts`) — the one
+  place mapping render nodes to identity. `register` / `unregister` /
+  `resolveFromObject` / `resolveFromSemanticId` / `getParent` / `getChildren` /
+  `getAncestors` / `getDescendants` / `has` / `hasGeometry` / `isValid` /
+  `clear`. Generation-stamped: a node from a previous model can never resolve.
+- **`SceneController.beginRegistration`** — the seam between geometry and
+  meaning. Clearing render nodes no longer discards the model.
+- **Bounds API** — `getObjectBounds` / `getObjectCenter` /
+  `getObjectWorldPosition` / `getObjectRadius`, in world units. No three.js type
+  crosses into the semantic layer; the 3D layer injects a `BoundsResolver`.
+  A grouping structure is framed by the extent of what it contains.
+- **Camera targeting** — `focusObject` selects and frames in one step and
+  refuses an id the model does not contain.
+- **Annotations** (`engine/spatial/annotations.ts`) — labels and pins anchored
+  to semantic objects, never to world coordinates, with priority and a
+  visibility budget.
+- **Spatial search** (`engine/spatial/search.ts`) — weighted over name, id,
+  synonym, system, region and metadata; results filtered to the current model.
+- **Workspace** — context panel, breadcrumb, children, relationships, search
+  and keyboard shortcuts, all reading the same controller state.
+- **Diagnostic model** — a real `SpatialModelGraph` of 7 objects across two
+  systems, published through the same `setGraph` used by a manifest-loaded
+  asset. Named `System A` / `Object 1`, under `veo.diagnostic.*`, labelled
+  **VEO SPATIAL ENGINE TEST** in the viewport. Not anatomy, and never described
+  as anatomy.
 
 ### Gate 5 — core spatial engine
 
@@ -154,7 +188,7 @@ Gate 1 section of the git history for detail.
 
 ## In progress
 
-Nothing. Gate 2 is closed.
+Nothing. Gate 6 is closed.
 
 ---
 
@@ -186,27 +220,63 @@ OpenAI, Stripe, OAuth providers.
 | --- | --- |
 | `npm run typecheck` | **PASS** — 0 errors |
 | `npm run lint` | **PASS** — 0 errors, 0 warnings |
-| `npm run test` | **PASS** — 242 passed / 242 total, 18 files |
+| `npm run test` | **PASS** — 297 passed / 297 total, 19 files |
 | `npm run build` | **PASS** — 18 routes |
+| `npm run test:semantics` | **PASS** — 80 live semantic checks, 0 failures |
 | `npm run test:engine` | **PASS** — 54 live engine checks, 0 failures |
 | `npm run test:ui` | **PASS** — 116 live UI checks, 0 failures |
 
-### Gate 5 unit coverage
+### Unit coverage
 
 | File | Tests | Covers |
 | --- | ---: | --- |
-| `engine/spatial/object-registry.test.ts` | 12 | semantic resolution, nearest-ancestor rule, stale tags |
-| `engine/spatial/model-lifecycle.test.ts` | 14 | every transition, generation guarding, terminal disposal |
+| `engine/spatial/semantic.test.ts` | 52 | descriptors, generation safety, hierarchy, selection integrity, bounds, search, annotations, registration order |
+| `engine/3d/engine.test.ts` | 33 | materials, disposal, renderer policy, pointer rules, bounds, diagnostic graph |
+| `components/workspace/workspace.test.tsx` | 22 | context panel, breadcrumb, relationships, search, empty states |
 | `engine/spatial/scene-controller.test.ts` | 20 | selection, visibility, isolation, replacement, camera intents |
-| `engine/3d/engine.test.ts` | 31 | materials, disposal, renderer policy, pointer rules, bounds, diagnostic scene |
-| `engine/3d/camera/camera-math.test.ts` | +8 | zoom limits, initial framing, box guards |
+| `engine/3d/camera/camera-math.test.ts` | 20 | zoom limits, initial framing, box guards |
+| `components/ui/primitives.test.tsx` | 18 | design-system primitives |
+| `lib/semantic-id.test.ts` | 17 | parsing, building, hierarchy operations |
+| `engine/spatial/model-lifecycle.test.ts` | 14 | every transition, generation guarding, terminal disposal |
+| `engine/spatial/visual-state.test.ts` | 14 | visual state resolution |
+| `anatomy/providers/gltf-anatomy-provider.test.ts` | 14 | provider contract |
+| 9 further files | 73 | stores, navigation, content, manifest, entitlements, tokens, database types |
 
-Totals: **242 unit tests across 18 files** (Gate 1: 92, Gate 2: 73, Gate 5: 77).
+Totals: **297 unit tests across 19 files** (Gate 6 added 55).
+
+### Live semantic verification (`npm run test:semantics`)
+
+Drives a production build in Chromium. Screen positions are discovered by
+moving the pointer and asking the engine what is under it, so nothing depends
+on hard-coded geometry:
+
+| Group | Checks |
+| --- | ---: |
+| Workspace opens with the diagnostic model | 3 |
+| Semantic model and hierarchy | 4 |
+| Hover resolves and clears | 7 |
+| Hover does not churn state | 1 |
+| Selection drives the interface | 10 |
+| Navigating the hierarchy | 3 |
+| The child wins over its parent group | 4 |
+| Camera targeting and bounds | 5 |
+| Spatial search | 4 |
+| Keyboard | 4 |
+| Material integrity | 5 |
+| Selection integrity | 3 |
+| Untrusted identifiers | 5 |
+| Stale references | 6 |
+| Console | 1 |
+| Mobile 360 / 390 / 430 | 15 |
+| **Total** | **80 passed, 0 failed** |
+
+The stale-reference claim is measured, not asserted: a real render node is
+captured from the live model, the model is replaced, and resolving that same
+node is required to return `null`.
 
 ### Live engine verification (`npm run test:engine`)
 
-Drives a production build in Chromium and reads engine state through a
-diagnostic debug bridge, so each claim is about what the engine actually did:
+Gate 5's suite, re-run unchanged against the Gate 6 build:
 
 | Group | Checks |
 | --- | ---: |
@@ -249,6 +319,73 @@ and the renderer's own `gl.info.memory.geometries` is required not to grow.
 
 ---
 
+## Issues found and fixed during Gate 6
+
+Two were real defects in the engine, both invisible to unit tests and to source
+inspection, and both found only by driving the running application.
+
+1. **Clearing render nodes silently deleted the model.** `SpatialSceneRoot`
+   called `registry.clear()` directly when binding a newly rendered scene, and
+   `clear()` dropped the model's descriptors along with its render nodes.
+   Registration happens inside the canvas — a separate React tree that commits
+   on its own schedule — while the model is published from the page tree, so
+   whichever committed last won. In the production build registration committed
+   last, and the loaded model lost its hierarchy, its grouping structures and
+   its search entries while still rendering and selecting perfectly.
+
+   *Fixed* by adding `SceneController.beginRegistration()`, which clears the
+   previous generation's nodes and re-attaches the current model's descriptors.
+   Geometry and meaning have different lifetimes; this is the seam that keeps
+   them from being confused. The result is now identical in either commit
+   order, which four regression tests pin down.
+
+2. **The registry treated "has geometry" as "exists".** `has`, `isValid` and
+   hierarchy lookups consulted only registered render nodes, so a structure the
+   model declares but draws as a bare group — a system, a region, an assembly,
+   which is how essentially every real asset is authored — vanished from the
+   hierarchy, from search and from selection. That is precisely the mistake of
+   letting the rendered mesh be the source of truth.
+
+   *Fixed* by making the registry's notion of the current model the union of
+   declared descriptors and registered nodes, with `hasGeometry()` kept as the
+   separate question it actually is. `getObjectBounds` now frames a grouping
+   structure by the extent of what it contains, so the camera can target one.
+   Seven regression tests cover it, and the browser suite navigates to a group
+   through the breadcrumb and finds one by name.
+
+3. **A debug field reported a constant.** The diagnostic bridge published
+   `materialOverrides: 0` unconditionally. Nothing asserted on it, so nothing
+   failed — which is the problem: a verification surface that reports a fixed
+   number can only ever mislead. It is now wired to the material manager's real
+   count, and the browser suite asserts the actual invariant.
+
+4. **Two browser assertions checked the wrong thing.** One matched the selected
+   object's name against the whole context panel, which also prints the
+   semantic id — so it would have passed without the name ever being rendered.
+   It now reads the heading, and a second assertion checks a fact that exists
+   only in the descriptor (`region`), which appears nowhere in the id.
+
+### Verified, not changed
+
+Three browser assertions failed on first run and were wrong about the engine
+rather than finding a defect:
+
+- **Selecting a breadcrumb ancestor also moves the camera**, because
+  `onSelectObject` is `focusObject` — selecting and framing in one gesture.
+  The test had reused pixel coordinates probed before the camera moved. It now
+  re-probes against the current view.
+- **Override materials are deliberately reused, not freed.** The engine
+  allocates at most one override per mesh and swaps the authored material back
+  by reference. Asserting zero overrides after deselection would have forced a
+  worse design that churns GPU resources on every hover. The assertion now
+  states the real invariant: never more than one override per tracked mesh, and
+  never a count that climbs with interaction.
+- **Search returns nothing for a query with no match**, which is correct; the
+  first draft of the test read that as a defect before the grouping-structure
+  fix above landed.
+
+---
+
 ## Issues found and fixed during Gate 5
 
 1. **Grid and axes helpers inflated the model bounds**, so fit-to-model framed
@@ -284,46 +421,45 @@ engine rather than finding a defect:
 
 ---
 
-## Blocked
-
-**One external dependency, unchanged since Gate 1:**
-
-- **Licensed anatomy assets are not available in this environment.** The
-  engine, provider, manifest contract, registry, renderer, camera and disposal
-  are complete and verified, but no licensed GLB/GLTF asset set is configured,
-  so no subject geometry can be displayed.
-
-  This is a **content/licensing blocker, not an engineering one**. VEO does not
-  substitute procedurally generated geometry for licensed subject models. The
-  GLTF loading path is implemented and unit-tested against a stubbed manifest;
-  it has not been exercised against a real licensed asset because none exists.
-
-  *To unblock:* publish a licensed asset set plus its `manifest.json` and set
-  `NEXT_PUBLIC_SPATIAL_ASSET_BASE_URL`. No code change is required.
-
-**Not blockers, simply unconfigured** (each reports itself in the UI): Supabase,
-OpenAI, Stripe, OAuth providers.
-
----
-
 ## Next action
 
-**Gate 6.** Gate 5 is GREEN, so this gate is now open. Gate 5 deliberately
-stopped short of: AI tutoring, active recall, spaced repetition, dissection and
-exploded view, and licensed anatomy asset integration.
+**Gate 7.** Gate 6 is GREEN, so the next gate is open. Gate 6 deliberately
+stopped short of: dissection, full peel mechanics, spaced repetition, AI tutor
+responses, and licensed anatomy asset integration. The semantic layer those
+features need is now in place — every one of them addresses structures by
+semantic id, not by mesh.
 
-To run the engine verification locally:
+To reproduce the verification locally:
 
 ```bash
 # The diagnostic scene is gated; enable it for engineering verification only.
 echo 'NEXT_PUBLIC_ENABLE_PIPELINE_DIAGNOSTIC=true' >> .env.local
-npm run build && npm start &
-npm run test:engine
+npm run verify
+npm start &
+npm run test:browser      # UI + engine + semantics, 250 checks
 ```
 
 **Decision still required from you:** the licensing route for subject content —
 license an SDK, license a GLB/GLTF asset set, or commission VEO-owned models.
 The provider layer supports all three; only the SDK path carries a code cost,
-and the abstraction for it already exists. This is now the critical path: the
-engine is complete and every remaining gate builds on content it cannot yet
-display.
+and the abstraction for it already exists. This remains the critical path: the
+engine and its semantic layer are complete and every remaining gate builds on
+content this environment cannot yet display.
+
+### What a licensed asset needs to supply
+
+Gate 6 makes the integration contract concrete. An asset set is ready for VEO
+when its `manifest.json` provides, for every structure:
+
+| Field | Why it matters now |
+| --- | --- |
+| `semanticId` | VEO's permanent identity; never the vendor's mesh name |
+| `parentId` / `childIds` | drives hierarchy, breadcrumb and fit-to-group |
+| `name` | what the panel, search and labels display |
+| `synonyms` | search recall for the terms a learner actually types |
+| `system` / `region` | grouping, filtering and layer membership |
+| `providerMeshNames` | the vendor-side mapping, kept at the edge |
+| `relationships` | related-structure navigation |
+
+Structures that render as bare grouping nodes are first-class: they need no
+geometry to be navigable, searchable, selectable or framable.

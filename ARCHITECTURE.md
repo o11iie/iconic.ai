@@ -393,7 +393,8 @@ naive scene picking.
 
 The registry also refuses to resolve identities it does not hold, so a stale
 tag left on a node from a previous model cannot resolve to something that no
-longer exists.
+longer exists. §16 covers how that guarantee is enforced, and the distinction
+between a structure existing and a structure being rendered.
 
 It is written against a minimal structural `SceneNode` rather than
 `THREE.Object3D`, so every resolution rule is unit-tested without a WebGL
@@ -518,9 +519,170 @@ exists so engineers can verify the engine, and it says so.
   a screen reader, and claiming otherwise would be a false promise. The
   surrounding interface carries the information: camera controls are real
   focusable buttons, and selection is announced through a live region.
+- **Labels and pins are a foundation, not a feature.** The data model,
+  anchoring, priority and visibility budget exist and are tested, but nothing
+  is drawn in the viewport yet.
 - **Instancing and LOD are not implemented.** Neither is needed at current
   scene complexity, and both would be premature before a real asset sets the
   performance budget.
+
+---
+
+## 16. The semantic layer
+
+Gate 5 made the engine draw and frame. This layer makes it *mean* something.
+
+### The one rule
+
+**A rendered mesh is not the source of truth. The `SpatialObject` is.**
+
+A mesh belongs to one model from one vendor. Replace the asset and every mesh
+is different. What must survive is the structure: what it is called, what
+contains it, what it connects to, what a learner wrote about it last month.
+That lives in the semantic object, addressed by a `SemanticId`, and every layer
+above the renderer speaks only that language.
+
+Concretely, nothing outside `engine/3d` ever sees a `THREE.Object3D`. The
+context panel, the breadcrumb, search, labels, pins, the camera API and the URL
+all deal in semantic ids.
+
+### Geometry and meaning have different lifetimes
+
+This is the distinction the layer is built around, and getting it wrong caused
+both real defects found during Gate 6.
+
+| Question | Answered by |
+| --- | --- |
+| Does the current model contain this structure? | `registry.has(id)` / `isValid(id)` |
+| Is it currently backed by a render node? | `registry.hasGeometry(id)` |
+| What is it? | `registry.resolveFromSemanticId(id)` |
+| What render node did this raycast hit? | `registry.resolve(node)` |
+
+A model routinely declares structures that draw as bare grouping nodes with no
+mesh of their own — a system, a region, an assembly. They are first-class: they
+appear in the hierarchy, they are searchable, selectable and framable. Treating
+geometry as the test for existence silently deletes them from the model, which
+is the same mistake as letting the mesh be the source of truth.
+
+Symmetrically, geometry can be unloaded without the structure ceasing to exist.
+`unregister` drops the binding; the descriptor stays.
+
+### One entry point for a model
+
+`SceneController.setGraph(graph)` is the only way a model enters the system.
+It publishes descriptors to the registry, builds the search index, seeds labels
+and declares the object universe — once, in one place, from one shape. Both
+content paths go through it: a manifest-loaded GLTF asset and the diagnostic
+scene. Verifying the engine against a scene that bypassed the production path
+would prove nothing.
+
+`SceneController.beginRegistration()` is the matching seam on the geometry
+side. It drops the previous generation's render nodes and re-attaches the
+current model's descriptors.
+
+That second step is not incidental. Registration happens inside the canvas,
+which React reconciles as a **separate tree that commits on its own schedule**,
+while the model is published from the page tree. Neither can assume it runs
+first. Clearing render nodes used to discard the model's descriptors as a side
+effect, so whenever registration committed last, the model lost its hierarchy,
+its groups and its search entries — while still rendering and selecting
+perfectly. Routing both through the controller makes the result identical in
+either order, which is the property the regression tests pin.
+
+### Generation safety
+
+Every registration is stamped with the registry's generation, which increments
+on `clear()`. A node held from a previous model still carries its tag, but
+resolving it returns `null` because the stamp no longer matches.
+
+This makes *"a stale object reference can never resolve as a valid current
+object"* a property of the design rather than a hope. The browser suite proves
+it the only way that counts: it captures a real render node from the live
+model, replaces the model, and requires that same node to resolve to nothing.
+
+### Resolution pipeline
+
+```
+pointer event
+  → R3F raycast              (nearest hit mesh)
+  → resolveSelectable(node)  (first tagged ancestor, walking UP)
+  → registry.resolve(id)     (generation check)
+  → controller.setHovered / select
+  → subscribers re-render
+```
+
+`resolveSelectable` walking upward and stopping at the **first** tag is the
+whole selection rule: when a selectable child sits inside a tagged group, the
+child wins. Returning the outermost match would mean every click selected the
+entire model.
+
+### Restrained hover
+
+Hover runs on every pointer move, so it must cost almost nothing. `setHovered`
+returns early when the id is unchanged: no state published, no subscriber
+notified, no frame requested. Moving the pointer across one structure produces
+exactly one state change, on entry. The browser suite asserts this directly by
+reading the controller's revision counter across eight moves.
+
+### Selection integrity
+
+- At most one selection and one hover at any moment.
+- Selecting an id the current model does not contain **fails** and changes
+  nothing — the guard every externally supplied id passes through.
+- Hiding the selected structure invalidates the selection rather than leaving
+  the interface describing something invisible.
+- A model reload keeps the selection when the identity still exists, and drops
+  it when it does not. Losing a learner's place on every reload would be
+  hostile; keeping a dangling reference would be a bug.
+
+### Untrusted identifiers
+
+A semantic id arriving from outside the application — a URL parameter, a saved
+note, a shared link — is **data, not authority**. `?select=` is parsed for
+shape, then validated against the loaded model. A well-formed id from a
+different model is refused; a malformed one is ignored without error. Nothing
+about an object reference can mutate unrelated model state: the only mutations
+it can reach are this controller's own selection and camera intents.
+
+### Bounds without three.js
+
+`engine/spatial` must not import three.js, or the semantic layer becomes
+untestable without a WebGL context. So the 3D layer **injects** a
+`BoundsResolver`, registered per rendered root, and the controller exposes
+`getObjectBounds` / `getObjectCenter` / `getObjectWorldPosition` /
+`getObjectRadius` in plain world units.
+
+Resolution order: live geometry, then bounds declared by the model, then the
+union of the structure's descendants. That last step is what lets the camera
+frame a grouping structure that owns no geometry itself.
+
+Camera framing reads bounds through this API rather than the registry, so there
+is one answer to "what is this object's extent" rather than two that drift.
+
+### Search
+
+`SpatialSearchIndex` scores name, semantic id, synonyms, system, region and
+metadata, weighted in that order, with exact > prefix > word-boundary >
+substring. Results are filtered to the current model before they are returned,
+so a search result is always something the learner can actually select.
+
+### Labels and pins
+
+Both anchor to a **semantic object**, never to world coordinates: a label that
+remembers a position is wrong the moment the model changes. Labels carry a
+priority (derived from hierarchy depth) and are drawn against a budget, so a
+dense model degrades by dropping the least important rather than by
+overlapping. Pins carry an id, a semantic id, an anchor, a title, a description
+and a type. Both are pruned to the current model on every `setGraph`.
+
+Gate 6 builds the foundation; neither is rendered in the viewport yet.
+
+### What this layer is not
+
+It does not know what a heart is. `veo.anatomy.heart.left_ventricle` and
+`veo.engineering.turbine.stage_two_rotor` are the same kind of thing to it. The
+diagnostic model — `veo.diagnostic.test_scene.system_a.object_1` — exercises
+every path in it, which is only possible because none of it is domain-specific.
 
 ---
 
