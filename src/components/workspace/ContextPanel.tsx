@@ -1,26 +1,39 @@
 'use client';
 
-import type { AnatomyStructureMetadata } from '@/anatomy/providers/anatomy-provider';
 import { Badge } from '@/components/ui/Badge';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { PanelSection } from '@/components/ui/Panel';
 import { EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/cn';
-import { semanticIdAncestors, semanticIdToLabel, type SemanticId } from '@/lib/semantic-id';
+import { semanticIdToLabel, type SemanticId } from '@/lib/semantic-id';
 import type { Relationship, SpatialObject } from '@/types/domain/spatial';
-import { RelationshipList, RelationshipTrail } from './RelationshipTrail';
+import { ObjectBreadcrumb, ObjectChildren, type BreadcrumbNode } from './ObjectBreadcrumb';
+import { RelationshipList } from './RelationshipTrail';
 
 /**
  * Context panel.
  *
- * Renders the selected object and the actions available on it. Deliberately
- * driven entirely by a real `SpatialObject` plus optional provider metadata:
- * every field is rendered only when the provider actually supplies it, and
- * nothing is generated to fill a gap. A model that ships geometry without
- * clinical description shows the geometry facts and says nothing more.
+ * Driven entirely by a real `SpatialObject` resolved through the registry —
+ * never by a mesh name, and never by reading three.js userData. Every field is
+ * rendered only when the model actually supplies it, so a model that ships
+ * geometry without descriptive content shows the structural facts and says
+ * nothing more.
+ *
+ * The study actions are not yet implemented, but they already receive the full
+ * semantic context, so wiring them later is a change of handler rather than a
+ * change of architecture.
  */
 
 export type ContextAction = 'explain' | 'quiz' | 'flashcard' | 'note' | 'review';
+
+/** What an action handler receives. Complete semantic context, no mesh data. */
+export interface ContextActionPayload {
+  readonly action: ContextAction;
+  readonly semanticId: SemanticId;
+  readonly object: SpatialObject | null;
+  readonly ancestors: readonly SemanticId[];
+  readonly relationships: readonly Relationship[];
+}
 
 const ACTIONS: readonly { id: ContextAction; icon: IconName; label: string }[] = [
   { id: 'explain', icon: 'sparkles', label: 'AI Explain' },
@@ -33,20 +46,23 @@ const ACTIONS: readonly { id: ContextAction; icon: IconName; label: string }[] =
 export function ContextPanel({
   selectedId,
   object,
-  metadata,
+  trail,
+  childObjects,
   relationships,
-  onSelectRelated,
+  onSelectObject,
   onAction,
   actionsEnabled,
   className,
 }: {
   readonly selectedId: SemanticId | null;
   readonly object: SpatialObject | null;
-  readonly metadata: AnatomyStructureMetadata | null;
+  /** Ancestry, root first, current structure last. */
+  readonly trail: readonly BreadcrumbNode[];
+  /** Named `childObjects`: this is data, not nested JSX. */
+  readonly childObjects: readonly BreadcrumbNode[];
   readonly relationships: readonly Relationship[];
-  readonly onSelectRelated: (id: SemanticId) => void;
-  readonly onAction: (action: ContextAction) => void;
-  /** False when no model is loaded, so actions have nothing to act on. */
+  readonly onSelectObject: (semanticId: SemanticId) => void;
+  readonly onAction: (payload: ContextActionPayload) => void;
   readonly actionsEnabled: boolean;
   readonly className?: string;
 }) {
@@ -54,7 +70,7 @@ export function ContextPanel({
     return (
       <div className={cn('flex h-full flex-col justify-center', className)}>
         <EmptyState
-          title="Nothing selected"
+          title="Select a structure to explore"
           description="Choose a structure in the viewport to see what it is, how it connects, and to turn it into recall material."
           className="border-0 bg-transparent"
           icon={<Icon name="select" size={22} />}
@@ -63,34 +79,45 @@ export function ContextPanel({
     );
   }
 
-  const label = metadata?.name ?? object?.name ?? semanticIdToLabel(selectedId);
-  const ancestors = [...semanticIdAncestors(selectedId)].reverse();
+  const label = object?.name ?? semanticIdToLabel(selectedId);
+  const latinName = typeof object?.metadata.latinName === 'string' ? object.metadata.latinName : null;
+  const clinicalNotes = Array.isArray(object?.metadata.clinicalNotes)
+    ? (object.metadata.clinicalNotes as unknown[]).filter(
+        (note): note is string => typeof note === 'string',
+      )
+    : [];
+  const externalIds =
+    object?.metadata.externalIds && typeof object.metadata.externalIds === 'object'
+      ? (object.metadata.externalIds as Record<string, string>)
+      : {};
+
+  function emit(action: ContextAction) {
+    if (!selectedId) return;
+    onAction({
+      action,
+      semanticId: selectedId,
+      object,
+      ancestors: trail.slice(0, -1).map((node) => node.semanticId),
+      relationships,
+    });
+  }
 
   return (
     <div className={cn('flex h-full flex-col gap-5 overflow-y-auto', className)}>
       <header className="flex flex-col gap-2">
-        {ancestors.length > 0 ? (
-          <RelationshipTrail nodes={[...ancestors, selectedId]} onSelect={onSelectRelated} />
-        ) : null}
+        {trail.length > 1 ? <ObjectBreadcrumb trail={trail} onSelect={onSelectObject} /> : null}
 
-        <h2 className="text-lg font-semibold leading-tight tracking-tight text-ink">
-          {label}
-        </h2>
+        <h2 className="text-lg font-semibold leading-tight tracking-tight text-ink">{label}</h2>
 
-        {metadata?.latinName ? (
-          <p className="text-xs italic text-ink-subtle">{metadata.latinName}</p>
-        ) : null}
+        {latinName ? <p className="text-xs italic text-ink-subtle">{latinName}</p> : null}
 
         <div className="flex flex-wrap gap-1.5">
           {object?.kind ? <Badge>{object.kind}</Badge> : null}
-          {metadata?.system ? <Badge tone="accent">{metadata.system}</Badge> : null}
-          {metadata?.region ? <Badge>{metadata.region}</Badge> : null}
-          {metadata?.laterality ? <Badge>{metadata.laterality}</Badge> : null}
+          {object?.system ? <Badge tone="accent">{object.system}</Badge> : null}
+          {object?.region ? <Badge>{object.region}</Badge> : null}
         </div>
 
-        <code className="mt-1 block break-all font-mono text-[10px] text-cyan">
-          {selectedId}
-        </code>
+        <code className="mt-1 block break-all font-mono text-[10px] text-cyan">{selectedId}</code>
       </header>
 
       {/* Actions sit high: they are why a learner selected something. */}
@@ -101,7 +128,7 @@ export function ContextPanel({
               key={action.id}
               type="button"
               disabled={!actionsEnabled}
-              onClick={() => onAction(action.id)}
+              onClick={() => emit(action.id)}
               className={cn(
                 'flex items-center gap-2 rounded-lg border border-hairline px-2.5 py-2',
                 'text-left text-xs font-medium text-ink-muted transition-colors duration-150',
@@ -117,22 +144,16 @@ export function ContextPanel({
         </div>
       </PanelSection>
 
-      {metadata?.description ? (
-        <PanelSection label="Description">
-          <p className="text-sm leading-relaxed text-ink-muted">{metadata.description}</p>
-        </PanelSection>
-      ) : null}
-
-      {object?.description && !metadata?.description ? (
+      {object?.description ? (
         <PanelSection label="Description">
           <p className="text-sm leading-relaxed text-ink-muted">{object.description}</p>
         </PanelSection>
       ) : null}
 
-      {metadata && metadata.clinicalNotes.length > 0 ? (
+      {clinicalNotes.length > 0 ? (
         <PanelSection label="Notes">
           <ul className="flex list-disc flex-col gap-1.5 pl-4">
-            {metadata.clinicalNotes.map((note) => (
+            {clinicalNotes.map((note) => (
               <li key={note} className="text-sm leading-relaxed text-ink-muted">
                 {note}
               </li>
@@ -141,20 +162,24 @@ export function ContextPanel({
         </PanelSection>
       ) : null}
 
-      <PanelSection label="Relationships">
-        <RelationshipList relationships={relationships} onSelect={onSelectRelated} />
+      <PanelSection label="Contains">
+        <ObjectChildren items={childObjects} onSelect={onSelectObject} />
       </PanelSection>
 
-      {metadata && metadata.synonyms.length > 0 ? (
+      <PanelSection label="Related structures">
+        <RelationshipList relationships={relationships} onSelect={onSelectObject} />
+      </PanelSection>
+
+      {object && object.synonyms.length > 0 ? (
         <PanelSection label="Also known as">
-          <p className="text-sm text-ink-muted">{metadata.synonyms.join(', ')}</p>
+          <p className="text-sm text-ink-muted">{object.synonyms.join(', ')}</p>
         </PanelSection>
       ) : null}
 
-      {metadata && Object.keys(metadata.externalIds).length > 0 ? (
+      {Object.keys(externalIds).length > 0 ? (
         <PanelSection label="Cross-references">
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-            {Object.entries(metadata.externalIds).map(([vocabulary, value]) => (
+            {Object.entries(externalIds).map(([vocabulary, value]) => (
               <div key={vocabulary} className="contents">
                 <dt className="font-mono uppercase text-ink-faint">{vocabulary}</dt>
                 <dd className="text-ink-muted">{value}</dd>

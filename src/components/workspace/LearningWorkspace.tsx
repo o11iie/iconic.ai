@@ -10,12 +10,15 @@ import { ErrorState, LoadingState, NotConfiguredState } from '@/components/ui/st
 import { ViewportShell } from '@/components/spatial/ViewportShell';
 import { useAnatomyModel } from '@/hooks/use-anatomy-model';
 import { DIAGNOSTIC_LABEL } from '@/engine/3d/diagnostics/diagnostic-scene';
-import { semanticIdToLabel, type SemanticId } from '@/lib/semantic-id';
+import { isSemanticId, semanticIdToLabel, type SemanticId } from '@/lib/semantic-id';
 import type { InteractionMode } from '@/engine/spatial/types';
 import { useReducedMotion } from '@/store/ui-store';
 import { useViewerStore } from '@/store/viewer-store';
 import { AIStudyPanel } from './AIStudyPanel';
-import { ContextPanel, type ContextAction } from './ContextPanel';
+import { ContextPanel, type ContextActionPayload } from './ContextPanel';
+import { SpatialSearch } from './SpatialSearch';
+import type { BreadcrumbNode } from './ObjectBreadcrumb';
+import { useSpatialKeyboard } from '@/hooks/use-spatial-keyboard';
 import { LayersPanel } from './LayersPanel';
 import { ModelSwitcher } from './ModelSwitcher';
 import { SpatialToolbar } from './SpatialToolbar';
@@ -88,6 +91,12 @@ export function LearningWorkspace({
    * to rendered state: a selection is an event from an external store, and
    * handling it in the callback avoids a cascading render on every snapshot.
    */
+  /** Live selection for the keyboard handler, which must not re-bind per change. */
+  const selectedIdRef = useRef<SemanticId | null>(null);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
   const previousSelection = useRef<SemanticId | null>(null);
   useEffect(() => {
     if (!controller) return;
@@ -105,19 +114,106 @@ export function LearningWorkspace({
 
   const sceneReady = diagnostic ? registrySize > 0 : status === 'ready';
 
-  const relationships = useMemo(
-    () => (selectedId && provider && !diagnostic ? provider.getRelatedStructures(selectedId) : []),
-    [provider, selectedId, diagnostic],
-  );
+  /**
+   * Deep link to a structure: /explore?model=heart&select=veo.anatomy.heart
+   *
+   * The id is NEVER trusted. It is parsed for shape and then validated against
+   * the current model's object set, so a crafted or stale link cannot select
+   * something that does not exist, reach into another model, or mutate any
+   * state beyond selection. An invalid id is ignored silently — it is a bad
+   * link, not an error the learner caused.
+   */
+  const selectParam = searchParams.get('select');
+  useEffect(() => {
+    if (!controller || !sceneReady || !selectParam) return;
+    if (!isSemanticId(selectParam)) return;
+    controller.focusObject(selectParam, { reducedMotion });
+  }, [controller, sceneReady, selectParam, reducedMotion]);
 
-  const metadata = useMemo(
-    () => (selectedId && provider && !diagnostic ? provider.getStructureMetadata(selectedId) : null),
-    [provider, selectedId, diagnostic],
-  );
+  /**
+   * Keyboard accelerators. Every one is also a visible control, and none fire
+   * while the learner is typing.
+   */
+  useSpatialKeyboard({
+    enabled: sceneReady,
+    onEscape: () => {
+      if (contextOpen) {
+        setContextOpen(false);
+        return;
+      }
+      if (layersOpen) {
+        setLayersOpen(false);
+        return;
+      }
+      controller?.select(null);
+    },
+    onReset: () => {
+      controller?.restore();
+      controller?.resetCamera({ reducedMotion });
+    },
+    onFocus: () => {
+      if (selectedIdRef.current) controller?.flyTo(selectedIdRef.current, { reducedMotion });
+    },
+  });
 
+  /**
+   * Everything the panel shows is resolved through the registry, so a mesh
+   * name never reaches the interface. `revision` is in the dependency list
+   * because the controller is an external store: without it these would go
+   * stale the moment selection or the model changed.
+   */
+  const revision = snapshot?.revision ?? 0;
+
+  /*
+   * `revision` is listed deliberately and is NOT unused.
+   *
+   * The controller is an external mutable store: `getObject`, `getRelationships`
+   * and the registry queries return different results as it changes, without
+   * any of their arguments changing. `revision` is the store's change counter,
+   * so including it is what keeps these memos correct. The exhaustive-deps rule
+   * cannot see through an external store, so it reports the dependency as
+   * unnecessary; removing it would silently stale every panel field.
+   */
+  /* eslint-disable react-hooks/exhaustive-deps */
   const selectedObject = useMemo(
-    () => (selectedId && provider && !diagnostic ? provider.getStructure(selectedId) : null),
-    [provider, selectedId, diagnostic],
+    () => (selectedId && controller ? controller.getObject(selectedId) : null),
+    [controller, selectedId, revision],
+  );
+
+  const relationships = useMemo(
+    () => (selectedId && controller ? controller.getRelationships(selectedId) : []),
+    [controller, selectedId, revision],
+  );
+
+  const trail = useMemo<BreadcrumbNode[]>(() => {
+    if (!selectedId || !controller) return [];
+    const ancestors = [...controller.registry.getAncestors(selectedId)].reverse();
+    return [...ancestors, selectedId].map((id) => ({
+      semanticId: id,
+      name: controller.getObject(id)?.name ?? null,
+    }));
+  }, [controller, selectedId, revision]);
+
+  const childNodes = useMemo<BreadcrumbNode[]>(() => {
+    if (!selectedId || !controller) return [];
+    return controller.registry.getChildren(selectedId).map((id) => ({
+      semanticId: id,
+      name: controller.getObject(id)?.name ?? null,
+    }));
+  }, [controller, selectedId, revision]);
+
+  const runSearch = useCallback(
+    (query: string) => controller?.search(query) ?? [],
+    [controller, revision],
+  );
+  /* eslint-enable react-hooks/exhaustive-deps */
+
+  /** One entry point for every route to a structure: click, search, related. */
+  const focusObject = useCallback(
+    (id: SemanticId) => {
+      controller?.focusObject(id, { reducedMotion });
+    },
+    [controller, reducedMotion],
   );
 
   const handleModelChange = useCallback(
@@ -128,26 +224,29 @@ export function LearningWorkspace({
     [router, setModelRef],
   );
 
-  const handleAction = useCallback((action: ContextAction) => {
-    // Study actions are implemented in the gate that builds generation and
-    // scheduling. They are surfaced here because the context panel must be
-    // able to accept real SpatialObject data now.
+  /**
+   * Study actions.
+   *
+   * Implemented in the gate that builds generation and scheduling. The full
+   * semantic payload is already assembled and passed, so wiring them later is
+   * a change of handler rather than a change of architecture. Nothing here
+   * fabricates a result.
+   */
+  const handleAction = useCallback((payload: ContextActionPayload) => {
     setContextOpen(false);
-    void action;
+    void payload;
   }, []);
 
   const contextPanel = (
     <ContextPanel
       selectedId={selectedId}
       object={selectedObject}
-      metadata={metadata}
+      trail={trail}
+      childObjects={childNodes}
       relationships={relationships}
-      onSelectRelated={(id: SemanticId) => {
-        controller?.select(id);
-        controller?.flyTo(id, { reducedMotion });
-      }}
+      onSelectObject={focusObject}
       onAction={handleAction}
-      actionsEnabled={sceneReady && !diagnostic}
+      actionsEnabled={sceneReady}
     />
   );
 
@@ -165,6 +264,13 @@ export function LearningWorkspace({
         ) : (
           <ModelSwitcher modelRef={activeModel} onSelect={handleModelChange} />
         )}
+
+        <SpatialSearch
+          onSearch={runSearch}
+          onSelect={focusObject}
+          disabled={!sceneReady}
+          className="ml-2 w-full max-w-[13rem] sm:max-w-xs"
+        />
 
         <div className="ml-auto flex items-center gap-1">
           <IconButton
