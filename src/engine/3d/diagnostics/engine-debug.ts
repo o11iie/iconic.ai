@@ -32,6 +32,18 @@ export interface EngineMemoryState {
   readonly drawCalls: number;
 }
 
+/** What the semantic layer reports for one object. */
+export interface EngineHierarchyState {
+  readonly parent: string | null;
+  readonly ancestors: readonly string[];
+  readonly children: readonly string[];
+}
+
+export interface EngineBoundsState {
+  readonly center: readonly [number, number, number];
+  readonly radius: number;
+}
+
 export interface EngineDebugState {
   readonly ready: boolean;
   readonly camera: EngineCameraState | null;
@@ -41,8 +53,18 @@ export interface EngineDebugState {
   readonly hoveredId: SemanticId | null;
   readonly visualStates: Readonly<Record<string, string>>;
   readonly materialOverrides: number;
+  /** Meshes whose authored material the engine is tracking. */
+  readonly materialTracked: number;
   readonly lifecycle: string;
   readonly sceneEpoch: number;
+  /** Registry generation. Bumped whenever the model is replaced. */
+  readonly generation: number;
+  /**
+   * Controller revision. Advances only when scene state actually changed, so
+   * a test can prove that pointer movement inside one object is not
+   * repeatedly waking the React tree.
+   */
+  readonly revision: number;
 }
 
 export interface EngineDebugHandle {
@@ -56,6 +78,31 @@ export interface EngineDebugHandle {
   resetCamera: () => void;
   fitModel: () => void;
   fitSelection: () => void;
+
+  // ---- semantic layer (Gate 6) --------------------------------------------
+
+  /** Select and frame in one step, through the semantic API. */
+  focusObject: (semanticId: string) => boolean;
+  /** Hide structures, to prove selection cannot survive its own object. */
+  hide: (semanticIds: readonly string[]) => void;
+  /** Hierarchy as the registry reports it. */
+  hierarchy: (semanticId: string) => EngineHierarchyState;
+  /** Live geometry through the semantic bounds API. */
+  bounds: (semanticId: string) => EngineBoundsState | null;
+  /** Semantic search, returning ids in rank order. */
+  search: (query: string) => readonly string[];
+
+  /**
+   * Hold on to the render node currently backing a semantic id.
+   *
+   * Paired with `resolveCaptured`, this is how a browser test proves the
+   * central Gate 6 rule: after the model is replaced, the node kept here is a
+   * real object reference from the previous model, and resolving it must
+   * yield nothing rather than silently pointing at the new scene.
+   */
+  captureNode: (semanticId: string) => boolean;
+  /** Resolve the captured node against the CURRENT registry. */
+  resolveCaptured: () => string | null;
 }
 
 declare global {
@@ -76,18 +123,34 @@ const sources: {
   scene: null,
 };
 
+const EMPTY_HIERARCHY: EngineHierarchyState = { parent: null, ancestors: [], children: [] };
+
 const actions: {
   replaceScene: () => void;
   select: (id: string | null) => void;
   resetCamera: () => void;
   fitModel: () => void;
   fitSelection: () => void;
+  focusObject: (id: string) => boolean;
+  hide: (ids: readonly string[]) => void;
+  hierarchy: (id: string) => EngineHierarchyState;
+  bounds: (id: string) => EngineBoundsState | null;
+  search: (query: string) => readonly string[];
+  captureNode: (id: string) => boolean;
+  resolveCaptured: () => string | null;
 } = {
   replaceScene: () => {},
   select: () => {},
   resetCamera: () => {},
   fitModel: () => {},
   fitSelection: () => {},
+  focusObject: () => false,
+  hide: () => {},
+  hierarchy: () => EMPTY_HIERARCHY,
+  bounds: () => null,
+  search: () => [],
+  captureNode: () => false,
+  resolveCaptured: () => null,
 };
 
 function install(): void {
@@ -105,8 +168,11 @@ function install(): void {
         hoveredId: sceneState?.hoveredId ?? null,
         visualStates: sceneState?.visualStates ?? {},
         materialOverrides: sceneState?.materialOverrides ?? 0,
+        materialTracked: sceneState?.materialTracked ?? 0,
         lifecycle: sceneState?.lifecycle ?? 'idle',
         sceneEpoch: sceneState?.sceneEpoch ?? 0,
+        generation: sceneState?.generation ?? 0,
+        revision: sceneState?.revision ?? 0,
       };
     },
     replaceScene: () => actions.replaceScene(),
@@ -114,6 +180,13 @@ function install(): void {
     resetCamera: () => actions.resetCamera(),
     fitModel: () => actions.fitModel(),
     fitSelection: () => actions.fitSelection(),
+    focusObject: (id) => actions.focusObject(id),
+    hide: (ids) => actions.hide(ids),
+    hierarchy: (id) => actions.hierarchy(id),
+    bounds: (id) => actions.bounds(id),
+    search: (query) => actions.search(query),
+    captureNode: (id) => actions.captureNode(id),
+    resolveCaptured: () => actions.resolveCaptured(),
   };
 }
 

@@ -37,6 +37,14 @@ export const DEFAULT_PALETTE: VisualColorPalette = {
   muted: '#64748b',
 };
 
+/** Live material bookkeeping. Read by diagnostics to prove nothing leaks. */
+export interface MaterialStats {
+  /** Override materials currently allocated by VEO. */
+  readonly overrides: number;
+  /** Meshes whose authored material is being tracked. */
+  readonly tracked: number;
+}
+
 interface MeshRecord {
   /** The asset's authored material. Never mutated, never disposed by us. */
   readonly original: THREE.Material | THREE.Material[];
@@ -62,6 +70,10 @@ export class MaterialStateManager {
 
   get trackedCount(): number {
     return this.records.size;
+  }
+
+  get stats(): MaterialStats {
+    return { overrides: this.overrideCount, tracked: this.trackedCount };
   }
 
   stateOf(mesh: THREE.Mesh): VisualState {

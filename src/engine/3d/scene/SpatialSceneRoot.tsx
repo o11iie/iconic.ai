@@ -10,7 +10,7 @@ import { buildRegistryFromMapping, collectMeshes, readTag } from '@/engine/spati
 import type { SceneVisualState } from '@/engine/spatial/types';
 import type { BoundingBox } from '@/types/domain/spatial';
 import { boundsOf, boundsOfAll } from '../bounds';
-import { MaterialStateManager } from '../materials/material-state';
+import { MaterialStateManager, type MaterialStats } from '../materials/material-state';
 import { disposeObject3D } from '../disposal';
 import { isClick, modeAllowsHover, modeAllowsSelection, type PointerOrigin } from '../interaction/pointer';
 
@@ -43,6 +43,14 @@ export interface SpatialSceneRootProps {
   readonly onModelBounds: (box: BoundingBox | null) => void;
   readonly onUnmappedMeshes?: (names: readonly string[]) => void;
   readonly onRegistryReady?: (count: number) => void;
+  /**
+   * Publishes a live reader for material bookkeeping.
+   *
+   * Handed out as a getter rather than a snapshot so diagnostics can sample it
+   * at any moment without this component re-rendering on every material
+   * change — which would defeat the on-demand frame loop.
+   */
+  readonly onMaterialStats?: (read: () => MaterialStats) => void;
 }
 
 export function SpatialSceneRoot({
@@ -54,6 +62,7 @@ export function SpatialSceneRoot({
   onModelBounds,
   onUnmappedMeshes,
   onRegistryReady,
+  onMaterialStats,
 }: SpatialSceneRootProps) {
   const invalidate = useThree((state) => state.invalidate);
   const materials = useMemo(() => new MaterialStateManager(), []);
@@ -67,7 +76,11 @@ export function SpatialSceneRoot({
    */
   useEffect(() => {
     const registry = controller.registry;
-    registry.clear();
+
+    // Through the controller, not the registry: the controller owns the model
+    // and re-attaches its descriptors, so this effect and the one publishing
+    // the model can commit in either order.
+    controller.beginRegistration();
 
     if (!root) {
       controller.setObjects([]);
@@ -99,7 +112,10 @@ export function SpatialSceneRoot({
       }
     }
 
-    controller.setObjects(registry.ids());
+    // The controller already holds the graph; registering nodes is what binds
+    // those descriptors to real geometry. Re-declaring the universe here
+    // narrows it to what actually rendered.
+    if (controller.getGraph() === null) controller.setObjects(registry.ids());
     onRegistryReady?.(registry.size);
 
     const unmapped = registry.unmappedNames();
@@ -125,6 +141,26 @@ export function SpatialSceneRoot({
     // setObjects ran, and the canvas only needs one more frame.
     invalidate();
   }, [root, meshMapping, controller, onModelBounds, onUnmappedMeshes, onRegistryReady, invalidate]);
+
+  /**
+   * Install the live bounds resolver.
+   *
+   * The controller owns meaning and must stay free of three.js; this is the
+   * seam through which it reads real geometry. Registered per root so a model
+   * swap cannot leave the semantic API measuring disposed nodes.
+   */
+  useEffect(() => {
+    controller.setBoundsResolver((semanticId) => {
+      const entry = controller.registry.get(semanticId);
+      return entry ? boundsOf(entry.node as unknown as THREE.Object3D) : null;
+    });
+
+    return () => controller.setBoundsResolver(null);
+  }, [controller, root]);
+
+  useEffect(() => {
+    onMaterialStats?.(() => materials.stats);
+  }, [materials, onMaterialStats]);
 
   /** Apply visual state whenever it changes. */
   useEffect(() => {

@@ -1,20 +1,24 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as THREE from 'three';
 import { SpatialCanvas } from '@/engine/3d/canvas/SpatialCanvas';
 import { SpatialCameraRig } from '@/engine/3d/camera/SpatialCameraRig';
 import { SpatialSceneRoot } from '@/engine/3d/scene/SpatialSceneRoot';
 import { ModelLoader } from '@/engine/3d/scene/ModelLoader';
-import { buildDiagnosticScene, DIAGNOSTIC_LABEL } from '@/engine/3d/diagnostics/diagnostic-scene';
-import { boundsOf } from '@/engine/3d/bounds';
+import {
+  buildDiagnosticGraph,
+  buildDiagnosticScene,
+  DIAGNOSTIC_LABEL,
+} from '@/engine/3d/diagnostics/diagnostic-scene';
 import { EngineDebugBridge } from '@/engine/3d/diagnostics/EngineDebugBridge';
 import { registerSceneDebug } from '@/engine/3d/diagnostics/engine-debug';
 import { ErrorState } from '@/components/ui/states';
 import type { SceneController } from '@/engine/spatial/scene-controller';
 import type { SceneVisualState } from '@/engine/spatial/types';
-import type { SemanticId } from '@/lib/semantic-id';
+import { isSemanticId, type SemanticId } from '@/lib/semantic-id';
 import type { BoundingBox } from '@/types/domain/spatial';
+import type { MaterialStats } from '@/engine/3d/materials/material-state';
 
 /**
  * The 3D stage.
@@ -68,6 +72,20 @@ export function SpatialStage({
    */
   const [sceneEpoch, setSceneEpoch] = useState(0);
 
+  /** Live material bookkeeping, published by the scene root. */
+  const materialStats = useRef<(() => MaterialStats) | null>(null);
+  const readMaterialStats = useCallback((read: () => MaterialStats) => {
+    materialStats.current = read;
+  }, []);
+
+  /**
+   * A render node held across a model replacement.
+   *
+   * Kept as a real reference so verification can ask the registry to resolve
+   * an object from a model that no longer exists. Diagnostic-only.
+   */
+  const capturedNode = useRef<Parameters<SceneController['registry']['resolve']>[0]>(null);
+
   // Rebuilt per epoch. Disposed by the scene root like any other content.
   const diagnosticRoot = useMemo(
     () => (diagnostic ? buildDiagnosticScene() : null),
@@ -78,11 +96,27 @@ export function SpatialStage({
   const loadedRoot = loaded && loaded.url === assetUrl ? loaded.root : null;
   const root = diagnostic ? diagnosticRoot : loadedRoot;
 
+  /**
+   * Publish the diagnostic model's semantic graph.
+   *
+   * Goes through the same `setGraph` entry point a manifest-loaded model uses,
+   * so hierarchy, relationships, search and labels are exercised by the real
+   * code path rather than a parallel one.
+   */
+  useEffect(() => {
+    if (!diagnostic) return;
+    controller.setGraph(buildDiagnosticGraph());
+    return () => controller.setGraph(null);
+  }, [diagnostic, controller, sceneEpoch]);
+
+  /*
+   * Camera framing reads bounds through the semantic API, not the registry.
+   * The controller is where "what is this object's extent" is answered — it
+   * knows that a grouping structure is framed by what it contains — and a
+   * second implementation here would drift from it.
+   */
   const resolveBox = useCallback(
-    (id: string) => {
-      const entry = controller.registry.get(id as SemanticId);
-      return entry ? boundsOf(entry.node as unknown as THREE.Object3D) : null;
-    },
+    (id: string) => (isSemanticId(id) ? controller.getObjectBounds(id) : null),
     [controller],
   );
 
@@ -101,9 +135,12 @@ export function SpatialStage({
           selectedId: snapshot.selectedId,
           hoveredId: snapshot.hoveredId,
           visualStates,
-          materialOverrides: 0,
+          materialOverrides: materialStats.current?.().overrides ?? 0,
+          materialTracked: materialStats.current?.().tracked ?? 0,
           lifecycle: snapshot.lifecycle.phase,
           sceneEpoch,
+          generation: controller.registry.generation,
+          revision: snapshot.revision,
         };
       },
       {
@@ -115,6 +152,32 @@ export function SpatialStage({
         },
         fitModel: () => controller.fitToModel({ durationMs: 0 }),
         fitSelection: () => controller.fitToSelection({ durationMs: 0 }),
+
+        focusObject: (id) =>
+          isSemanticId(id) ? controller.focusObject(id, { durationMs: 0 }) : false,
+        hide: (ids) => controller.hide(ids.filter(isSemanticId)),
+        hierarchy: (id) => {
+          if (!isSemanticId(id)) return { parent: null, ancestors: [], children: [] };
+          return {
+            parent: controller.registry.getParent(id),
+            ancestors: controller.registry.getAncestors(id),
+            children: controller.registry.getChildren(id),
+          };
+        },
+        bounds: (id) => {
+          if (!isSemanticId(id)) return null;
+          const center = controller.getObjectCenter(id);
+          const radius = controller.getObjectRadius(id);
+          return center && radius !== null ? { center, radius } : null;
+        },
+        search: (query) => controller.search(query).map((result) => result.semanticId),
+        captureNode: (id) => {
+          if (!isSemanticId(id)) return false;
+          const entry = controller.registry.get(id);
+          capturedNode.current = entry ? entry.node : null;
+          return entry !== undefined;
+        },
+        resolveCaptured: () => controller.registry.resolve(capturedNode.current),
       },
     );
   }, [diagnostic, controller, sceneEpoch]);
@@ -156,6 +219,7 @@ export function SpatialStage({
         onModelBounds={setModelBox}
         {...(onUnmappedMeshes ? { onUnmappedMeshes } : {})}
         {...(onRegistryReady ? { onRegistryReady } : {})}
+        {...(diagnostic ? { onMaterialStats: readMaterialStats } : {})}
       />
 
       {diagnostic ? <EngineDebugBridge /> : null}
