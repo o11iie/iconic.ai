@@ -12,7 +12,7 @@
  */
 import { chromium } from 'playwright';
 
-const BASE = process.argv[2] ?? 'http://127.0.0.1:3410';
+const BASE = process.argv[2] ?? process.env.VEO_BASE_URL ?? 'http://127.0.0.1:3410';
 const EXPLORE = `${BASE}/explore?diagnostic=1`;
 
 const IGNORED = [/Download the React DevTools/i, /\[Fast Refresh\]/i, /favicon\.ico/i];
@@ -204,16 +204,21 @@ try {
   // Selection must be reflected outside the canvas — the canvas is aria-hidden,
   // so this panel and the live region are how the selection is communicated.
   const panelText = await page.locator('aside[aria-label="Structure details"]').innerText();
-  const expectedLabel = targetId.split('.').pop().replace('node_', 'Node ').toUpperCase();
   check(
     panelText.includes(targetId),
     'selection is reported outside the canvas with its semantic id',
     panelText.slice(0, 80).replace(/\n/g, ' / '),
   );
+  // The heading, not the whole panel: the semantic id is printed there too,
+  // and matching against it would pass without the name ever being rendered.
+  const panelHeading = await page
+    .locator('aside[aria-label="Structure details"] h2')
+    .first()
+    .innerText();
   check(
-    panelText.toUpperCase().includes(expectedLabel),
-    'the panel names the selected node',
-    `expected ${expectedLabel}`,
+    /^Object \d+$/.test(panelHeading.trim()),
+    'the panel names the selected object',
+    `heading "${panelHeading.trim()}"`,
   );
 
   const liveRegion = await page.locator('[aria-live="polite"]').first().innerText();

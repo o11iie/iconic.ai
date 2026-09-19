@@ -12,8 +12,10 @@ import { isClick, modeAllowsHover, modeAllowsSelection, nextSelection, resolveHi
 import { boundsOf, boundsOfAll, centerOf } from './bounds';
 import {
   DIAGNOSTIC_DOMAIN,
+  DIAGNOSTIC_IDS,
   DIAGNOSTIC_LABEL,
   DIAGNOSTIC_NODES,
+  buildDiagnosticGraph,
   buildDiagnosticScene,
 } from './diagnostics/diagnostic-scene';
 import { readTag } from '@/engine/spatial/object-registry';
@@ -317,12 +319,17 @@ describe('diagnostic scene', () => {
     }
   });
 
-  it('carries no anatomical or subject naming', () => {
-    const text = JSON.stringify(DIAGNOSTIC_NODES).toLowerCase();
+  it('carries no anatomical or subject naming, anywhere in the graph', () => {
+    const text = JSON.stringify([
+      DIAGNOSTIC_NODES,
+      [...buildDiagnosticGraph().objects.values()],
+    ]).toLowerCase();
+
     for (const word of ['heart', 'bone', 'muscle', 'organ', 'anatomy', 'ventricle', 'skull']) {
       expect(text).not.toContain(word);
     }
-    expect(DIAGNOSTIC_NODES.every((spec) => /^Node [A-Z]$/.test(spec.label))).toBe(true);
+    // Engineering names only: System A / Object 1, never a subject term.
+    expect(DIAGNOSTIC_NODES.every((spec) => /^Object \d+$/.test(spec.label))).toBe(true);
   });
 
   it('tags every selectable node so the registry can resolve it', () => {
@@ -336,6 +343,35 @@ describe('diagnostic scene', () => {
     for (const mesh of meshes) {
       expect(readTag(mesh as never)).toMatch(/^veo\.diagnostic\./);
     }
+  });
+
+  it('nests meshes inside tagged system groups, so ancestry is real', () => {
+    // The nearest-selectable-ancestor rule needs a genuine group to resolve
+    // against: a click on Object 1 must select Object 1, not System A.
+    const root = buildDiagnosticScene();
+    expect(readTag(root as never)).toBe(DIAGNOSTIC_IDS.root);
+
+    const mesh = root.getObjectByName('Object 1');
+    expect(mesh).toBeDefined();
+    expect(readTag(mesh as never)).toBe(DIAGNOSTIC_IDS.object1);
+    expect(readTag(mesh!.parent as never)).toBe(DIAGNOSTIC_IDS.systemA);
+  });
+
+  it('produces a real SpatialModelGraph with hierarchy and relationships', () => {
+    const graph = buildDiagnosticGraph();
+
+    expect(graph.objects.size).toBe(7);
+    expect(graph.relationships.length).toBeGreaterThan(0);
+    expect(graph.layers.map((layer) => layer.id).sort()).toEqual(['system_a', 'system_b']);
+
+    const object1 = graph.objects.get(DIAGNOSTIC_IDS.object1);
+    expect(object1?.parentId).toBe(DIAGNOSTIC_IDS.systemA);
+    expect(object1?.system).toBe('system_a');
+    expect(object1?.region).toBe('quadrant_west');
+
+    const systemA = graph.objects.get(DIAGNOSTIC_IDS.systemA);
+    expect(systemA?.childIds).toContain(DIAGNOSTIC_IDS.object1);
+    expect(systemA?.parentId).toBe(DIAGNOSTIC_IDS.root);
   });
 
   it('produces geometry with real bounds, so fitting is verifiable', () => {

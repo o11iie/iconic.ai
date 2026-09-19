@@ -13,7 +13,7 @@
  */
 import { chromium } from 'playwright';
 
-const BASE = process.argv[2] ?? 'http://127.0.0.1:3310';
+const BASE = process.argv[2] ?? process.env.VEO_BASE_URL ?? 'http://127.0.0.1:3410';
 
 const ROUTES = [
   { path: '/', name: 'Landing', heading: /Learning you can see/i },

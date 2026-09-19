@@ -3,7 +3,6 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SemanticId } from '@/lib/semantic-id';
 import type { Relationship, SpatialObject } from '@/types/domain/spatial';
-import type { AnatomyStructureMetadata } from '@/anatomy/providers/anatomy-provider';
 import { ContextPanel } from './ContextPanel';
 import { RelationshipList, RelationshipTrail } from './RelationshipTrail';
 import { AIStudyPanel } from './AIStudyPanel';
@@ -35,69 +34,51 @@ function objectFixture(overrides: Partial<SpatialObject> = {}): SpatialObject {
 }
 
 describe('ContextPanel', () => {
-  it('shows an honest empty state when nothing is selected', () => {
-    render(
-      <ContextPanel
-        selectedId={null}
-        object={null}
-        metadata={null}
-        relationships={[]}
-        onSelectRelated={() => {}}
-        onAction={() => {}}
-        actionsEnabled={false}
-      />,
-    );
+  const base = {
+    trail: [] as never[],
+    childObjects: [] as never[],
+    relationships: [] as never[],
+    onSelectObject: () => {},
+    onAction: () => {},
+  };
 
-    expect(screen.getByText('Nothing selected')).toBeInTheDocument();
+  it('invites selection when nothing is selected', () => {
+    render(<ContextPanel {...base} selectedId={null} object={null} actionsEnabled={false} />);
+
+    expect(screen.getByText('Select a structure to explore')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /AI Explain/ })).toBeNull();
   });
 
-  it('renders only fields the provider actually supplies', () => {
+  it('renders only fields the model actually supplies', () => {
     render(
-      <ContextPanel
-        selectedId={lv}
-        object={objectFixture()}
-        metadata={null}
-        relationships={[]}
-        onSelectRelated={() => {}}
-        onAction={() => {}}
-        actionsEnabled
-      />,
+      <ContextPanel {...base} selectedId={lv} object={objectFixture()} actionsEnabled />,
     );
 
-    // Name and semantic id come from real data.
+    // Name and semantic id come from the resolved SpatialObject, never a mesh.
     expect(screen.getByRole('heading', { name: 'Left ventricle' })).toBeInTheDocument();
     expect(screen.getByText(lv)).toBeInTheDocument();
 
     // No description was supplied, so no description section is invented.
     expect(screen.queryByText('Description')).toBeNull();
-    expect(
-      screen.getByText('No relationships are defined for this structure.'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('No relationships are defined for this structure.')).toBeInTheDocument();
   });
 
-  it('renders supplied clinical metadata when present', () => {
-    const metadata: AnatomyStructureMetadata = {
-      semanticId: lv,
-      name: 'Left ventricle',
-      latinName: 'Ventriculus sinister',
-      system: 'cardiovascular',
-      region: 'thorax',
-      laterality: 'left',
-      description: 'Pumps oxygenated blood into the aorta.',
-      synonyms: ['LV'],
-      clinicalNotes: ['Hypertrophies in chronic hypertension.'],
-      externalIds: { FMA: '7101' },
-    };
-
+  it('renders descriptor content when the model supplies it', () => {
     render(
       <ContextPanel
+        {...base}
         selectedId={lv}
-        object={objectFixture()}
-        metadata={metadata}
-        relationships={[]}
-        onSelectRelated={() => {}}
-        onAction={() => {}}
+        object={objectFixture({
+          system: 'cardiovascular',
+          region: 'thorax',
+          description: 'Pumps oxygenated blood into the aorta.',
+          synonyms: ['LV'],
+          metadata: {
+            latinName: 'Ventriculus sinister',
+            clinicalNotes: ['Hypertrophies in chronic hypertension.'],
+            externalIds: { FMA: '7101' },
+          },
+        })}
         actionsEnabled
       />,
     );
@@ -106,17 +87,48 @@ describe('ContextPanel', () => {
     expect(screen.getByText('Pumps oxygenated blood into the aorta.')).toBeInTheDocument();
     expect(screen.getByText('Hypertrophies in chronic hypertension.')).toBeInTheDocument();
     expect(screen.getByText('7101')).toBeInTheDocument();
+    expect(screen.getByText('cardiovascular')).toBeInTheDocument();
   });
 
-  it('exposes every study action and reports the chosen one', async () => {
+  it('renders hierarchy and lets the learner navigate it', async () => {
+    const onSelectObject = vi.fn();
+    render(
+      <ContextPanel
+        {...base}
+        selectedId={lv}
+        object={objectFixture()}
+        trail={[
+          { semanticId: 'veo.anatomy.heart' as SemanticId, name: 'Heart' },
+          { semanticId: lv, name: 'Left ventricle' },
+        ]}
+        childObjects={[{ semanticId: rv, name: 'Right ventricle' }]}
+        onSelectObject={onSelectObject}
+        actionsEnabled
+      />,
+    );
+
+    expect(screen.getByRole('navigation', { name: 'Structure hierarchy' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Heart' }));
+    expect(onSelectObject).toHaveBeenCalledWith('veo.anatomy.heart');
+
+    await userEvent.click(screen.getByRole('button', { name: /Right ventricle/ }));
+    expect(onSelectObject).toHaveBeenCalledWith(rv);
+  });
+
+  it('passes complete semantic context to every action handler', async () => {
+    // The actions are not implemented yet, but they must already receive the
+    // full context so wiring them later is a handler change, not a redesign.
     const onAction = vi.fn();
     render(
       <ContextPanel
+        {...base}
         selectedId={lv}
         object={objectFixture()}
-        metadata={null}
-        relationships={[]}
-        onSelectRelated={() => {}}
+        trail={[
+          { semanticId: 'veo.anatomy.heart' as SemanticId, name: 'Heart' },
+          { semanticId: lv, name: 'Left ventricle' },
+        ]}
         onAction={onAction}
         actionsEnabled
       />,
@@ -127,22 +139,21 @@ describe('ContextPanel', () => {
     }
 
     await userEvent.click(screen.getByRole('button', { name: 'Quiz Me' }));
-    expect(onAction).toHaveBeenCalledWith('quiz');
+
+    expect(onAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'quiz',
+        semanticId: lv,
+        object: expect.objectContaining({ name: 'Left ventricle' }),
+        ancestors: ['veo.anatomy.heart'],
+      }),
+    );
   });
 
   it('disables study actions when no model is loaded', () => {
     render(
-      <ContextPanel
-        selectedId={lv}
-        object={objectFixture()}
-        metadata={null}
-        relationships={[]}
-        onSelectRelated={() => {}}
-        onAction={() => {}}
-        actionsEnabled={false}
-      />,
+      <ContextPanel {...base} selectedId={lv} object={objectFixture()} actionsEnabled={false} />,
     );
-
     expect(screen.getByRole('button', { name: 'AI Explain' })).toBeDisabled();
   });
 });

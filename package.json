@@ -17,9 +17,11 @@
     "test:watch": "vitest",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
     "test:ui": "node scripts/verify-ui.mjs",
+    "test:engine": "node scripts/verify-engine.mjs",
+    "test:semantics": "node scripts/verify-semantics.mjs",
+    "test:browser": "npm run test:ui && npm run test:engine && npm run test:semantics",
     "verify:full": "npm run verify && npm run start:verify",
-    "start:verify": "next start -p 3399 & sleep 4 && node scripts/verify-ui.mjs http://127.0.0.1:3399; kill %1",
-    "test:engine": "node scripts/verify-engine.mjs"
+    "start:verify": "next start -p 3410 & sleep 5 && npm run test:browser; kill %1"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",
