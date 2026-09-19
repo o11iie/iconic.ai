@@ -1,5 +1,9 @@
 import { isDescendantOf, type SemanticId } from '@/lib/semantic-id';
+import type { BoundingBox, SpatialModelGraph, SpatialObject, Vec3 } from '@/types/domain/spatial';
+import type { Relationship, RelationshipKind } from '@/types/domain/spatial';
+import { AnnotationRegistry, anchorPosition, defaultLabelsFor } from './annotations';
 import { SpatialObjectRegistry, type SceneNode } from './object-registry';
+import { SpatialSearchIndex, type SearchResult } from './search';
 import {
   INITIAL_LIFECYCLE,
   modelLifecycleReducer,
@@ -49,8 +53,19 @@ export interface SceneControllerOptions {
   readonly ghostContextOnIsolate?: boolean;
 }
 
+/**
+ * Resolves live world bounds for a structure.
+ *
+ * Injected by the 3D layer so this module stays free of three.js and remains
+ * testable without a WebGL context. Returns null when the structure has no
+ * geometry, which callers must handle rather than assuming an origin box.
+ */
+export type BoundsResolver = (semanticId: SemanticId) => BoundingBox | null;
+
 export class SceneController<TNode extends SceneNode = SceneNode> {
   readonly registry = new SpatialObjectRegistry<TNode>();
+  readonly annotations = new AnnotationRegistry();
+  readonly searchIndex = new SpatialSearchIndex();
 
   private selectedId: SemanticId | null = null;
   private hoveredId: SemanticId | null = null;
@@ -62,9 +77,13 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
 
   /** Every addressable object, and the layers each belongs to. */
   private objectIds: readonly SemanticId[] = [];
+  /** Same set, indexed — selection validates on every call and must be O(1). */
+  private objectIdSet = new Set<SemanticId>();
   private layerMembership = new Map<SemanticId, readonly string[]>();
 
   private lifecycle: ModelLifecycleState = INITIAL_LIFECYCLE;
+  private graph: SpatialModelGraph | null = null;
+  private boundsResolver: BoundsResolver | null = null;
 
   private cameraCommand: CameraCommand | null = null;
   private cameraVersion = 0;
@@ -130,6 +149,7 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
     layerMembership?: ReadonlyMap<SemanticId, readonly string[]>,
   ): void {
     this.objectIds = objectIds;
+    this.objectIdSet = new Set(objectIds);
     this.layerMembership = new Map(layerMembership ?? []);
 
     // Drop emphasis referring to objects that no longer exist. Without this a
@@ -161,7 +181,11 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
     if (event.type === 'unload' || event.type === 'dispose' || event.type === 'load') {
       this.clearEmphasis();
       this.registry.clear();
+      this.searchIndex.clear();
+      this.annotations.clear();
+      this.graph = null;
       this.objectIds = [];
+      this.objectIdSet = new Set();
       this.layerMembership = new Map();
     }
 
@@ -175,13 +199,45 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
 
   // ---- selection and emphasis --------------------------------------------
 
-  select(semanticId: SemanticId | null): void {
-    if (this.selectedId === semanticId) return;
+  /**
+   * Select a structure.
+   *
+   * Rejects an id the current model does not contain, which is what makes it
+   * safe to pass one straight from a URL parameter, a saved note or a stale
+   * link. Returns whether the selection was accepted.
+   */
+  select(semanticId: SemanticId | null): boolean {
+    if (semanticId !== null && this.objectIdSet.size > 0 && !this.objectIdSet.has(semanticId)) {
+      return false;
+    }
+    if (this.selectedId === semanticId) return true;
+
     this.selectedId = semanticId;
     this.invalidate();
+    return true;
+  }
+
+  /** True when the id names a structure in the current model. */
+  isSelectable(semanticId: SemanticId | null): semanticId is SemanticId {
+    return semanticId !== null && this.objectIdSet.has(semanticId);
+  }
+
+  /**
+   * Select a structure and bring the camera to it.
+   *
+   * The single entry point used by search results, relationship navigation and
+   * breadcrumbs, so every route to a structure behaves identically.
+   */
+  focusObject(semanticId: SemanticId, options: FlyToOptions = {}): boolean {
+    if (!this.select(semanticId)) return false;
+    this.flyTo(semanticId, options);
+    return true;
   }
 
   setHovered(semanticId: SemanticId | null): void {
+    if (semanticId !== null && this.objectIdSet.size > 0 && !this.objectIdSet.has(semanticId)) {
+      return;
+    }
     if (this.hoveredId === semanticId) return;
     this.hoveredId = semanticId;
     this.invalidate();
@@ -197,6 +253,13 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
       this.hiddenIds.add(id);
       this.ghostedIds.delete(id);
     }
+
+    // A hidden structure cannot be seen, so leaving it selected would leave
+    // the context panel describing something invisible. Selection and hover
+    // both invalidate.
+    if (this.selectedId && this.hiddenIds.has(this.selectedId)) this.selectedId = null;
+    if (this.hoveredId && this.hiddenIds.has(this.hoveredId)) this.hoveredId = null;
+
     this.invalidate();
   }
 
@@ -265,6 +328,199 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
     this.ghostedIds = new Set();
     this.isolatedId = null;
     this.hiddenLayerIds = new Set();
+  }
+
+  // ---- semantic model -----------------------------------------------------
+
+  /**
+   * Begin binding a freshly rendered scene to the current model.
+   *
+   * Drops the previous generation's render nodes — invalidating every
+   * reference handed out for them — and immediately re-attaches the current
+   * model's descriptors.
+   *
+   * That second step is the important one. Registration happens inside the
+   * canvas, which is a separate React tree that commits on its own schedule,
+   * while the model is published from the page tree. Neither can assume it
+   * runs first. Clearing render nodes previously discarded the model's
+   * descriptors as a side effect, so whenever registration committed last the
+   * model silently lost its hierarchy, its groups and its search entries.
+   *
+   * Geometry and meaning have different lifetimes. This is the seam that keeps
+   * them from being confused for one another, and it makes the result the same
+   * in either order.
+   */
+  beginRegistration(): void {
+    this.registry.clear();
+    if (this.graph) this.registry.setDescriptors(this.graph.objects);
+  }
+
+  /**
+   * Publish the loaded model's semantic graph.
+   *
+   * This is the single entry point for both content paths — a manifest-loaded
+   * asset and the diagnostic scene — so everything downstream (registry
+   * descriptors, search index, labels, hierarchy) is built once, in one place,
+   * from one shape.
+   */
+  setGraph(graph: SpatialModelGraph | null): void {
+    this.graph = graph;
+
+    if (!graph) {
+      this.registry.setDescriptors(new Map());
+      this.searchIndex.clear();
+      this.annotations.clear();
+      this.setObjects([]);
+      return;
+    }
+
+    this.registry.setDescriptors(graph.objects);
+    this.searchIndex.build(graph.objects.values());
+
+    const layerMembership = new Map<SemanticId, readonly string[]>();
+    for (const [id, object] of graph.objects) layerMembership.set(id, object.layerIds);
+
+    this.setObjects([...graph.objects.keys()], layerMembership);
+
+    // Labels are seeded hidden: the learner turns them on. Rendering every
+    // label by default makes a dense model unreadable.
+    this.annotations.setLabels(
+      defaultLabelsFor(
+        [...graph.objects.values()].map((object) => ({
+          semanticId: object.semanticId,
+          name: object.name,
+          depth: this.registry.getAncestors(object.semanticId).length,
+        })),
+      ),
+    );
+    this.annotations.pruneTo(new Set(graph.objects.keys()));
+  }
+
+  getGraph(): SpatialModelGraph | null {
+    return this.graph;
+  }
+
+  /** The domain descriptor for a structure in the CURRENT model. */
+  getObject(semanticId: SemanticId): SpatialObject | null {
+    return this.registry.resolveFromSemanticId(semanticId);
+  }
+
+  /** The selected structure's descriptor, or null. */
+  getSelectedObject(): SpatialObject | null {
+    return this.selectedId ? this.getObject(this.selectedId) : null;
+  }
+
+  /**
+   * Relationships touching a structure.
+   *
+   * Filtered to targets that exist in the current model, so the interface
+   * never offers navigation to something that cannot be selected.
+   */
+  getRelationships(
+    semanticId: SemanticId,
+    kinds?: readonly RelationshipKind[],
+  ): readonly Relationship[] {
+    if (!this.graph) return [];
+    const kindFilter = kinds && kinds.length > 0 ? new Set<string>(kinds) : null;
+
+    return this.graph.relationships.filter((relationship) => {
+      const touches =
+        relationship.sourceId === semanticId ||
+        (relationship.bidirectional && relationship.targetId === semanticId);
+      if (!touches) return false;
+      if (kindFilter !== null && !kindFilter.has(relationship.kind)) return false;
+      return this.registry.isValid(relationship.targetId);
+    });
+  }
+
+  search(query: string, limit?: number): readonly SearchResult[] {
+    // Results are filtered against the registry, so a stale index can never
+    // hand back something unselectable.
+    return this.searchIndex.search(query, limit).filter((r) => this.registry.isValid(r.semanticId));
+  }
+
+  // ---- geometry (semantic API) --------------------------------------------
+
+  /**
+   * Install the live bounds resolver.
+   *
+   * The 3D layer owns geometry; this module owns meaning. Injecting the
+   * resolver keeps three.js out of the semantic layer entirely.
+   */
+  setBoundsResolver(resolver: BoundsResolver | null): void {
+    this.boundsResolver = resolver;
+  }
+
+  /** Live world bounds, or null when the structure has no geometry. */
+  getObjectBounds(semanticId: SemanticId): BoundingBox | null {
+    if (!this.registry.isValid(semanticId)) return null;
+
+    const live = this.boundsResolver?.(semanticId) ?? null;
+    if (live) return live;
+
+    // Fall back to bounds declared by the model, for a structure that is
+    // described but not currently rendered.
+    const declared = this.getObject(semanticId)?.boundingBox ?? null;
+    if (declared) return declared;
+
+    /*
+     * A grouping structure — a system, a region, an assembly — usually owns no
+     * geometry of its own; its extent is the extent of what it contains.
+     * Without this, framing a system would have nothing to frame, and the
+     * camera would simply ignore the request.
+     */
+    return this.unionOfDescendants(semanticId);
+  }
+
+  private unionOfDescendants(semanticId: SemanticId): BoundingBox | null {
+    let min: [number, number, number] | null = null;
+    let max: [number, number, number] | null = null;
+
+    for (const childId of this.registry.getDescendants(semanticId)) {
+      const box = this.boundsResolver?.(childId) ?? this.getObject(childId)?.boundingBox ?? null;
+      if (!box) continue;
+
+      if (!min || !max) {
+        min = [box.min[0], box.min[1], box.min[2]];
+        max = [box.max[0], box.max[1], box.max[2]];
+        continue;
+      }
+      for (let axis = 0; axis < 3; axis += 1) {
+        min[axis] = Math.min(min[axis] as number, box.min[axis] as number);
+        max[axis] = Math.max(max[axis] as number, box.max[axis] as number);
+      }
+    }
+
+    return min && max ? { min, max } : null;
+  }
+
+  getObjectCenter(semanticId: SemanticId): Vec3 | null {
+    const box = this.getObjectBounds(semanticId);
+    if (!box) return null;
+    return [
+      (box.min[0] + box.max[0]) / 2,
+      (box.min[1] + box.max[1]) / 2,
+      (box.min[2] + box.max[2]) / 2,
+    ];
+  }
+
+  /** World position of a structure. Its centre, unless an anchor is given. */
+  getObjectWorldPosition(semanticId: SemanticId, anchor: 'center' | 'top' | 'bottom' | 'front' = 'center'): Vec3 | null {
+    const box = this.getObjectBounds(semanticId);
+    return box ? anchorPosition(box, anchor) : null;
+  }
+
+  /** Radius of the sphere enclosing the structure. Used for camera framing. */
+  getObjectRadius(semanticId: SemanticId): number | null {
+    const box = this.getObjectBounds(semanticId);
+    if (!box) return null;
+
+    const half: Vec3 = [
+      (box.max[0] - box.min[0]) / 2,
+      (box.max[1] - box.min[1]) / 2,
+      (box.max[2] - box.min[2]) / 2,
+    ];
+    return Math.hypot(half[0], half[1], half[2]);
   }
 
   // ---- camera intents -----------------------------------------------------

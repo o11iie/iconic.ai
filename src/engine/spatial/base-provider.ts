@@ -137,10 +137,10 @@ export abstract class BaseSceneGraphProvider implements SceneGraphProvider {
   protected publishGraph(graph: SpatialModelGraph): void {
     this.graph = graph;
 
-    const layerMembership = new Map<SemanticId, readonly string[]>();
-    for (const [id, object] of graph.objects) layerMembership.set(id, object.layerIds);
-
-    this.scene.setObjects([...graph.objects.keys()], layerMembership);
+    // One entry point: setGraph builds registry descriptors, the search index,
+    // label seeds and the object universe together, so the manifest path and
+    // the diagnostic path cannot drift apart.
+    this.scene.setGraph(graph);
   }
 
   // ---- React integration ---------------------------------------------------
