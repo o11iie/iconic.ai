@@ -76,7 +76,12 @@ npm run test:ui        # live browser checks of the product shell
 npm run test:engine    # live browser checks of the spatial engine
 npm run test:semantics # live browser checks of semantic object interaction
 npm run test:spatial   # live browser checks of spatial manipulation
-npm run test:browser   # all four, in order
+npm run test:anatomy   # live browser checks of the anatomy provider boundary
+npm run test:browser   # all five, in order
+
+npm run validate:anatomy                      # validate the contract fixture
+npm run validate:anatomy -- <manifest.json>    # validate a real manifest
+npm run validate:anatomy -- <manifest.json> --asset <model.glb>
 npm run verify:full    # verify, then boot a production server and run test:ui
 ```
 
@@ -98,7 +103,19 @@ claims there are measured rather than asserted — that every semantic object is
 still registered and searchable after each manipulation, and that an exploded
 part returns to the *exact* coordinates the asset shipped.
 
-All three need the diagnostic scene enabled:
+`test:anatomy` verifies the provider boundary: that a missing licensed source
+produces an honest unavailable state with no geometry at all, that the
+diagnostic scene stays out of the anatomy path, that the model catalogue is the
+allowlist, and that no provider secret reaches the browser — with a positive
+control, because a scan that finds no secret may simply be a scan that finds
+nothing.
+
+`validate:anatomy` checks a manifest before it is ever served, and with
+`--asset` cross-checks mesh names and the version stamp against the geometry
+itself. A manifest that is internally perfect but describes a different
+revision of the asset is refused.
+
+The browser suites need the diagnostic scene enabled:
 
 ```bash
 echo 'NEXT_PUBLIC_ENABLE_PIPELINE_DIAGNOSTIC=true' >> .env.local
@@ -168,14 +185,15 @@ src/
       diagnostics/      labelled VEO SPATIAL ENGINE TEST scene
   anatomy/
     taxonomy.ts         systems, regions, relationship vocabulary
-    providers/          AnatomyProvider + licensed GLB/GLTF implementation
-    mapping/            semantic mapping manifest schema + validation
+    providers/          AnatomyProvider, GLTF and hosted implementations
+    mapping/            manifest schema, validation, graph projection, hierarchy
+    fixtures/           provider conformance fixture (test content, not anatomy)
     models/             declared model catalogue
   ai/                   LLMClient abstraction, OpenAI adapter, tutor prompts
   store/                viewer / learning / auth / ui Zustand stores
   lib/                  semantic ids, Result, errors, Supabase, Stripe
   types/domain/         all core domain entities
-  config/               env (client-safe + server-only), site config
+  config/               env (client-safe + server-only), anatomy provider secrets
   hooks/                React bindings to the provider layer
   tests/                test setup + design-token guards
 scripts/                verify-ui / verify-engine / verify-semantics — live browser verification
@@ -189,8 +207,17 @@ supabase/migrations/    schema + Row Level Security
 **Gate 5 — Core Spatial / 3D Engine: complete and verified.**
 **Gate 6 — Spatial Intelligence + Object Interaction: complete and verified.**
 **Gate 7 — Spatial Manipulation + Reconstruction: complete and verified.**
+**Gate 8 — Anatomy Provider Integration: pipeline complete and verified.**
 
 Working today:
+
+- A production anatomy ingestion pipeline: the VEO Anatomy Manifest, a
+  validator with fifteen error classes, hierarchy normalisation into Body →
+  System → Region → Structure, capability discovery, model versioning, two
+  provider implementations behind one conformance suite, and a server-side
+  security boundary that keeps licence credentials out of the browser.
+  **No licensed anatomy exists in this environment, so no anatomical geometry
+  has been rendered.**
 
 - Spatial manipulation that never destroys the model: layers (show / hide /
   ghost / restore), isolation, object hide and ghost, a peel driven by the
@@ -222,7 +249,7 @@ Working today:
   permanent VEO identity.
 - Supabase auth with session refresh and protected routes; Postgres schema and
   Row Level Security for all core tables.
-- 374 automated tests plus 408 live browser checks.
+- 468 automated tests plus 435 live browser checks.
 
 Deliberately **not** present:
 
@@ -236,7 +263,7 @@ Deliberately **not** present:
 - **No sectioning or cut planes yet** — the provider capability is declared in
   the contract; nothing sits behind it.
 
-Next: **Phase 4** — see [VEO_BUILD_STATUS.md](./VEO_BUILD_STATUS.md).
+Next: **Gate 9 — real licensed anatomy** — see [VEO_BUILD_STATUS.md](./VEO_BUILD_STATUS.md).
 
 ## Note on this repository
 

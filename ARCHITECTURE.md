@@ -865,6 +865,158 @@ publishes.
 
 ---
 
+## 18. Anatomy provider integration
+
+Everything above this section is domain-agnostic. This is where anatomy
+arrives — and the shape of the seam is what lets any other domain arrive the
+same way later.
+
+```
+licensed source → AnatomyProvider → adapter → manifest
+    → semantic graph → spatial engine → learning experience
+```
+
+### The identity rule
+
+**The provider's object id must never become VEO's identity.**
+
+A vendor asset contains meshes called `Heart_LV_001`; a hosted API returns
+`obj_88213`. Both are export artefacts that change between revisions and differ
+between vendors. The manifest declares the mapping in one direction:
+
+```
+providerId "obj_88213"     ──┐
+                             ├──→ veo.anatomy.heart.left_ventricle
+mesh       "Heart_LV_001"  ──┘
+```
+
+Swap the vendor, rewrite the manifest, and every question, flashcard, note and
+memory record a learner has built stays valid. The learner's work outlives the
+asset it was made against. A provider that resolves a selection does it through
+the mapping, never by trusting the id it was handed — the conformance suite
+asserts that a lookup by provider id returns nothing.
+
+### The manifest
+
+One document describing a model: `model`, `provider`, `modelVersion`,
+`manifestVersion`, `domain`, `body`, `systems`, `regions`, `structures`,
+`layers`, `relationships`, `explosion` and `capabilities`. A structure carries
+`semanticId`, `providerId`, `meshes`, `name`, `officialName`, `synonyms`,
+`kind`, `system`, `region`, `parentId`, `layers`, `description`, `function`,
+`references`, `educationalLevel`, `externalIds`, bounds and exploded offset.
+
+It is data, not code, so a new model needs no deployment.
+
+**VEO does not author it.** Every descriptive field comes from the manifest's
+author, with `references` recording where the claim came from. A structure with
+no description renders without one. A description with no citation raises a
+warning, because an anatomical claim VEO cannot stand behind should be visible
+as such rather than invisible.
+
+### Validation, and why it refuses
+
+A hand-authored manifest will be wrong sometimes. The question is whether it is
+wrong loudly or quietly.
+
+**A quietly wrong manifest is the worst failure this system has.** A structure
+mapped to the wrong mesh renders perfectly, selects perfectly, and teaches a
+learner something false — and nothing in the running application looks broken.
+So every check converts a silent mislabelling into a refusal to load:
+
+duplicate ids · orphaned parents · circular hierarchy · ambiguous meshes ·
+ambiguous provider ids · unresolved relationships, layers, regions and exploded
+groups · empty declared systems · leaves with nothing to render · ids from
+another domain · capability claims the data cannot support · geometry and
+manifest describing different revisions.
+
+Warnings — an unsourced claim, a relationship kind outside the vocabulary —
+never block. A model that is merely incomplete is still useful, and refusing it
+would push authors towards inventing content to satisfy a validator, which is
+the opposite of the point.
+
+### Versioning
+
+Geometry and semantics version separately and are corrected on different
+cadences, so the manifest carries both `modelVersion` and `manifestVersion`.
+When the asset stamps its own version, validation compares them and refuses a
+mismatch. Mixing semantic data from one revision with geometry from another
+mislabels structures while looking exactly like working software.
+
+### Hierarchy normalisation
+
+VEO's hierarchy is Body → System → Region → Structure → Substructure. No
+provider ships exactly that: one nests by dissection order, another by mesh
+grouping, a third gives a flat list with tags.
+
+The normaliser builds that shape from tags the manifest already declares. The
+grouping nodes it produces carry no geometry, no description and no anatomical
+claim — they are navigation, and they are marked `synthetic` so nothing
+mistakes them for content.
+
+It builds a **view**. The containment tree the manifest declares is untouched,
+so both survive: a learner navigating by system and a learner navigating by
+containment are asking different questions.
+
+### Capabilities
+
+Derived from the model's data, then narrowed twice — by what the manifest
+permits and by what the provider can drive. Never widened.
+
+A manifest claiming `supportsPeeling` with one peelable layer is a validation
+**error**, not a silently ignored field: an author who wrote it believed it
+would do something. This is Gate 7's rule enforced where manifests are written.
+
+### Security
+
+```
+browser  →  VEO server  →  licensed provider  →  temporary resource
+```
+
+The browser never holds a provider credential and never talks to the vendor.
+Configuration lives in `config/anatomy.server.ts`, which imports `server-only`
+so the build fails if a Client Component reaches it, and ESLint forbids the
+import from components, hooks and stores. A `NEXT_PUBLIC_` variable is compiled
+into the bundle; a licence token in a bundle is a licence token that has been
+published.
+
+Three further boundaries:
+
+- **The catalogue is the allowlist.** `/api/anatomy/<modelRef>` serves only
+  catalogued models. Without that it is an open proxy to any path on a licensed
+  host — precisely the extraction vector a licence forbids.
+- **Upstream errors are not echoed.** They carry hosts, paths and occasionally
+  the credential that failed.
+- **Manifests are validated server-side before being served**, then again in
+  the browser. A client that trusts a response shape it did not verify is one
+  proxy away from rendering someone else's data under VEO's labels.
+
+The verification runs with a **positive control**: the scan must first find the
+value of a public variable, because a scan that finds no secret may simply be a
+scan that finds nothing.
+
+### Conformance
+
+Every `AnatomyProvider` implementation passes the same 69 assertions —
+initialisation, model load, manifest, versions, structure lookup, hierarchy,
+normalisation, relationships, layers, capabilities, bounds, selection,
+visibility, isolation, camera, disposal, and replacement leaving no stale
+objects. A provider that passes behaves interchangeably with the others from
+the application's point of view, which is the whole promise of the abstraction.
+
+Driven by a fixture that names no body structure, sits under a reserved
+namespace, and is absent from the catalogue — asserted by a test, because a
+fixture that could be served as anatomy is a fixture that eventually will be.
+
+### What Gate 8 does NOT mean
+
+It does not mean anatomy is integrated. It means the pipeline is ready to
+accept it. **No anatomical geometry has been rendered by this build**, because
+no licensed source exists in this environment. When none is configured the
+product says so and renders nothing — no canvas, no stand-in, no primitive
+standing in for an organ.
+
+---
+
 ## Appendix: version pinning rationale
 
 Two pins are not "latest", for concrete compatibility reasons found by checking
