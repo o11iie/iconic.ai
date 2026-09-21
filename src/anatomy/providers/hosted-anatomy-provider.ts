@@ -1,5 +1,6 @@
 import { BaseSceneGraphProvider } from '@/engine/spatial/base-provider';
 import { SpatialError } from '@/engine/spatial/errors';
+import { resolveCapabilities } from '@/engine/spatial/capabilities';
 import { completeLayer } from '@/engine/spatial/layers';
 import type {
   LoadModelOptions,
@@ -8,25 +9,16 @@ import type {
   SpatialResult,
 } from '@/engine/spatial/provider';
 import type { FlyToOptions, ObjectSummary } from '@/engine/spatial/types';
-import { env } from '@/config/env';
 import { err, ok } from '@/lib/result';
 import type { SemanticId } from '@/lib/semantic-id';
 import type {
   Relationship,
   SpatialCapabilities,
   SpatialLayer,
-  SpatialModelGraph,
   SpatialObject,
   SpatialRegion,
   Vec3,
 } from '@/types/domain/spatial';
-import { resolveCapabilities } from '@/engine/spatial/capabilities';
-import {
-  buildMeshMapping,
-  buildProviderMapping,
-  type AnatomyManifest,
-} from '../mapping/manifest';
-import { parseManifest } from '../mapping/validation';
 import { manifestToGraph, objectIdsWhere } from '../mapping/graph';
 import {
   normalizeHierarchy,
@@ -34,40 +26,52 @@ import {
   systemsPresent,
   type HierarchyNode,
 } from '../mapping/hierarchy';
+import {
+  buildMeshMapping,
+  buildProviderMapping,
+  type AnatomyManifest,
+} from '../mapping/manifest';
+import { parseManifest } from '../mapping/validation';
 import type {
   AnatomyModelVersion,
   AnatomyProvider,
   AnatomyStructureMetadata,
 } from './anatomy-provider';
-import type {
-  AnatomyRegion,
-  AnatomyRelationshipKind,
-  AnatomySystem,
-} from '../taxonomy';
+import type { AnatomyRegion, AnatomyRelationshipKind, AnatomySystem } from '../taxonomy';
 
 /**
- * GLTF Asset Anatomy Provider
- * ===========================
+ * Hosted Anatomy Provider
+ * =======================
  *
- * Loads LICENSED GLB/GLTF anatomy assets plus their semantic mapping manifest
- * and renders them through VEO's own React Three Fiber scene.
+ * For licensed anatomy that authenticates.
  *
- * This provider generates NO geometry of its own. If no licensed asset source
- * is configured it reports `ready: false` with an explicit reason, and every
- * anatomy surface in the product renders that reason instead of fabricating
- * something that looks like anatomy. Fake anatomy would be worse than no
- * anatomy: a learner cannot tell the difference, and the product's entire
- * promise is that what you see is true.
+ * The browser never holds a provider credential and never talks to the vendor.
+ * It asks VEO's own server, which holds the key, fetches and validates the
+ * manifest, and returns it with a URL for the geometry that is time-limited
+ * when the licence requires it:
  *
- * Configure with:
- *   NEXT_PUBLIC_SPATIAL_ASSET_BASE_URL=https://<licensed-asset-host>/models
+ *     browser  →  /api/anatomy/<modelRef>  →  licensed provider
  *
- * Expected layout at that base URL, per model:
- *   <base>/<modelRef>/manifest.json   validated by mapping/manifest.ts
- *   <base>/<modelRef>/<assetPath>     the licensed .glb/.gltf named in the manifest
+ * That indirection is what makes a signed-URL or token-authenticated licence
+ * usable at all, and it is the same path whether or not the licence needs it.
+ * A secure path only exercised in production is a path nobody has tested.
+ *
+ * This provider renders through VEO's own engine, so everything Gates 5–7
+ * built — selection, layers, peel, dissection, exploded view — applies
+ * unchanged. A vendor that owns its renderer would instead implement
+ * `SpatialProvider` without `rendersIntoVeoScene` and mount its own component;
+ * that is a different adapter, and deliberately not this one.
+ *
+ * ## Status
+ *
+ * This adapter is complete and exercised by the conformance suite. It has NOT
+ * been run against a commercial anatomy vendor, because no licence or
+ * credential exists in this environment. Vendor-specific request shaping —
+ * whatever a particular provider's API expects — belongs in the server route,
+ * not here, and is the one piece that a real integration still has to write.
  */
-export class GltfAnatomyProvider extends BaseSceneGraphProvider implements AnatomyProvider {
-  readonly id = 'gltf-asset';
+export class HostedAnatomyProvider extends BaseSceneGraphProvider implements AnatomyProvider {
+  readonly id = 'hosted';
 
   protected readonly capabilities: SpatialProviderCapabilities = {
     ownsRenderer: false,
@@ -75,9 +79,6 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     supportsGhosting: true,
     supportsIsolation: true,
     supportsCutPlanes: false,
-    // VEO's own engine performs the exploded view, using the displacements the
-    // manifest declares. Reported true because this provider renders through
-    // that engine; a provider owning its renderer would report its own answer.
     supportsExplodedView: true,
     supportsAnimation: false,
     providesHierarchy: true,
@@ -86,39 +87,54 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
 
   private manifest: AnatomyManifest | null = null;
   private meshMapping: Map<string, SemanticId> = new Map();
-  /** Provider object id -> VEO identity. Unused by this provider; see below. */
   private providerMapping: Map<string, SemanticId> = new Map();
   private hierarchy: HierarchyNode | null = null;
   private assetUrl: string | null = null;
-  private baseUrl: string | null = null;
-  private readonly configuredBaseUrl: string | undefined;
+
+  private readonly endpoint: string;
 
   /**
-   * `baseUrl` overrides the environment. This exists so a deployment can serve
-   * several licensed asset hosts from one build (and so the provider is
-   * testable without global environment state).
+   * `endpoint` overrides VEO's own route. Exists so the conformance suite can
+   * drive this provider against a controlled fixture without a live server.
    */
-  constructor(options: { readonly baseUrl?: string } = {}) {
+  constructor(options: { readonly endpoint?: string } = {}) {
     super();
-    this.configuredBaseUrl = options.baseUrl;
+    this.endpoint = (options.endpoint ?? '/api/anatomy').replace(/\/+$/, '');
   }
 
+  /**
+   * Ask the server whether anatomy can be served here.
+   *
+   * The reason for "no" comes from the server in the words a learner will
+   * read, rather than being reconstructed in the browser from flags.
+   */
   async initialize(): SpatialResult<SpatialProviderStatus> {
-    const configured = this.configuredBaseUrl ?? env.NEXT_PUBLIC_SPATIAL_ASSET_BASE_URL;
+    try {
+      const response = await fetch(this.endpoint, { headers: { accept: 'application/json' } });
+      if (!response.ok) {
+        this.ready = false;
+        this.notReadyReason = `VEO's anatomy service returned HTTP ${response.status}.`;
+        return err(SpatialError.notConfigured(this.id));
+      }
 
-    if (!configured) {
+      const body = (await response.json()) as { configured?: boolean; reason?: string | null };
+
+      if (!body.configured) {
+        this.ready = false;
+        this.notReadyReason =
+          body.reason ?? 'No licensed anatomy source is configured for this deployment.';
+        return err(SpatialError.notConfigured(this.id));
+      }
+
+      this.ready = true;
+      this.notReadyReason = null;
+      this.touch();
+      return ok(this.getStatus());
+    } catch {
       this.ready = false;
-      this.notReadyReason =
-        'No licensed spatial asset source is configured. Set NEXT_PUBLIC_SPATIAL_ASSET_BASE_URL to the host serving your licensed GLB/GLTF anatomy assets.';
+      this.notReadyReason = "VEO's anatomy service could not be reached.";
       return err(SpatialError.notConfigured(this.id));
     }
-
-    this.baseUrl = configured.replace(/\/+$/, '');
-    this.ready = true;
-    this.notReadyReason = null;
-    this.touch();
-
-    return ok(this.getStatus());
   }
 
   getAssetUrl(): string | null {
@@ -129,47 +145,53 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     return this.meshMapping;
   }
 
-  async loadModel(modelRef: string, options?: LoadModelOptions): SpatialResult<SpatialModelGraph> {
-    if (!this.ready || !this.baseUrl) {
-      return err(SpatialError.notConfigured(this.id));
-    }
+  /** Provider object id -> VEO identity, for a vendor that addresses by id. */
+  resolveProviderId(providerId: string): SemanticId | null {
+    return this.providerMapping.get(providerId) ?? null;
+  }
 
-    // Entering the lifecycle bumps the generation, so a load already in
-    // flight for a different model cannot complete into this one.
+  async loadModel(modelRef: string, options?: LoadModelOptions) {
+    if (!this.ready) return err(SpatialError.notConfigured(this.id));
+
     const { generation } = this.scene.dispatchLifecycle({ type: 'load', modelRef });
+    options?.onProgress?.({ ratio: null, loadedBytes: 0, totalBytes: null, phase: 'downloading' });
 
-    const manifestUrl = `${this.baseUrl}/${modelRef}/manifest.json`;
-    options?.onProgress?.({
-      ratio: null,
-      loadedBytes: 0,
-      totalBytes: null,
-      phase: 'downloading',
-    });
+    let payload: {
+      manifest?: unknown;
+      assetUrl?: string;
+      message?: string;
+      issues?: string[];
+    };
 
-    let payload: unknown;
     try {
-      const response = await fetch(manifestUrl, {
+      const response = await fetch(`${this.endpoint}/${encodeURIComponent(modelRef)}`, {
         signal: options?.signal ?? null,
         headers: { accept: 'application/json' },
       });
+      payload = (await response.json()) as typeof payload;
+
       if (!response.ok) {
         const failure = SpatialError.modelUnavailable(
           modelRef,
-          `manifest request failed with HTTP ${response.status}`,
+          payload.message ?? `VEO's anatomy service returned HTTP ${response.status}`,
         );
         this.scene.dispatchLifecycle({ type: 'fail', error: failure.message, generation });
         return err(failure);
       }
-      payload = await response.json();
     } catch (cause) {
-      const failure = SpatialError.assetLoadFailed(manifestUrl, cause);
+      const failure = SpatialError.assetLoadFailed(`${this.endpoint}/${modelRef}`, cause);
       this.scene.dispatchLifecycle({ type: 'fail', error: failure.message, generation });
       return err(failure);
     }
 
     options?.onProgress?.({ ratio: null, loadedBytes: 0, totalBytes: null, phase: 'mapping' });
 
-    const parsed = parseManifest(payload);
+    /*
+     * The server validated this manifest already. It is validated again here
+     * because a client that trusts a response shape it did not verify is one
+     * proxy away from rendering someone else's data under VEO's labels.
+     */
+    const parsed = parseManifest(payload.manifest);
     if (!parsed.ok) {
       const failure = SpatialError.modelUnavailable(
         modelRef,
@@ -180,17 +202,10 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     }
 
     const manifest = parsed.value;
-
-    /*
-     * A manifest written for another provider describes objects this one
-     * cannot address. Loading it anyway would render geometry under labels
-     * that were never meant for it — the exact silent mislabelling the
-     * manifest contract exists to prevent.
-     */
-    if (manifest.provider !== this.id) {
+    if (manifest.provider !== this.id && manifest.provider !== 'gltf-asset') {
       const failure = SpatialError.modelUnavailable(
         modelRef,
-        `manifest is written for provider "${manifest.provider}", not "${this.id}"`,
+        `manifest is written for provider "${manifest.provider}", which this adapter cannot render`,
       );
       this.scene.dispatchLifecycle({ type: 'fail', error: failure.message, generation });
       return err(failure);
@@ -200,11 +215,9 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     this.meshMapping = buildMeshMapping(manifest);
     this.providerMapping = buildProviderMapping(manifest);
     this.hierarchy = normalizeHierarchy(manifest);
-    this.assetUrl = `${this.baseUrl}/${modelRef}/${manifest.assetPath}`;
+    this.assetUrl = payload.assetUrl ?? null;
 
-    const graph = manifestToGraph(manifest, { providerId: this.id, baseUrl: this.baseUrl });
-    // publishGraph tells the scene controller which objects now exist, which
-    // is what makes selection and visual state resolvable.
+    const graph = manifestToGraph(manifest, { providerId: this.id, baseUrl: null });
     this.publishGraph(graph);
     this.scene.dispatchLifecycle({ type: 'loaded', generation });
 
@@ -214,13 +227,14 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
 
   // ---- AnatomyProvider ------------------------------------------------------
 
-  async loadSystem(system: AnatomySystem, options?: LoadModelOptions): SpatialResult<SpatialLayer> {
+  async loadSystem(system: AnatomySystem): SpatialResult<SpatialLayer> {
     const layer = this.graph?.layers.find((candidate) => candidate.id === system);
     if (layer) return ok(layer);
 
-    // Not a preloaded layer: synthesise one from the objects tagged with this
-    // system. This is real grouping over real loaded data, not invented content.
-    const objectIds = this.manifest ? objectIdsWhere(this.manifest, (o) => o.system === system) : [];
+    const objectIds = this.manifest
+      ? objectIdsWhere(this.manifest, (object) => object.system === system)
+      : [];
+
     if (objectIds.length === 0) {
       return err(
         SpatialError.modelUnavailable(
@@ -230,7 +244,6 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
       );
     }
 
-    void options;
     return ok(
       completeLayer({
         id: system,
@@ -245,14 +258,14 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     );
   }
 
-  async loadAnatomyRegion(
-    region: AnatomyRegion,
-    options?: LoadModelOptions,
-  ): SpatialResult<SpatialRegion> {
+  async loadAnatomyRegion(region: AnatomyRegion): SpatialResult<SpatialRegion> {
     const existing = this.graph?.regions.find((candidate) => candidate.id === region);
     if (existing) return ok(existing);
 
-    const objectIds = this.manifest ? objectIdsWhere(this.manifest, (o) => o.region === region) : [];
+    const objectIds = this.manifest
+      ? objectIdsWhere(this.manifest, (object) => object.region === region)
+      : [];
+
     if (objectIds.length === 0) {
       return err(
         SpatialError.modelUnavailable(
@@ -262,7 +275,6 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
       );
     }
 
-    void options;
     return ok({
       id: region,
       modelId: this.graph?.model.id ?? '',
@@ -313,7 +325,6 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     return this.getPosition(semanticId);
   }
 
-  /** Select, ghost the surrounding context, and fly the camera in. */
   focusStructure(semanticId: SemanticId, options: FlyToOptions = {}): void {
     this.select(semanticId);
     this.isolate(semanticId);
@@ -336,17 +347,8 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     return this.manifest;
   }
 
-  /**
-   * What can be done to the loaded model.
-   *
-   * The engine derives this from the graph and narrows it by what the manifest
-   * permits; this narrows it again by what the PROVIDER can actually drive. A
-   * provider that owns its own renderer and cannot ghost reports no ghosting,
-   * whatever the data would allow.
-   */
   getCapabilities(): SpatialCapabilities {
     const derived = resolveCapabilities(this.scene.getGraph());
-
     return {
       ...derived,
       supportsGhosting: derived.supportsGhosting && this.capabilities.supportsGhosting,
@@ -368,4 +370,12 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     };
   }
 
+  override dispose(): void {
+    this.manifest = null;
+    this.meshMapping = new Map();
+    this.providerMapping = new Map();
+    this.hierarchy = null;
+    this.assetUrl = null;
+    super.dispose();
+  }
 }
