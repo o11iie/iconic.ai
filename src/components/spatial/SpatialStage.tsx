@@ -19,6 +19,7 @@ import type { SceneVisualState } from '@/engine/spatial/types';
 import { isSemanticId, type SemanticId } from '@/lib/semantic-id';
 import type { BoundingBox } from '@/types/domain/spatial';
 import type { MaterialStats } from '@/engine/3d/materials/material-state';
+import type { TransformReader } from '@/engine/3d/transform-state';
 
 /**
  * The 3D stage.
@@ -37,6 +38,8 @@ export interface SpatialStageProps {
   readonly assetUrl: string | null;
   readonly meshMapping: ReadonlyMap<string, SemanticId>;
   readonly visual: SceneVisualState;
+  /** Manipulation displacements by semantic id. Empty when nothing is moved. */
+  readonly offsets: ReadonlyMap<SemanticId, readonly [number, number, number]>;
   readonly controller: SceneController;
   readonly interactionMode: string;
   readonly reducedMotion: boolean;
@@ -51,6 +54,7 @@ export function SpatialStage({
   assetUrl,
   meshMapping,
   visual,
+  offsets,
   controller,
   interactionMode,
   reducedMotion,
@@ -76,6 +80,12 @@ export function SpatialStage({
   const materialStats = useRef<(() => MaterialStats) | null>(null);
   const readMaterialStats = useCallback((read: () => MaterialStats) => {
     materialStats.current = read;
+  }, []);
+
+  /** Live transform bookkeeping, published by the scene root. */
+  const transforms = useRef<TransformReader | null>(null);
+  const readTransformStats = useCallback((reader: TransformReader) => {
+    transforms.current = reader;
   }, []);
 
   /**
@@ -141,6 +151,21 @@ export function SpatialStage({
           sceneEpoch,
           generation: controller.registry.generation,
           revision: snapshot.revision,
+
+          transformsTracked: transforms.current?.stats().tracked ?? 0,
+          transformsDisplaced: transforms.current?.stats().displaced ?? 0,
+          peelLevel: snapshot.manipulation.peelLevel,
+          peelSteps: snapshot.peelSteps,
+          isolatedId: snapshot.manipulation.isolatedId,
+          dissectedIds: [...snapshot.manipulation.dissectedIds],
+          hiddenIds: [...snapshot.manipulation.hiddenIds],
+          ghostedIds: [...snapshot.manipulation.ghostedIds],
+          hiddenLayerIds: [...snapshot.manipulation.hiddenLayerIds],
+          ghostedLayerIds: [...snapshot.manipulation.ghostedLayerIds],
+          exploded: snapshot.manipulation.exploded,
+          capabilities: { ...snapshot.capabilities },
+          canUndo: snapshot.canUndo,
+          canRedo: snapshot.canRedo,
         };
       },
       {
@@ -178,6 +203,48 @@ export function SpatialStage({
           return entry !== undefined;
         },
         resolveCaptured: () => controller.registry.resolve(capturedNode.current),
+
+        hideObject: (id) => (isSemanticId(id) ? controller.hideObject(id) : false),
+        showObject: (id) => (isSemanticId(id) ? controller.showObject(id) : false),
+        ghostObject: (id) => (isSemanticId(id) ? controller.ghostObject(id) : false),
+        isolateObject: (id) =>
+          isSemanticId(id) ? controller.isolateObject(id, { durationMs: 0 }) : false,
+        restoreIsolation: () => controller.restoreIsolation(),
+        dissect: (id) => (isSemanticId(id) ? controller.dissectObject(id) : false),
+        restoreDissection: () => controller.restoreDissection(),
+        resetDissection: () => controller.resetDissection(),
+        showLayer: (layerId) => controller.showLayer(layerId),
+        hideLayer: (layerId) => controller.hideLayer(layerId),
+        ghostLayer: (layerId) => controller.ghostLayer(layerId),
+        restoreLayer: (layerId) => controller.restoreLayer(layerId),
+        layerState: (layerId) => controller.getLayerState(layerId),
+        nextPeel: () => controller.nextPeel(),
+        previousPeel: () => controller.previousPeel(),
+        resetPeel: () => controller.resetPeel(),
+        explode: () => controller.enterExplodedView(),
+        implode: () => controller.exitExplodedView(),
+        reconstructStep: () => controller.reconstructStep(),
+        reconstructAll: () => controller.reconstructAll(),
+        resetScene: () => controller.resetScene({ durationMs: 0 }),
+        undo: () => controller.undoManipulation(),
+        redo: () => controller.redoManipulation(),
+
+        nodeTransform: (id) => {
+          if (!isSemanticId(id)) return null;
+          const entry = controller.registry.get(id);
+          if (!entry) return null;
+
+          const node = entry.node as unknown as THREE.Object3D;
+          const base = transforms.current?.baseOf(node) ?? null;
+          return {
+            position: [node.position.x, node.position.y, node.position.z],
+            base: base ? [base.x, base.y, base.z] : null,
+          };
+        },
+        visualState: (id) =>
+          isSemanticId(id)
+            ? (controller.getSnapshot().visual.states.get(id) ?? null)
+            : null,
       },
     );
   }, [diagnostic, controller, sceneEpoch]);
@@ -215,11 +282,14 @@ export function SpatialStage({
         {...(diagnostic ? {} : { meshMapping })}
         controller={controller}
         visual={visual}
+        offsets={offsets}
         interactionMode={interactionMode}
         onModelBounds={setModelBox}
         {...(onUnmappedMeshes ? { onUnmappedMeshes } : {})}
         {...(onRegistryReady ? { onRegistryReady } : {})}
-        {...(diagnostic ? { onMaterialStats: readMaterialStats } : {})}
+        {...(diagnostic
+          ? { onMaterialStats: readMaterialStats, onTransformStats: readTransformStats }
+          : {})}
       />
 
       {diagnostic ? <EngineDebugBridge /> : null}

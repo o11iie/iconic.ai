@@ -11,6 +11,7 @@ import type { SceneVisualState } from '@/engine/spatial/types';
 import type { BoundingBox } from '@/types/domain/spatial';
 import { boundsOf, boundsOfAll } from '../bounds';
 import { MaterialStateManager, type MaterialStats } from '../materials/material-state';
+import { TransformStateManager, type TransformReader } from '../transform-state';
 import { disposeObject3D } from '../disposal';
 import { isClick, modeAllowsHover, modeAllowsSelection, type PointerOrigin } from '../interaction/pointer';
 
@@ -39,6 +40,8 @@ export interface SpatialSceneRootProps {
   /** Scene state owner. Selection and hover are written here, not to local state. */
   readonly controller: SceneController;
   readonly visual: SceneVisualState;
+  /** Manipulation displacements by semantic id. Empty when nothing is moved. */
+  readonly offsets: ReadonlyMap<SemanticId, readonly [number, number, number]>;
   readonly interactionMode: string;
   readonly onModelBounds: (box: BoundingBox | null) => void;
   readonly onUnmappedMeshes?: (names: readonly string[]) => void;
@@ -51,6 +54,8 @@ export interface SpatialSceneRootProps {
    * change — which would defeat the on-demand frame loop.
    */
   readonly onMaterialStats?: (read: () => MaterialStats) => void;
+  /** Publishes a read-only view of transform bookkeeping. Diagnostics only. */
+  readonly onTransformStats?: (reader: TransformReader) => void;
 }
 
 export function SpatialSceneRoot({
@@ -58,14 +63,17 @@ export function SpatialSceneRoot({
   meshMapping,
   controller,
   visual,
+  offsets,
   interactionMode,
   onModelBounds,
   onUnmappedMeshes,
   onRegistryReady,
   onMaterialStats,
+  onTransformStats,
 }: SpatialSceneRootProps) {
   const invalidate = useThree((state) => state.invalidate);
   const materials = useMemo(() => new MaterialStateManager(), []);
+  const transforms = useMemo(() => new TransformStateManager(), []);
   const pointerOrigin = useRef<PointerOrigin | null>(null);
 
   /**
@@ -162,6 +170,37 @@ export function SpatialSceneRoot({
     onMaterialStats?.(() => materials.stats);
   }, [materials, onMaterialStats]);
 
+  useEffect(() => {
+    onTransformStats?.(transforms.reader);
+  }, [transforms, onTransformStats]);
+
+  /**
+   * Apply manipulation displacements.
+   *
+   * The offsets are a semantic answer — which structure moves how far — and
+   * this is the only place they touch a transform. Nodes absent from the map
+   * are returned to their authored position rather than left where a previous
+   * view put them, so leaving an exploded view is a restore, not a second
+   * displacement that happens to cancel the first.
+   */
+  useEffect(() => {
+    if (!root) return;
+
+    let changed = false;
+    for (const entry of controller.registry.all()) {
+      const node = entry.node as unknown as THREE.Object3D;
+      const offset = offsets.get(entry.semanticId);
+
+      if (offset) {
+        if (transforms.apply(node, offset)) changed = true;
+      } else if (transforms.reset(node)) {
+        changed = true;
+      }
+    }
+
+    if (changed) invalidate();
+  }, [offsets, root, controller, transforms, invalidate]);
+
   /** Apply visual state whenever it changes. */
   useEffect(() => {
     if (!root) return;
@@ -189,10 +228,13 @@ export function SpatialSceneRoot({
   useEffect(() => {
     const current = root;
     return () => {
+      // Transforms first: disposal should see the geometry where the asset
+      // put it, not where a manipulation left it.
+      transforms.dispose();
       materials.dispose();
       if (current) disposeObject3D(current);
     };
-  }, [root, materials]);
+  }, [root, materials, transforms]);
 
   const resolve = useCallback(
     (event: ThreeEvent<PointerEvent | MouseEvent>): SemanticId | null => {

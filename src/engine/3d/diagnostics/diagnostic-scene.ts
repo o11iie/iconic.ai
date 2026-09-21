@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { buildSemanticId, type SemanticId } from '@/lib/semantic-id';
 import { tagNode } from '@/engine/spatial/object-registry';
+import { completeLayer } from '@/engine/spatial/layers';
 import type {
+  ExplodedGroup,
   Relationship,
   SpatialLayer,
   SpatialModel,
@@ -43,15 +45,37 @@ export const DIAGNOSTIC_LABEL = 'VEO SPATIAL ENGINE TEST';
 
 const id = (...path: string[]): SemanticId => buildSemanticId(DIAGNOSTIC_DOMAIN, ...path);
 
-/** Root, two systems, and four objects — enough to exercise real hierarchy. */
+/**
+ * Root, three systems and five objects.
+ *
+ * Enough to exercise real hierarchy, and enough for layers to cut ACROSS it:
+ * the shell and frame layers each take one object from System A and one from
+ * System B, which is what proves a layer is a way of looking at a model rather
+ * than a second hierarchy.
+ */
 export const DIAGNOSTIC_IDS = {
   root: id('test_scene'),
   systemA: id('test_scene', 'system_a'),
   systemB: id('test_scene', 'system_b'),
+  systemC: id('test_scene', 'system_c'),
   object1: id('test_scene', 'system_a', 'object_1'),
   object2: id('test_scene', 'system_a', 'object_2'),
   object3: id('test_scene', 'system_b', 'object_3'),
   object4: id('test_scene', 'system_b', 'object_4'),
+  object5: id('test_scene', 'system_c', 'object_5'),
+} as const;
+
+/**
+ * Diagnostic layers, outermost first.
+ *
+ * `core` is deliberately not peelable: peeling every layer would leave an
+ * empty viewport, and a peel that ends in nothing teaches nothing. Two
+ * peelable layers means two peel steps, each revealing what sits beneath.
+ */
+export const DIAGNOSTIC_LAYERS = {
+  shell: 'shell',
+  frame: 'frame',
+  core: 'core',
 } as const;
 
 export interface DiagnosticNodeSpec {
@@ -59,10 +83,19 @@ export interface DiagnosticNodeSpec {
   readonly label: string;
   readonly parentId: SemanticId;
   readonly position: [number, number, number];
-  readonly kind: 'box' | 'sphere' | 'torus' | 'cone';
+  readonly kind: 'box' | 'sphere' | 'torus' | 'cone' | 'octahedron';
   readonly system: string;
   readonly region: string;
+  readonly layerId: string;
   readonly color: string;
+  /**
+   * Displacement in an exploded view, when this node declares one.
+   *
+   * Declared for System A so the explicit-offset path is exercised; System B
+   * is left undeclared so its offsets come from the exploded group below, and
+   * both routes are covered by the same scene.
+   */
+  readonly explodedOffset?: [number, number, number];
 }
 
 /**
@@ -81,7 +114,9 @@ export const DIAGNOSTIC_NODES: readonly DiagnosticNodeSpec[] = [
     kind: 'box',
     system: 'system_a',
     region: 'quadrant_west',
+    layerId: 'shell',
     color: '#64748b',
+    explodedOffset: [-1.3, 0, 0],
   },
   {
     semanticId: DIAGNOSTIC_IDS.object2,
@@ -91,7 +126,9 @@ export const DIAGNOSTIC_NODES: readonly DiagnosticNodeSpec[] = [
     kind: 'torus',
     system: 'system_a',
     region: 'quadrant_north',
+    layerId: 'frame',
     color: '#64748b',
+    explodedOffset: [0, 1.3, 0],
   },
   {
     semanticId: DIAGNOSTIC_IDS.object3,
@@ -101,6 +138,7 @@ export const DIAGNOSTIC_NODES: readonly DiagnosticNodeSpec[] = [
     kind: 'sphere',
     system: 'system_b',
     region: 'quadrant_east',
+    layerId: 'shell',
     color: '#64748b',
   },
   {
@@ -111,6 +149,18 @@ export const DIAGNOSTIC_NODES: readonly DiagnosticNodeSpec[] = [
     kind: 'cone',
     system: 'system_b',
     region: 'quadrant_south',
+    layerId: 'frame',
+    color: '#64748b',
+  },
+  {
+    semanticId: DIAGNOSTIC_IDS.object5,
+    label: 'Object 5',
+    parentId: DIAGNOSTIC_IDS.systemC,
+    position: [0, 0, 0],
+    kind: 'octahedron',
+    system: 'system_c',
+    region: 'quadrant_centre',
+    layerId: 'core',
     color: '#64748b',
   },
 ];
@@ -125,6 +175,25 @@ const DIAGNOSTIC_GROUPS: readonly {
   { semanticId: DIAGNOSTIC_IDS.root, label: 'Test Scene', parentId: null, system: null },
   { semanticId: DIAGNOSTIC_IDS.systemA, label: 'System A', parentId: DIAGNOSTIC_IDS.root, system: 'system_a' },
   { semanticId: DIAGNOSTIC_IDS.systemB, label: 'System B', parentId: DIAGNOSTIC_IDS.root, system: 'system_b' },
+  { semanticId: DIAGNOSTIC_IDS.systemC, label: 'System C', parentId: DIAGNOSTIC_IDS.root, system: 'system_c' },
+];
+
+/**
+ * Objects whose exploded displacement is derived rather than declared.
+ *
+ * System B's parts move directly away from the scene centre, by an amount the
+ * group's scale and spacing fix exactly. Declaring the centre rather than
+ * averaging the members keeps the result independent of which members happen
+ * to be visible.
+ */
+const DIAGNOSTIC_EXPLOSION: readonly ExplodedGroup[] = [
+  {
+    id: 'system_b',
+    objectIds: [DIAGNOSTIC_IDS.object3, DIAGNOSTIC_IDS.object4],
+    center: [0, 0, 0],
+    scale: 1.5,
+    spacing: 0.8,
+  },
 ];
 
 /** Typed edges, proving relationship resolution across and within systems. */
@@ -168,6 +237,8 @@ function geometryFor(kind: DiagnosticNodeSpec['kind']): THREE.BufferGeometry {
       return new THREE.TorusGeometry(0.42, 0.16, 20, 48);
     case 'cone':
       return new THREE.ConeGeometry(0.52, 0.95, 32);
+    case 'octahedron':
+      return new THREE.OctahedronGeometry(0.46, 0);
     default:
       return new THREE.BoxGeometry(0.9, 0.9, 0.9);
   }
@@ -190,7 +261,9 @@ function emptyObject(
     childIds,
     system,
     region: null,
-    layerIds: system ? [system] : [],
+    // Grouping nodes draw nothing, so layer membership would describe no
+    // geometry. A layer's object list stays a list of things it can show.
+    layerIds: [],
     providerMeshNames: [],
     boundingBox: null,
     description: null,
@@ -213,7 +286,7 @@ export function buildDiagnosticGraph(): SpatialModelGraph {
   for (const group of DIAGNOSTIC_GROUPS) {
     const childIds =
       group.semanticId === DIAGNOSTIC_IDS.root
-        ? [DIAGNOSTIC_IDS.systemA, DIAGNOSTIC_IDS.systemB]
+        ? [DIAGNOSTIC_IDS.systemA, DIAGNOSTIC_IDS.systemB, DIAGNOSTIC_IDS.systemC]
         : DIAGNOSTIC_NODES.filter((node) => node.parentId === group.semanticId).map(
             (node) => node.semanticId,
           );
@@ -235,27 +308,67 @@ export function buildDiagnosticGraph(): SpatialModelGraph {
       childIds: [],
       system: node.system,
       region: node.region,
-      layerIds: [node.system],
+      layerIds: [node.layerId],
       providerMeshNames: [node.label],
       boundingBox: null,
+      ...(node.explodedOffset ? { explodedOffset: node.explodedOffset } : {}),
       description: `Diagnostic ${node.kind} used to verify selection, hierarchy, relationships and camera targeting. Not subject content.`,
       synonyms: [`${node.kind} node`],
       metadata: { diagnostic: true, primitive: node.kind },
     });
   }
 
-  const layers: SpatialLayer[] = ['system_a', 'system_b'].map((system, index) => ({
-    id: system,
-    modelId: DIAGNOSTIC_MODEL_ID,
-    name: system === 'system_a' ? 'System A' : 'System B',
-    description: 'Diagnostic layer',
-    objectIds: DIAGNOSTIC_NODES.filter((node) => node.system === system).map(
-      (node) => node.semanticId,
-    ),
-    defaultVisible: true,
-    order: index,
-    colorToken: null,
-  }));
+  /*
+   * Three layers, outermost first. They cut across the system hierarchy on
+   * purpose: `shell` holds one object from each of System A and System B, so
+   * hiding a layer and hiding a system are visibly different operations.
+   */
+  const layerSpecs: readonly {
+    id: string;
+    name: string;
+    description: string;
+    order: number;
+    peelable: boolean;
+  }[] = [
+    {
+      id: DIAGNOSTIC_LAYERS.shell,
+      name: 'Shell',
+      description: 'Outermost diagnostic layer',
+      order: 0,
+      peelable: true,
+    },
+    {
+      id: DIAGNOSTIC_LAYERS.frame,
+      name: 'Frame',
+      description: 'Intermediate diagnostic layer',
+      order: 1,
+      peelable: true,
+    },
+    {
+      id: DIAGNOSTIC_LAYERS.core,
+      name: 'Core',
+      description: 'Innermost diagnostic layer, never peeled away',
+      order: 2,
+      peelable: false,
+    },
+  ];
+
+  const layers: SpatialLayer[] = layerSpecs.map((spec) =>
+    completeLayer({
+      id: spec.id,
+      modelId: DIAGNOSTIC_MODEL_ID,
+      name: spec.name,
+      description: spec.description,
+      objectIds: DIAGNOSTIC_NODES.filter((node) => node.layerId === spec.id).map(
+        (node) => node.semanticId,
+      ),
+      defaultVisible: true,
+      order: spec.order,
+      peelable: spec.peelable,
+      peelMode: 'ghost',
+      colorToken: null,
+    }),
+  );
 
   const relationships: Relationship[] = DIAGNOSTIC_RELATIONSHIPS.map((edge, index) => ({
     id: `${DIAGNOSTIC_MODEL_ID}:rel:${index}`,
@@ -294,7 +407,7 @@ export function buildDiagnosticGraph(): SpatialModelGraph {
     updatedAt: now,
   };
 
-  return { model, objects, layers, regions: [], relationships };
+  return { model, objects, layers, regions: [], relationships, explosion: DIAGNOSTIC_EXPLOSION };
 }
 
 /**

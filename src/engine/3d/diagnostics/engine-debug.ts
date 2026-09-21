@@ -65,6 +65,30 @@ export interface EngineDebugState {
    * repeatedly waking the React tree.
    */
   readonly revision: number;
+
+  // ---- manipulation (Gate 7) -----------------------------------------------
+
+  /** Meshes whose base transform is held, and how many are displaced. */
+  readonly transformsTracked: number;
+  readonly transformsDisplaced: number;
+  readonly peelLevel: number;
+  readonly peelSteps: number;
+  readonly isolatedId: string | null;
+  readonly dissectedIds: readonly string[];
+  readonly hiddenIds: readonly string[];
+  readonly ghostedIds: readonly string[];
+  readonly hiddenLayerIds: readonly string[];
+  readonly ghostedLayerIds: readonly string[];
+  readonly exploded: boolean;
+  readonly capabilities: Readonly<Record<string, boolean>>;
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+}
+
+/** One node's world position, for verifying an exploded view moved it. */
+export interface EngineNodeTransform {
+  readonly position: [number, number, number];
+  readonly base: [number, number, number] | null;
 }
 
 export interface EngineDebugHandle {
@@ -103,6 +127,36 @@ export interface EngineDebugHandle {
   captureNode: (semanticId: string) => boolean;
   /** Resolve the captured node against the CURRENT registry. */
   resolveCaptured: () => string | null;
+
+  // ---- manipulation (Gate 7) -----------------------------------------------
+
+  hideObject: (semanticId: string) => boolean;
+  showObject: (semanticId: string) => boolean;
+  ghostObject: (semanticId: string) => boolean;
+  isolateObject: (semanticId: string) => boolean;
+  restoreIsolation: () => void;
+  dissect: (semanticId: string) => boolean;
+  restoreDissection: () => string | null;
+  resetDissection: () => void;
+  showLayer: (layerId: string) => void;
+  hideLayer: (layerId: string) => void;
+  ghostLayer: (layerId: string) => void;
+  restoreLayer: (layerId: string) => void;
+  layerState: (layerId: string) => string;
+  nextPeel: () => boolean;
+  previousPeel: () => boolean;
+  resetPeel: () => void;
+  explode: () => boolean;
+  implode: () => void;
+  reconstructStep: () => boolean;
+  reconstructAll: () => void;
+  resetScene: () => void;
+  undo: () => boolean;
+  redo: () => boolean;
+  /** Live world position of a structure's node, and its authored position. */
+  nodeTransform: (semanticId: string) => EngineNodeTransform | null;
+  /** The visual state of one object, as the engine resolved it. */
+  visualState: (semanticId: string) => string | null;
 }
 
 declare global {
@@ -125,6 +179,8 @@ const sources: {
 
 const EMPTY_HIERARCHY: EngineHierarchyState = { parent: null, ancestors: [], children: [] };
 
+const NO_CAPABILITIES: Readonly<Record<string, boolean>> = {};
+
 const actions: {
   replaceScene: () => void;
   select: (id: string | null) => void;
@@ -138,6 +194,31 @@ const actions: {
   search: (query: string) => readonly string[];
   captureNode: (id: string) => boolean;
   resolveCaptured: () => string | null;
+  hideObject: (id: string) => boolean;
+  showObject: (id: string) => boolean;
+  ghostObject: (id: string) => boolean;
+  isolateObject: (id: string) => boolean;
+  restoreIsolation: () => void;
+  dissect: (id: string) => boolean;
+  restoreDissection: () => string | null;
+  resetDissection: () => void;
+  showLayer: (layerId: string) => void;
+  hideLayer: (layerId: string) => void;
+  ghostLayer: (layerId: string) => void;
+  restoreLayer: (layerId: string) => void;
+  layerState: (layerId: string) => string;
+  nextPeel: () => boolean;
+  previousPeel: () => boolean;
+  resetPeel: () => void;
+  explode: () => boolean;
+  implode: () => void;
+  reconstructStep: () => boolean;
+  reconstructAll: () => void;
+  resetScene: () => void;
+  undo: () => boolean;
+  redo: () => boolean;
+  nodeTransform: (id: string) => EngineNodeTransform | null;
+  visualState: (id: string) => string | null;
 } = {
   replaceScene: () => {},
   select: () => {},
@@ -151,6 +232,31 @@ const actions: {
   search: () => [],
   captureNode: () => false,
   resolveCaptured: () => null,
+  hideObject: () => false,
+  showObject: () => false,
+  ghostObject: () => false,
+  isolateObject: () => false,
+  restoreIsolation: () => {},
+  dissect: () => false,
+  restoreDissection: () => null,
+  resetDissection: () => {},
+  showLayer: () => {},
+  hideLayer: () => {},
+  ghostLayer: () => {},
+  restoreLayer: () => {},
+  layerState: () => 'visible',
+  nextPeel: () => false,
+  previousPeel: () => false,
+  resetPeel: () => {},
+  explode: () => false,
+  implode: () => {},
+  reconstructStep: () => false,
+  reconstructAll: () => {},
+  resetScene: () => {},
+  undo: () => false,
+  redo: () => false,
+  nodeTransform: () => null,
+  visualState: () => null,
 };
 
 function install(): void {
@@ -173,6 +279,20 @@ function install(): void {
         sceneEpoch: sceneState?.sceneEpoch ?? 0,
         generation: sceneState?.generation ?? 0,
         revision: sceneState?.revision ?? 0,
+        transformsTracked: sceneState?.transformsTracked ?? 0,
+        transformsDisplaced: sceneState?.transformsDisplaced ?? 0,
+        peelLevel: sceneState?.peelLevel ?? 0,
+        peelSteps: sceneState?.peelSteps ?? 0,
+        isolatedId: sceneState?.isolatedId ?? null,
+        dissectedIds: sceneState?.dissectedIds ?? [],
+        hiddenIds: sceneState?.hiddenIds ?? [],
+        ghostedIds: sceneState?.ghostedIds ?? [],
+        hiddenLayerIds: sceneState?.hiddenLayerIds ?? [],
+        ghostedLayerIds: sceneState?.ghostedLayerIds ?? [],
+        exploded: sceneState?.exploded ?? false,
+        capabilities: sceneState?.capabilities ?? NO_CAPABILITIES,
+        canUndo: sceneState?.canUndo ?? false,
+        canRedo: sceneState?.canRedo ?? false,
       };
     },
     replaceScene: () => actions.replaceScene(),
@@ -187,6 +307,32 @@ function install(): void {
     search: (query) => actions.search(query),
     captureNode: (id) => actions.captureNode(id),
     resolveCaptured: () => actions.resolveCaptured(),
+
+    hideObject: (id) => actions.hideObject(id),
+    showObject: (id) => actions.showObject(id),
+    ghostObject: (id) => actions.ghostObject(id),
+    isolateObject: (id) => actions.isolateObject(id),
+    restoreIsolation: () => actions.restoreIsolation(),
+    dissect: (id) => actions.dissect(id),
+    restoreDissection: () => actions.restoreDissection(),
+    resetDissection: () => actions.resetDissection(),
+    showLayer: (id) => actions.showLayer(id),
+    hideLayer: (id) => actions.hideLayer(id),
+    ghostLayer: (id) => actions.ghostLayer(id),
+    restoreLayer: (id) => actions.restoreLayer(id),
+    layerState: (id) => actions.layerState(id),
+    nextPeel: () => actions.nextPeel(),
+    previousPeel: () => actions.previousPeel(),
+    resetPeel: () => actions.resetPeel(),
+    explode: () => actions.explode(),
+    implode: () => actions.implode(),
+    reconstructStep: () => actions.reconstructStep(),
+    reconstructAll: () => actions.reconstructAll(),
+    resetScene: () => actions.resetScene(),
+    undo: () => actions.undo(),
+    redo: () => actions.redo(),
+    nodeTransform: (id) => actions.nodeTransform(id),
+    visualState: (id) => actions.visualState(id),
   };
 }
 
