@@ -248,6 +248,9 @@ describe('AIStudyPanel', () => {
 
 describe('SpatialToolbar', () => {
   const allCapabilities = {
+    supportsSelection: true,
+    supportsLabels: true,
+    supportsRelationships: true,
     supportsLayers: true,
     supportsIsolation: true,
     supportsGhosting: true,

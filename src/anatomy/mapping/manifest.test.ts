@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildMeshMapping, parseManifest } from './manifest';
+import { buildMeshMapping } from './manifest';
+import { parseManifest } from './validation';
 
 const MODEL_ID = '2f1c9a3e-6b41-4c8f-9f0a-1d2e3f4a5b6c';
 
