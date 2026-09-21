@@ -1,5 +1,6 @@
 import { BaseSceneGraphProvider } from '@/engine/spatial/base-provider';
 import { SpatialError } from '@/engine/spatial/errors';
+import { completeLayer } from '@/engine/spatial/layers';
 import type {
   LoadModelOptions,
   SpatialProviderCapabilities,
@@ -196,16 +197,18 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     }
 
     void options;
-    return ok({
-      id: system,
-      modelId: this.graph?.model.id ?? '',
-      name: system,
-      description: null,
-      objectIds,
-      defaultVisible: true,
-      order: 0,
-      colorToken: null,
-    });
+    return ok(
+      completeLayer({
+        id: system,
+        modelId: this.graph?.model.id ?? '',
+        name: system,
+        description: null,
+        objectIds,
+        defaultVisible: true,
+        order: 0,
+        colorToken: null,
+      }),
+    );
   }
 
   async loadAnatomyRegion(
@@ -369,7 +372,7 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     return {
       model,
       objects,
-      layers: manifest.layers.map((layer) => ({
+      layers: manifest.layers.map((layer) => completeLayer({
         id: layer.id,
         modelId: manifest.modelId,
         name: layer.name,

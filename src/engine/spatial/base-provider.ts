@@ -10,6 +10,7 @@ import type {
   SpatialRegion,
   Vec3,
 } from '@/types/domain/spatial';
+import type { SpatialCapabilities } from '@/types/domain/spatial';
 import { SpatialError } from './errors';
 import type {
   LoadModelOptions,
@@ -21,6 +22,7 @@ import type {
 import { SceneController, type CameraCommand, type SceneSnapshot } from './scene-controller';
 import type { FlyToOptions, ObjectSummary, SceneVisualState } from './types';
 import type { ModelLifecycleState } from './model-lifecycle';
+import type { ManipulationState } from './manipulation';
 
 export type { CameraCommand } from './scene-controller';
 
@@ -37,6 +39,13 @@ export interface ProviderSnapshot {
   readonly camera: CameraCommand | null;
   readonly graph: SpatialModelGraph | null;
   readonly lifecycle: ModelLifecycleState;
+  /** Everything the learner has done to the model's presentation. */
+  readonly manipulation: ManipulationState;
+  /** What the loaded model can actually be asked to do. */
+  readonly capabilities: SpatialCapabilities;
+  readonly peelSteps: number;
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
   readonly revision: number;
 }
 
@@ -84,7 +93,18 @@ export abstract class BaseSceneGraphProvider implements SceneGraphProvider {
   /** The single owner of scene state. Exposed so the renderer can bind to it. */
   readonly scene = new SceneController();
 
-  protected graph: SpatialModelGraph | null = null;
+  /**
+   * The loaded model.
+   *
+   * A getter, not a field. The controller owns the graph; a provider keeping
+   * its own copy meant a model published straight to the controller — the
+   * diagnostic path does exactly that — was invisible to everything reading
+   * the provider, so the layers panel had nothing to list while the engine was
+   * peeling those same layers.
+   */
+  protected get graph(): SpatialModelGraph | null {
+    return this.scene.getGraph();
+  }
   protected ready = false;
   protected notReadyReason: string | null = 'Provider has not been initialised.';
 
@@ -124,7 +144,7 @@ export abstract class BaseSceneGraphProvider implements SceneGraphProvider {
   }
 
   unloadModel(): void {
-    this.graph = null;
+    // The lifecycle event clears the controller's graph, which is the only copy.
     this.scene.dispatchLifecycle({ type: 'unload' });
   }
 
@@ -135,8 +155,6 @@ export abstract class BaseSceneGraphProvider implements SceneGraphProvider {
    * which objects exist and which layers they belong to.
    */
   protected publishGraph(graph: SpatialModelGraph): void {
-    this.graph = graph;
-
     // One entry point: setGraph builds registry descriptors, the search index,
     // label seeds and the object universe together, so the manifest path and
     // the diagnostic path cannot drift apart.
@@ -164,8 +182,13 @@ export abstract class BaseSceneGraphProvider implements SceneGraphProvider {
       hoveredId: sceneSnapshot.hoveredId,
       camera: sceneSnapshot.camera,
       lifecycle: sceneSnapshot.lifecycle,
+      manipulation: sceneSnapshot.manipulation,
+      capabilities: sceneSnapshot.capabilities,
+      peelSteps: sceneSnapshot.peelSteps,
+      canUndo: sceneSnapshot.canUndo,
+      canRedo: sceneSnapshot.canRedo,
       revision: sceneSnapshot.revision,
-      graph: this.graph,
+      graph: this.scene.getGraph(),
     };
 
     return this.snapshot;

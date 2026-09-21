@@ -1,7 +1,28 @@
 import { isDescendantOf, type SemanticId } from '@/lib/semantic-id';
-import type { BoundingBox, SpatialModelGraph, SpatialObject, Vec3 } from '@/types/domain/spatial';
+import type {
+  BoundingBox,
+  SpatialCapabilities,
+  SpatialLayer,
+  SpatialModelGraph,
+  SpatialObject,
+  Vec3,
+} from '@/types/domain/spatial';
 import type { Relationship, RelationshipKind } from '@/types/domain/spatial';
 import { AnnotationRegistry, anchorPosition, defaultLabelsFor } from './annotations';
+import { resolveCapabilities } from './capabilities';
+import { layerMembershipIndex } from './layers';
+import {
+  INITIAL_MANIPULATION,
+  explodedOffsets,
+  isPristine,
+  maxPeelLevel,
+  nextReconstructionStage,
+  peeledLayers,
+  reconstructOnce,
+  type ManipulationAction,
+  type ManipulationState,
+} from './manipulation';
+import { ManipulationHistory } from './manipulation-history';
 import { SpatialObjectRegistry, type SceneNode } from './object-registry';
 import { SpatialSearchIndex, type SearchResult } from './search';
 import {
@@ -10,8 +31,8 @@ import {
   type ModelLifecycleEvent,
   type ModelLifecycleState,
 } from './model-lifecycle';
-import type { FlyToOptions, SceneVisualState } from './types';
-import { computeIsolationSets, resolveVisualState } from './visual-state';
+import { NON_RENDERING_STATES, type FlyToOptions, type SceneVisualState, type VisualState } from './types';
+import { resolveVisualState } from './visual-state';
 
 /**
  * Scene Controller
@@ -44,6 +65,14 @@ export interface SceneSnapshot {
   readonly hoveredId: SemanticId | null;
   readonly camera: CameraCommand | null;
   readonly lifecycle: ModelLifecycleState;
+  /** Everything the learner has done to the model's presentation. */
+  readonly manipulation: ManipulationState;
+  /** What the loaded model can actually be asked to do. */
+  readonly capabilities: SpatialCapabilities;
+  /** Peel steps available on this model. 0 means the model does not peel. */
+  readonly peelSteps: number;
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
   /** Bumped on every change; lets consumers detect a new snapshot cheaply. */
   readonly revision: number;
 }
@@ -67,13 +96,21 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
   readonly annotations = new AnnotationRegistry();
   readonly searchIndex = new SpatialSearchIndex();
 
+  readonly history = new ManipulationHistory();
+
   private selectedId: SemanticId | null = null;
   private hoveredId: SemanticId | null = null;
   private highlightedIds = new Set<SemanticId>();
-  private hiddenIds = new Set<SemanticId>();
-  private ghostedIds = new Set<SemanticId>();
-  private isolatedId: SemanticId | null = null;
-  private hiddenLayerIds = new Set<string>();
+
+  /**
+   * One value holding every manipulation.
+   *
+   * Isolation, peel level and layer state are kept as what the learner asked
+   * for rather than written into the hidden set when applied. The rendered
+   * result is computed from all of them together, which is what makes each
+   * one independently reversible.
+   */
+  private manipulation: ManipulationState = INITIAL_MANIPULATION;
 
   /** Every addressable object, and the layers each belongs to. */
   private objectIds: readonly SemanticId[] = [];
@@ -84,6 +121,20 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
   private lifecycle: ModelLifecycleState = INITIAL_LIFECYCLE;
   private graph: SpatialModelGraph | null = null;
   private boundsResolver: BoundsResolver | null = null;
+  private layers: readonly SpatialLayer[] = [];
+  private capabilities: SpatialCapabilities = resolveCapabilities(null);
+
+  /**
+   * Exploded displacements, computed once per explosion.
+   *
+   * A group-derived offset is a function of where its members ARE, so reading
+   * it again once they have moved would compound: each read would push them
+   * further out. Computing on the first read after entering the view — while
+   * every node is still at its base transform — and caching until the view is
+   * left makes the displacement a property of the model rather than of how
+   * many times the renderer happened to ask.
+   */
+  private offsetCache: ReadonlyMap<SemanticId, Vec3> | null = null;
 
   private cameraCommand: CameraCommand | null = null;
   private cameraVersion = 0;
@@ -110,27 +161,49 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
   getSnapshot = (): SceneSnapshot => {
     if (this.snapshot) return this.snapshot;
 
+    const manipulation = this.manipulation;
+    const visual = this.resolveVisual(manipulation);
+
     this.snapshot = {
-      visual: resolveVisualState({
-        objectIds: this.objectIds,
-        selectedId: this.selectedId,
-        hoveredId: this.hoveredId,
-        highlightedIds: this.highlightedIds,
-        hiddenIds: this.hiddenIds,
-        ghostedIds: this.ghostedIds,
-        isolatedId: this.isolatedId,
-        hiddenLayerIds: this.hiddenLayerIds,
-        layerMembership: this.layerMembership,
-      }),
+      visual: { ...visual, exploded: manipulation.exploded },
       selectedId: this.selectedId,
       hoveredId: this.hoveredId,
       camera: this.cameraCommand,
       lifecycle: this.lifecycle,
+      manipulation,
+      capabilities: this.capabilities,
+      peelSteps: maxPeelLevel(this.layers),
+      canUndo: this.history.canUndo(),
+      canRedo: this.history.canRedo(),
       revision: this.revision,
     };
 
     return this.snapshot;
   };
+
+  /** Resolve presentation for a candidate manipulation state. */
+  private resolveVisual(manipulation: ManipulationState): SceneVisualState {
+    const peeled = new Map<string, 'ghost' | 'hide'>();
+    for (const [layerId, layer] of peeledLayers(this.layers, manipulation.peelLevel)) {
+      peeled.set(layerId, layer.peelMode);
+    }
+
+    return resolveVisualState({
+      objectIds: this.objectIds,
+      selectedId: this.selectedId,
+      hoveredId: this.hoveredId,
+      highlightedIds: this.highlightedIds,
+      hiddenIds: manipulation.hiddenIds,
+      ghostedIds: manipulation.ghostedIds,
+      dissectedIds: manipulation.dissectedIds,
+      isolatedId: manipulation.isolatedId,
+      hiddenLayerIds: manipulation.hiddenLayerIds,
+      ghostedLayerIds: manipulation.ghostedLayerIds,
+      peeledLayers: peeled,
+      layerMembership: this.layerMembership,
+      ghostContextOnIsolate: this.ghostContextOnIsolate,
+    });
+  }
 
   private invalidate(): void {
     this.revision += 1;
@@ -157,10 +230,19 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
     const live = new Set(objectIds);
     if (this.selectedId && !live.has(this.selectedId)) this.selectedId = null;
     if (this.hoveredId && !live.has(this.hoveredId)) this.hoveredId = null;
-    if (this.isolatedId && !live.has(this.isolatedId)) this.isolatedId = null;
     this.highlightedIds = intersect(this.highlightedIds, live);
-    this.hiddenIds = intersect(this.hiddenIds, live);
-    this.ghostedIds = intersect(this.ghostedIds, live);
+
+    const manipulation = this.manipulation;
+    this.manipulation = {
+      ...manipulation,
+      hiddenIds: intersect(manipulation.hiddenIds, live),
+      ghostedIds: intersect(manipulation.ghostedIds, live),
+      dissectedIds: manipulation.dissectedIds.filter((id) => live.has(id)),
+      isolatedId:
+        manipulation.isolatedId && live.has(manipulation.isolatedId)
+          ? manipulation.isolatedId
+          : null,
+    };
 
     this.invalidate();
   }
@@ -179,14 +261,17 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
 
     // Leaving a loaded model behind means its selection is meaningless.
     if (event.type === 'unload' || event.type === 'dispose' || event.type === 'load') {
-      this.clearEmphasis();
+      this.restore();
       this.registry.clear();
       this.searchIndex.clear();
       this.annotations.clear();
       this.graph = null;
+      this.layers = [];
+      this.capabilities = resolveCapabilities(null);
       this.objectIds = [];
       this.objectIdSet = new Set();
       this.layerMembership = new Map();
+      this.history.clear();
     }
 
     this.invalidate();
@@ -248,86 +333,450 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
     this.invalidate();
   }
 
-  hide(semanticIds: readonly SemanticId[]): void {
-    for (const id of semanticIds) {
-      this.hiddenIds.add(id);
-      this.ghostedIds.delete(id);
+  // ---- manipulation -------------------------------------------------------
+
+  /**
+   * Apply a manipulation and record it.
+   *
+   * Every manipulation goes through here, so there is one place that decides
+   * what happens to the selection afterwards, one place that records history,
+   * and one place that publishes. A component reaching past this to set state
+   * directly is how a viewport ends up in a configuration nobody can explain.
+   */
+  private applyManipulation(
+    action: ManipulationAction,
+    next: ManipulationState,
+    options: { readonly record?: boolean } = {},
+  ): void {
+    if (next.exploded !== this.manipulation.exploded) this.offsetCache = null;
+    this.manipulation = next;
+
+    // Emphasis on something that is no longer drawn communicates nothing, and
+    // leaves the context panel describing an invisible structure.
+    const states = this.resolveVisual(next).states;
+    if (this.selectedId && isRemoved(states.get(this.selectedId))) this.selectedId = null;
+    if (this.hoveredId && isRemoved(states.get(this.hoveredId))) this.hoveredId = null;
+
+    if (options.record !== false) {
+      this.history.push({ action, state: next, selectedId: this.selectedId });
     }
-
-    // A hidden structure cannot be seen, so leaving it selected would leave
-    // the context panel describing something invisible. Selection and hover
-    // both invalidate.
-    if (this.selectedId && this.hiddenIds.has(this.selectedId)) this.selectedId = null;
-    if (this.hoveredId && this.hiddenIds.has(this.hoveredId)) this.hoveredId = null;
-
     this.invalidate();
+  }
+
+  getManipulation(): ManipulationState {
+    return this.manipulation;
+  }
+
+  /** What the loaded model can actually be asked to do. */
+  getCapabilities(): SpatialCapabilities {
+    return this.capabilities;
+  }
+
+  // ---- object visibility --------------------------------------------------
+
+  /**
+   * Hide structures.
+   *
+   * Applies to the subtree: hiding an assembly hides what it contains. The
+   * semantic objects stay registered, related and queryable throughout — a
+   * hidden structure is one that is not being drawn, not one that has stopped
+   * existing.
+   */
+  hide(semanticIds: readonly SemanticId[]): void {
+    const hiddenIds = new Set(this.manipulation.hiddenIds);
+    const ghostedIds = new Set(this.manipulation.ghostedIds);
+    for (const id of semanticIds) {
+      hiddenIds.add(id);
+      ghostedIds.delete(id);
+    }
+    this.applyManipulation('hide', { ...this.manipulation, hiddenIds, ghostedIds });
   }
 
   show(semanticIds: readonly SemanticId[]): void {
+    const hiddenIds = new Set(this.manipulation.hiddenIds);
+    const ghostedIds = new Set(this.manipulation.ghostedIds);
     for (const id of semanticIds) {
-      this.hiddenIds.delete(id);
-      this.ghostedIds.delete(id);
+      hiddenIds.delete(id);
+      ghostedIds.delete(id);
     }
-    this.invalidate();
+    this.applyManipulation('show', { ...this.manipulation, hiddenIds, ghostedIds });
   }
 
   ghost(semanticIds: readonly SemanticId[]): void {
+    const hiddenIds = new Set(this.manipulation.hiddenIds);
+    const ghostedIds = new Set(this.manipulation.ghostedIds);
     for (const id of semanticIds) {
-      this.ghostedIds.add(id);
-      this.hiddenIds.delete(id);
+      ghostedIds.add(id);
+      hiddenIds.delete(id);
     }
-    this.invalidate();
+    this.applyManipulation('ghost', { ...this.manipulation, hiddenIds, ghostedIds });
   }
+
+  hideObject(semanticId: SemanticId): boolean {
+    if (!this.objectIdSet.has(semanticId)) return false;
+    this.hide([semanticId]);
+    return true;
+  }
+
+  showObject(semanticId: SemanticId): boolean {
+    if (!this.objectIdSet.has(semanticId)) return false;
+    this.show([semanticId]);
+    return true;
+  }
+
+  toggleObjectVisibility(semanticId: SemanticId): boolean {
+    if (!this.objectIdSet.has(semanticId)) return false;
+    return this.manipulation.hiddenIds.has(semanticId)
+      ? this.showObject(semanticId)
+      : this.hideObject(semanticId);
+  }
+
+  ghostObject(semanticId: SemanticId): boolean {
+    if (!this.objectIdSet.has(semanticId)) return false;
+    this.ghost([semanticId]);
+    return true;
+  }
+
+  // ---- isolation ----------------------------------------------------------
 
   /**
    * Isolate a subtree.
    *
-   * Context is ghosted rather than deleted so the learner keeps their spatial
-   * bearings — losing orientation defeats the point of a spatial tool.
+   * Nothing is unregistered and nothing is disposed: the surroundings are
+   * ghosted so the learner keeps their bearings, because losing orientation
+   * defeats the point of a spatial tool. Isolation is stored as the id alone,
+   * so restoring it cannot erase a structure hidden by hand beforehand.
    */
-  isolate(semanticId: SemanticId): void {
-    const { hidden, ghosted } = computeIsolationSets(
-      this.objectIds,
-      semanticId,
-      this.ghostContextOnIsolate,
-    );
-    this.isolatedId = semanticId;
-    this.hiddenIds = hidden;
-    this.ghostedIds = ghosted;
+  isolate(semanticId: SemanticId): boolean {
+    if (this.objectIdSet.size > 0 && !this.objectIdSet.has(semanticId)) return false;
+    this.applyManipulation('isolate', { ...this.manipulation, isolatedId: semanticId });
+    return true;
+  }
+
+  isolateObject(semanticId: SemanticId, options: FlyToOptions = {}): boolean {
+    if (!this.select(semanticId)) return false;
+    if (!this.isolate(semanticId)) return false;
+    this.fitToSelection(options);
+    return true;
+  }
+
+  restoreIsolation(): void {
+    if (this.manipulation.isolatedId === null) return;
+    this.applyManipulation('restore_isolation', { ...this.manipulation, isolatedId: null });
+  }
+
+  getIsolatedId(): SemanticId | null {
+    return this.manipulation.isolatedId;
+  }
+
+  /**
+   * Clear every emphasis at once.
+   *
+   * The blunt instrument: selection included. `resetScene` is what a learner
+   * reaches for; this exists for callers that want a clean slate without
+   * touching the camera or history.
+   */
+  restore(): void {
+    this.offsetCache = null;
+    this.selectedId = null;
+    this.hoveredId = null;
+    this.highlightedIds = new Set();
+    this.manipulation = INITIAL_MANIPULATION;
     this.invalidate();
   }
 
-  restore(): void {
-    this.clearEmphasis();
-    this.invalidate();
+  // ---- layers -------------------------------------------------------------
+
+  getLayers(): readonly SpatialLayer[] {
+    return this.layers;
+  }
+
+  /** The layer's current state, resolved from hidden and ghosted sets. */
+  getLayerState(layerId: string): 'visible' | 'hidden' | 'ghosted' {
+    if (this.manipulation.hiddenLayerIds.has(layerId)) return 'hidden';
+    if (this.manipulation.ghostedLayerIds.has(layerId)) return 'ghosted';
+    return 'visible';
+  }
+
+  showLayer(layerId: string): void {
+    const hiddenLayerIds = new Set(this.manipulation.hiddenLayerIds);
+    const ghostedLayerIds = new Set(this.manipulation.ghostedLayerIds);
+    hiddenLayerIds.delete(layerId);
+    ghostedLayerIds.delete(layerId);
+    this.applyManipulation('layer_show', { ...this.manipulation, hiddenLayerIds, ghostedLayerIds });
+  }
+
+  hideLayer(layerId: string): void {
+    const hiddenLayerIds = new Set(this.manipulation.hiddenLayerIds);
+    const ghostedLayerIds = new Set(this.manipulation.ghostedLayerIds);
+    hiddenLayerIds.add(layerId);
+    ghostedLayerIds.delete(layerId);
+    this.applyManipulation('layer_hide', { ...this.manipulation, hiddenLayerIds, ghostedLayerIds });
+  }
+
+  ghostLayer(layerId: string): void {
+    const hiddenLayerIds = new Set(this.manipulation.hiddenLayerIds);
+    const ghostedLayerIds = new Set(this.manipulation.ghostedLayerIds);
+    ghostedLayerIds.add(layerId);
+    hiddenLayerIds.delete(layerId);
+    this.applyManipulation('layer_ghost', { ...this.manipulation, hiddenLayerIds, ghostedLayerIds });
+  }
+
+  /** Cycles visible -> hidden -> visible. Ghosting is its own deliberate act. */
+  toggleLayer(layerId: string): void {
+    if (this.getLayerState(layerId) === 'visible') {
+      this.hideLayer(layerId);
+    } else {
+      this.showLayer(layerId);
+    }
+  }
+
+  restoreLayer(layerId: string): void {
+    if (this.getLayerState(layerId) === 'visible') return;
+    const hiddenLayerIds = new Set(this.manipulation.hiddenLayerIds);
+    const ghostedLayerIds = new Set(this.manipulation.ghostedLayerIds);
+    hiddenLayerIds.delete(layerId);
+    ghostedLayerIds.delete(layerId);
+    this.applyManipulation('layer_restore', {
+      ...this.manipulation,
+      hiddenLayerIds,
+      ghostedLayerIds,
+    });
   }
 
   setLayerVisible(layerId: string, visible: boolean): void {
     if (visible) {
-      this.hiddenLayerIds.delete(layerId);
+      this.showLayer(layerId);
     } else {
-      this.hiddenLayerIds.add(layerId);
+      this.hideLayer(layerId);
     }
-    this.invalidate();
   }
 
   isLayerVisible(layerId: string): boolean {
-    return !this.hiddenLayerIds.has(layerId);
+    return !this.manipulation.hiddenLayerIds.has(layerId);
+  }
+
+  // ---- peeling ------------------------------------------------------------
+
+  /** How many peel steps this model offers. Comes from its own layers. */
+  getPeelSteps(): number {
+    return maxPeelLevel(this.layers);
+  }
+
+  getPeelLevel(): number {
+    return this.manipulation.peelLevel;
+  }
+
+  /** The layers the current peel level has removed, outermost first. */
+  getPeeledLayerIds(): readonly string[] {
+    return [...peeledLayers(this.layers, this.manipulation.peelLevel).keys()];
+  }
+
+  nextPeel(): boolean {
+    const steps = this.getPeelSteps();
+    if (this.manipulation.peelLevel >= steps) return false;
+    this.applyManipulation('peel_next', {
+      ...this.manipulation,
+      peelLevel: this.manipulation.peelLevel + 1,
+    });
+    return true;
+  }
+
+  previousPeel(): boolean {
+    if (this.manipulation.peelLevel <= 0) return false;
+    this.applyManipulation('peel_previous', {
+      ...this.manipulation,
+      peelLevel: this.manipulation.peelLevel - 1,
+    });
+    return true;
+  }
+
+  resetPeel(): void {
+    if (this.manipulation.peelLevel === 0) return;
+    this.applyManipulation('peel_reset', { ...this.manipulation, peelLevel: 0 });
+  }
+
+  // ---- dissection ---------------------------------------------------------
+
+  /**
+   * Remove a structure to reveal what sits beneath it.
+   *
+   * Visual only, and reversible in the order it was applied. The registry, the
+   * hierarchy, the relationships and the metadata are all untouched: a
+   * dissected structure can still be searched for, navigated to and described.
+   */
+  dissectObject(semanticId: SemanticId): boolean {
+    if (this.objectIdSet.size > 0 && !this.objectIdSet.has(semanticId)) return false;
+    if (this.manipulation.dissectedIds.includes(semanticId)) return true;
+
+    this.applyManipulation('dissect', {
+      ...this.manipulation,
+      dissectedIds: [...this.manipulation.dissectedIds, semanticId],
+    });
+    return true;
+  }
+
+  /** Undo the most recent dissection. */
+  restoreDissection(): SemanticId | null {
+    const stack = this.manipulation.dissectedIds;
+    const last = stack[stack.length - 1];
+    if (last === undefined) return null;
+
+    this.applyManipulation('restore_dissection', {
+      ...this.manipulation,
+      dissectedIds: stack.slice(0, -1),
+    });
+    return last;
+  }
+
+  resetDissection(): void {
+    if (this.manipulation.dissectedIds.length === 0) return;
+    this.applyManipulation('reset_dissection', { ...this.manipulation, dissectedIds: [] });
+  }
+
+  getDissectedIds(): readonly SemanticId[] {
+    return this.manipulation.dissectedIds;
+  }
+
+  // ---- exploded view ------------------------------------------------------
+
+  isExploded(): boolean {
+    return this.manipulation.exploded;
+  }
+
+  enterExplodedView(): boolean {
+    if (!this.capabilities.supportsExplosion || this.manipulation.exploded) return false;
+    this.applyManipulation('explode', { ...this.manipulation, exploded: true });
+    return true;
+  }
+
+  exitExplodedView(): void {
+    if (!this.manipulation.exploded) return;
+    this.applyManipulation('implode', { ...this.manipulation, exploded: false });
+  }
+
+  resetExplodedView(): void {
+    this.exitExplodedView();
+  }
+
+  /**
+   * Displacements for the current view, by semantic id.
+   *
+   * Empty when not exploded, which is what lets the 3D layer restore every
+   * transform to its authored value exactly rather than by subtracting an
+   * offset it has to remember.
+   */
+  getExplodedOffsets(): ReadonlyMap<SemanticId, Vec3> {
+    if (!this.manipulation.exploded || !this.graph) return EMPTY_OFFSETS;
+    if (this.offsetCache) return this.offsetCache;
+
+    this.offsetCache = explodedOffsets(
+      this.graph.objects,
+      this.graph.explosion ?? [],
+      (semanticId) => this.getObjectCenter(semanticId),
+    );
+    return this.offsetCache;
+  }
+
+  // ---- reconstruction -----------------------------------------------------
+
+  /** What the next reconstruction step would put back, or null when whole. */
+  getNextReconstructionStage(): ReturnType<typeof nextReconstructionStage> {
+    return nextReconstructionStage(this.manipulation);
+  }
+
+  /** Put back the most recent removal. Returns false when already whole. */
+  reconstructStep(): boolean {
+    const next = reconstructOnce(this.manipulation);
+    if (next === this.manipulation) return false;
+    this.applyManipulation('reconstruct_step', next);
+    return true;
+  }
+
+  /**
+   * Put the model back together in one move.
+   *
+   * Leaves the camera and the selection where they are: a learner who has
+   * worked their way down to one structure wants it whole again, not to lose
+   * their place as well.
+   */
+  reconstructAll(): void {
+    if (isPristine(this.manipulation)) return;
+    this.applyManipulation('reconstruct_all', INITIAL_MANIPULATION);
+  }
+
+  // ---- reset --------------------------------------------------------------
+
+  /**
+   * Return the scene to the state a model loads in.
+   *
+   * Visibility, ghosting, isolation, peel, dissection and the exploded view
+   * all go back to their documented defaults, the camera reframes the model,
+   * and the history is cleared — a reset is a fresh start, not a step that can
+   * itself be undone.
+   *
+   * Idempotent by construction: it assigns a constant rather than reversing
+   * whatever happened to be in force, so calling it twice cannot differ from
+   * calling it once.
+   */
+  resetScene(options: FlyToOptions = {}): void {
+    this.offsetCache = null;
+    this.manipulation = INITIAL_MANIPULATION;
+    this.selectedId = null;
+    this.hoveredId = null;
+    this.highlightedIds = new Set();
+    this.history.clear();
+    this.fitToModel(options);
+  }
+
+  /** The reconstruction vocabulary's name for `resetScene`. */
+  resetToOriginal(options: FlyToOptions = {}): void {
+    this.resetScene(options);
+  }
+
+  // ---- history ------------------------------------------------------------
+
+  canUndo(): boolean {
+    return this.history.canUndo();
+  }
+
+  canRedo(): boolean {
+    return this.history.canRedo();
+  }
+
+  undoManipulation(): boolean {
+    const entry = this.history.undo();
+    if (entry === null) return false;
+    this.offsetCache = null;
+
+    if (entry === 'pristine') {
+      this.manipulation = INITIAL_MANIPULATION;
+    } else {
+      this.manipulation = entry.state;
+      if (entry.selectedId === null || this.objectIdSet.has(entry.selectedId)) {
+        this.selectedId = entry.selectedId;
+      }
+    }
+    this.invalidate();
+    return true;
+  }
+
+  redoManipulation(): boolean {
+    const entry = this.history.redo();
+    if (entry === null) return false;
+    this.offsetCache = null;
+
+    this.manipulation = entry.state;
+    if (entry.selectedId === null || this.objectIdSet.has(entry.selectedId)) {
+      this.selectedId = entry.selectedId;
+    }
+    this.invalidate();
+    return true;
   }
 
   /** Descendants of an id that are currently registered. */
   descendantsOf(semanticId: SemanticId): SemanticId[] {
     return this.objectIds.filter((id) => isDescendantOf(id, semanticId));
-  }
-
-  private clearEmphasis(): void {
-    this.selectedId = null;
-    this.hoveredId = null;
-    this.highlightedIds = new Set();
-    this.hiddenIds = new Set();
-    this.ghostedIds = new Set();
-    this.isolatedId = null;
-    this.hiddenLayerIds = new Set();
   }
 
   // ---- semantic model -----------------------------------------------------
@@ -365,20 +814,40 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
    */
   setGraph(graph: SpatialModelGraph | null): void {
     this.graph = graph;
+    this.offsetCache = null;
 
     if (!graph) {
       this.registry.setDescriptors(new Map());
       this.searchIndex.clear();
       this.annotations.clear();
+      this.layers = [];
+      this.capabilities = resolveCapabilities(null);
       this.setObjects([]);
       return;
     }
 
     this.registry.setDescriptors(graph.objects);
     this.searchIndex.build(graph.objects.values());
+    this.layers = graph.layers;
+    this.capabilities = resolveCapabilities(graph);
 
-    const layerMembership = new Map<SemanticId, readonly string[]>();
-    for (const [id, object] of graph.objects) layerMembership.set(id, object.layerIds);
+    /*
+     * Layer membership comes from the layers themselves, with each object's
+     * own `layerIds` folded in. A model may express membership either way and
+     * both are authoritative; indexing once here is what keeps a layer
+     * operation a set lookup rather than a walk over every object.
+     */
+    const layerMembership = new Map<SemanticId, readonly string[]>(
+      layerMembershipIndex(graph.layers),
+    );
+    for (const [id, object] of graph.objects) {
+      if (object.layerIds.length === 0) continue;
+      const declared = layerMembership.get(id);
+      layerMembership.set(
+        id,
+        declared ? [...new Set([...declared, ...object.layerIds])] : object.layerIds,
+      );
+    }
 
     this.setObjects([...graph.objects.keys()], layerMembership);
 
@@ -564,8 +1033,23 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
   }
 }
 
-function intersect(source: Set<SemanticId>, live: ReadonlySet<SemanticId>): Set<SemanticId> {
+function intersect(
+  source: ReadonlySet<SemanticId>,
+  live: ReadonlySet<SemanticId>,
+): Set<SemanticId> {
   const next = new Set<SemanticId>();
   for (const id of source) if (live.has(id)) next.add(id);
   return next;
+}
+
+const EMPTY_OFFSETS: ReadonlyMap<SemanticId, Vec3> = new Map();
+
+/**
+ * True when a state means the object is not drawn.
+ *
+ * Selection and hover both invalidate against this rather than against a list
+ * of state names, so a state added later is covered by construction.
+ */
+function isRemoved(state: VisualState | undefined): boolean {
+  return state !== undefined && NON_RENDERING_STATES.has(state);
 }
