@@ -89,7 +89,13 @@ const eslintConfig = [
         {
           patterns: [
             {
-              group: ['@/config/env.server', '@/lib/supabase/admin', 'openai', 'stripe'],
+              group: [
+                '@/config/env.server',
+                '@/config/anatomy.server',
+                '@/lib/supabase/admin',
+                'openai',
+                'stripe',
+              ],
               message:
                 'Server-only modules (secrets, privileged SDKs) must never be imported from client-side code.',
             },
@@ -108,7 +114,7 @@ const eslintConfig = [
 
   // Verification scripts are command-line tools; printing is their purpose.
   {
-    files: ['scripts/**/*.{js,mjs,ts}'],
+    files: ['scripts/**/*.{js,mjs,mts,ts}'],
     rules: {
       'no-console': 'off',
     },
