@@ -11,17 +11,23 @@ import { ViewportShell } from '@/components/spatial/ViewportShell';
 import { useAnatomyModel } from '@/hooks/use-anatomy-model';
 import { DIAGNOSTIC_LABEL } from '@/engine/3d/diagnostics/diagnostic-scene';
 import { isSemanticId, semanticIdToLabel, type SemanticId } from '@/lib/semantic-id';
-import type { InteractionMode } from '@/engine/spatial/types';
+import type { InteractionMode, SceneVisualState } from '@/engine/spatial/types';
+import { NO_CAPABILITIES as NO_MODEL_CAPABILITIES } from '@/engine/spatial/capabilities';
+import type { SpatialCapabilities } from '@/types/domain/spatial';
 import { useReducedMotion } from '@/store/ui-store';
 import { useViewerStore } from '@/store/viewer-store';
 import { AIStudyPanel } from './AIStudyPanel';
-import { ContextPanel, type ContextActionPayload } from './ContextPanel';
+import {
+  ContextPanel,
+  type ContextActionPayload,
+  type ManipulateAction,
+} from './ContextPanel';
 import { SpatialSearch } from './SpatialSearch';
 import type { BreadcrumbNode } from './ObjectBreadcrumb';
 import { useSpatialKeyboard } from '@/hooks/use-spatial-keyboard';
 import { LayersPanel } from './LayersPanel';
 import { ModelSwitcher } from './ModelSwitcher';
-import { SpatialToolbar } from './SpatialToolbar';
+import { SpatialToolbar, type WorkspaceTool } from './SpatialToolbar';
 import { ViewportControls } from './ViewportControls';
 
 /**
@@ -75,9 +81,35 @@ export function LearningWorkspace({
   const [contextOpen, setContextOpen] = useState(false);
 
   const selectedId = snapshot?.selectedId ?? null;
-  const providerCapabilities = provider?.getStatus().capabilities;
   const graph = snapshot?.graph ?? null;
-  const hiddenLayerIds = snapshot?.visual.hiddenLayerIds ?? EMPTY_LAYER_SET;
+
+  /*
+   * What the tools may offer comes from the loaded model, narrowed by what the
+   * provider can drive. Neither alone is enough: a model may declare layers a
+   * provider cannot address, and a provider may support isolation on a model
+   * with nothing to isolate.
+   */
+  const providerCapabilities = provider?.getStatus().capabilities;
+  const modelCapabilities = snapshot?.capabilities ?? NO_MODEL_CAPABILITIES;
+  const capabilities = useMemo<SpatialCapabilities>(
+    () => ({
+      ...modelCapabilities,
+      supportsIsolation:
+        modelCapabilities.supportsIsolation && (providerCapabilities?.supportsIsolation ?? true),
+    }),
+    [modelCapabilities, providerCapabilities],
+  );
+
+  const manipulationState = snapshot?.manipulation ?? null;
+  const peeledLayerIds = useMemo(
+    () => controller?.getPeeledLayerIds() ?? EMPTY_PEELED,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [controller, manipulationState],
+  );
+  const offsets = useMemo(
+    () => (manipulationState?.exploded ? (controller?.getExplodedOffsets() ?? EMPTY_OFFSETS) : EMPTY_OFFSETS),
+    [controller, manipulationState],
+  );
 
   /** One-way sync so navigation and other non-3D surfaces can read selection. */
   useEffect(() => {
@@ -237,6 +269,79 @@ export function LearningWorkspace({
     void payload;
   }, []);
 
+  /**
+   * Manipulating the selected structure.
+   *
+   * Every one of these is an intent dispatched to the controller, which owns
+   * the resulting state. Nothing here keeps a parallel copy of what is hidden,
+   * ghosted or dissected — that is exactly the second source of truth a
+   * viewport cannot survive.
+   */
+  const handleManipulate = useCallback(
+    (action: ManipulateAction, semanticId: SemanticId) => {
+      if (!controller) return;
+
+      switch (action) {
+        case 'isolate':
+          controller.isolateObject(semanticId, { reducedMotion });
+          break;
+        case 'hide':
+          controller.hideObject(semanticId);
+          break;
+        case 'ghost':
+          controller.ghostObject(semanticId);
+          break;
+        case 'dissect':
+          controller.dissectObject(semanticId);
+          break;
+        case 'restore':
+          controller.reconstructStep();
+          break;
+      }
+    },
+    [controller, reducedMotion],
+  );
+
+  const handleTool = useCallback(
+    (tool: WorkspaceTool) => {
+      if (!controller) return;
+
+      switch (tool) {
+        case 'layers':
+          setLayersOpen((value) => !value);
+          break;
+        case 'isolate':
+          if (controller.getIsolatedId() !== null) {
+            controller.restoreIsolation();
+          } else if (selectedId) {
+            controller.isolateObject(selectedId, { reducedMotion });
+          }
+          break;
+        case 'peel':
+          // One button walks the sequence and wraps back to whole, so a peel
+          // needs no second control to undo it on a narrow screen.
+          if (!controller.nextPeel()) controller.resetPeel();
+          break;
+        case 'dissect':
+          if (selectedId) controller.dissectObject(selectedId);
+          break;
+        case 'explode':
+          if (controller.isExploded()) {
+            controller.exitExplodedView();
+          } else {
+            controller.enterExplodedView();
+          }
+          break;
+        case 'reset':
+          controller.resetScene({ reducedMotion });
+          break;
+        default:
+          break;
+      }
+    },
+    [controller, selectedId, reducedMotion],
+  );
+
   const contextPanel = (
     <ContextPanel
       selectedId={selectedId}
@@ -246,6 +351,14 @@ export function LearningWorkspace({
       relationships={relationships}
       onSelectObject={focusObject}
       onAction={handleAction}
+      onManipulate={handleManipulate}
+      manipulation={{
+        isolate: capabilities.supportsIsolation,
+        hide: sceneReady,
+        ghost: capabilities.supportsGhosting,
+        dissect: capabilities.supportsDissection,
+        restore: (snapshot?.manipulation && controller?.getNextReconstructionStage() !== null) ?? false,
+      }}
       actionsEnabled={sceneReady}
     />
   );
@@ -273,6 +386,22 @@ export function LearningWorkspace({
         />
 
         <div className="ml-auto flex items-center gap-1">
+          {snapshot?.canUndo || snapshot?.canRedo ? (
+            <>
+              <IconButton
+                icon="undo"
+                label="Undo manipulation"
+                disabled={!snapshot?.canUndo}
+                onClick={() => controller?.undoManipulation()}
+              />
+              <IconButton
+                icon="redo"
+                label="Redo manipulation"
+                disabled={!snapshot?.canRedo}
+                onClick={() => controller?.redoManipulation()}
+              />
+            </>
+          ) : null}
           <IconButton
             icon="layers"
             label={layersOpen ? 'Hide layers' : 'Show layers'}
@@ -292,17 +421,18 @@ export function LearningWorkspace({
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <SpatialToolbar
-          mode={interactionMode}
-          onModeChange={(mode: InteractionMode) => setInteractionMode(mode)}
-          onIsolate={() => selectedId && controller?.isolate(selectedId)}
-          onReset={() => {
-            controller?.restore();
-            controller?.resetCamera({ reducedMotion });
+          state={{
+            mode: interactionMode,
+            capabilities,
+            hasSelection: selectedId !== null,
+            layersOpen,
+            isolated: snapshot?.manipulation.isolatedId !== null,
+            exploded: snapshot?.manipulation.exploded ?? false,
+            peelLevel: snapshot?.manipulation.peelLevel ?? 0,
+            peelSteps: snapshot?.peelSteps ?? 0,
           }}
-          onToggleLayers={() => setLayersOpen((value) => !value)}
-          layersOpen={layersOpen}
-          canIsolate={(providerCapabilities?.supportsIsolation ?? false) && !diagnostic}
-          hasSelection={selectedId !== null}
+          onModeChange={(mode: InteractionMode) => setInteractionMode(mode)}
+          onAction={handleTool}
           disabled={!sceneReady}
         />
 
@@ -320,6 +450,7 @@ export function LearningWorkspace({
                 meshMapping={meshMapping}
                 controller={controller}
                 visual={snapshot?.visual ?? EMPTY_VISUAL}
+                offsets={offsets}
                 interactionMode={interactionMode}
                 reducedMotion={reducedMotion}
                 onUnmappedMeshes={setUnmapped}
@@ -377,10 +508,7 @@ export function LearningWorkspace({
             {sceneReady && controller ? (
               <ViewportControls
                 className="absolute bottom-3 left-1/2 -translate-x-1/2"
-                onResetView={() => {
-                  controller.restore();
-                  controller.resetCamera({ reducedMotion });
-                }}
+                onResetView={() => controller.resetScene({ reducedMotion })}
                 onFitModel={() => controller.fitToModel({ reducedMotion })}
                 onFitSelection={() => controller.fitToSelection({ reducedMotion })}
                 onClearSelection={() => controller.select(null)}
@@ -389,7 +517,7 @@ export function LearningWorkspace({
             ) : null}
 
             {layersOpen ? (
-              <div className="veo-glass absolute bottom-16 left-3 z-10 max-h-[55%] w-64 overflow-y-auto rounded-xl p-3">
+              <div className="veo-glass absolute bottom-16 left-3 right-3 z-10 max-h-[55%] overflow-y-auto rounded-xl p-3 sm:right-auto sm:w-64">
                 <div className="mb-2 flex items-center justify-between">
                   <h2 className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-faint">
                     Layers
@@ -403,10 +531,11 @@ export function LearningWorkspace({
                 </div>
                 <LayersPanel
                   layers={graph?.layers ?? []}
-                  hiddenLayerIds={hiddenLayerIds}
-                  onToggle={(layerId) =>
-                    controller?.setLayerVisible(layerId, hiddenLayerIds.has(layerId))
-                  }
+                  stateOf={(layerId) => controller?.getLayerState(layerId) ?? 'visible'}
+                  peeledLayerIds={peeledLayerIds}
+                  onShow={(layerId) => controller?.showLayer(layerId)}
+                  onHide={(layerId) => controller?.hideLayer(layerId)}
+                  onGhost={(layerId) => controller?.ghostLayer(layerId)}
                 />
               </div>
             ) : null}
@@ -453,10 +582,16 @@ export function LearningWorkspace({
 }
 
 const EMPTY_LAYER_SET: ReadonlySet<string> = new Set<string>();
-const EMPTY_VISUAL = {
+const EMPTY_OFFSETS: ReadonlyMap<SemanticId, readonly [number, number, number]> = new Map();
+const EMPTY_PEELED: readonly string[] = [];
+const EMPTY_VISUAL: SceneVisualState = {
   states: new Map(),
   isolatedId: null,
   hiddenLayerIds: EMPTY_LAYER_SET,
+  ghostedLayerIds: EMPTY_LAYER_SET,
+  peelLevel: 0,
+  dissectedIds: [],
+  exploded: false,
 };
 
 /**
@@ -467,6 +602,7 @@ const EMPTY_VISUAL = {
  */
 function WorkspaceCanvas({
   diagnostic,
+  offsets,
   status,
   error,
   progress,
@@ -490,7 +626,8 @@ function WorkspaceCanvas({
   readonly assetUrl: string | null;
   readonly meshMapping: ReadonlyMap<string, SemanticId>;
   readonly controller: NonNullable<ReturnType<typeof useAnatomyModel>['controller']>;
-  readonly visual: (typeof EMPTY_VISUAL) | NonNullable<ReturnType<typeof useAnatomyModel>['snapshot']>['visual'];
+  readonly visual: SceneVisualState;
+  readonly offsets: ReadonlyMap<SemanticId, readonly [number, number, number]>;
   readonly interactionMode: string;
   readonly reducedMotion: boolean;
   readonly onUnmappedMeshes: (names: readonly string[]) => void;
@@ -503,6 +640,7 @@ function WorkspaceCanvas({
       assetUrl={assetUrl}
       meshMapping={meshMapping}
       visual={visual}
+      offsets={offsets}
       controller={controller}
       interactionMode={interactionMode}
       reducedMotion={reducedMotion}

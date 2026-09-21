@@ -26,6 +26,15 @@ import { RelationshipList } from './RelationshipTrail';
 
 export type ContextAction = 'explain' | 'quiz' | 'flashcard' | 'note' | 'review';
 
+/**
+ * Manipulating the selected structure.
+ *
+ * Separate from the study actions above because these do something to the
+ * model right now, while those produce learning material. Mixing them would
+ * make a destructive-looking control sit next to a harmless one.
+ */
+export type ManipulateAction = 'isolate' | 'hide' | 'ghost' | 'dissect' | 'restore';
+
 /** What an action handler receives. Complete semantic context, no mesh data. */
 export interface ContextActionPayload {
   readonly action: ContextAction;
@@ -43,6 +52,43 @@ const ACTIONS: readonly { id: ContextAction; icon: IconName; label: string }[] =
   { id: 'review', icon: 'clock', label: 'Review Later' },
 ];
 
+/** What the loaded model permits doing to the selected structure. */
+export interface ManipulateAvailability {
+  readonly isolate: boolean;
+  readonly hide: boolean;
+  readonly ghost: boolean;
+  readonly dissect: boolean;
+  readonly restore: boolean;
+}
+
+const MANIPULATIONS: readonly {
+  id: ManipulateAction;
+  icon: IconName;
+  label: string;
+  unavailable: string;
+}[] = [
+  {
+    id: 'isolate',
+    icon: 'isolate',
+    label: 'Isolate',
+    unavailable: 'This model cannot isolate a structure',
+  },
+  { id: 'hide', icon: 'eyeOff', label: 'Hide', unavailable: 'This model cannot hide structures' },
+  { id: 'ghost', icon: 'ghost', label: 'Ghost', unavailable: 'This model cannot ghost structures' },
+  {
+    id: 'dissect',
+    icon: 'dissect',
+    label: 'Dissect',
+    unavailable: 'This model cannot be dissected',
+  },
+  {
+    id: 'restore',
+    icon: 'rebuild',
+    label: 'Restore',
+    unavailable: 'Nothing has been taken away yet',
+  },
+];
+
 export function ContextPanel({
   selectedId,
   object,
@@ -51,6 +97,8 @@ export function ContextPanel({
   relationships,
   onSelectObject,
   onAction,
+  onManipulate,
+  manipulation,
   actionsEnabled,
   className,
 }: {
@@ -63,6 +111,9 @@ export function ContextPanel({
   readonly relationships: readonly Relationship[];
   readonly onSelectObject: (semanticId: SemanticId) => void;
   readonly onAction: (payload: ContextActionPayload) => void;
+  readonly onManipulate: (action: ManipulateAction, semanticId: SemanticId) => void;
+  /** Which manipulations the loaded model supports. */
+  readonly manipulation: ManipulateAvailability;
   readonly actionsEnabled: boolean;
   readonly className?: string;
 }) {
@@ -120,7 +171,39 @@ export function ContextPanel({
         <code className="mt-1 block break-all font-mono text-[10px] text-cyan">{selectedId}</code>
       </header>
 
-      {/* Actions sit high: they are why a learner selected something. */}
+      {/*
+        * Manipulation comes first: a learner who selected a structure is
+        * usually about to look at it, look inside it, or get it out of the
+        * way. An unsupported operation is shown disabled with the reason
+        * rather than hidden, so the model's limits are legible.
+        */}
+      <PanelSection label="Manipulate">
+        <div className="grid grid-cols-3 gap-1.5">
+          {MANIPULATIONS.map((item) => {
+            const supported = manipulation[item.id];
+            return (
+              <button
+                key={item.id}
+                type="button"
+                disabled={!actionsEnabled || !supported}
+                title={supported ? item.label : item.unavailable}
+                onClick={() => onManipulate(item.id, selectedId)}
+                className={cn(
+                  'flex flex-col items-center gap-1 rounded-lg border border-hairline px-1.5 py-2',
+                  'text-[11px] font-medium text-ink-muted transition-colors duration-150',
+                  'hover:border-hairline-strong hover:text-ink',
+                  'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-hairline',
+                )}
+              >
+                <Icon name={item.icon} size={15} />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </PanelSection>
+
+      {/* Study actions: they produce learning material rather than change the view. */}
       <PanelSection label="Study this">
         <div className="grid grid-cols-2 gap-1.5">
           {ACTIONS.map((action) => (

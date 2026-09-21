@@ -48,7 +48,15 @@ export type IconName =
   | 'shield'
   | 'card'
   | 'palette'
-  | 'arrowRight';
+  | 'arrowRight'
+  | 'peel'
+  | 'dissect'
+  | 'explode'
+  | 'ghost'
+  | 'eyeOff'
+  | 'undo'
+  | 'redo'
+  | 'rebuild';
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <path d="M3.5 10.5 12 3.75l8.5 6.75V20a.75.75 0 0 1-.75.75h-4.5v-6h-6.5v6h-4.5A.75.75 0 0 1 3.5 20v-9.5Z" />,
@@ -125,6 +133,55 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M4 12a8 8 0 1 0 2.6-5.9" />
       <path d="M4 4v4.2h4.2" />
+    </>
+  ),
+  peel: (
+    <>
+      <path d="M4 7.5 12 4l8 3.5-8 3.5L4 7.5Z" />
+      <path d="M6.5 13.2 12 15.6l5.5-2.4M7.5 17.4l4.5 2 4.5-2" />
+    </>
+  ),
+  dissect: (
+    <>
+      <path d="M5 4.5 13.5 13M19 4.5 10.5 13" />
+      <circle cx="8" cy="17" r="2.5" />
+      <circle cx="16" cy="17" r="2.5" />
+    </>
+  ),
+  explode: (
+    <>
+      <rect x="9.5" y="9.5" width="5" height="5" rx="1" />
+      <path d="M12 7V3.5M12 17v3.5M7 12H3.5M17 12h3.5" />
+    </>
+  ),
+  ghost: (
+    <>
+      <circle cx="12" cy="12" r="7.5" strokeDasharray="3 2.5" />
+      <circle cx="12" cy="12" r="2.5" />
+    </>
+  ),
+  eyeOff: (
+    <>
+      <path d="M4 12s3.2-5.5 8-5.5c1.4 0 2.6.4 3.7 1M20 12s-3.2 5.5-8 5.5c-1.5 0-2.8-.5-3.9-1.2" />
+      <path d="M4.5 4.5l15 15" />
+    </>
+  ),
+  undo: (
+    <>
+      <path d="M4 10h9a5 5 0 0 1 0 10h-3" />
+      <path d="M7.5 6.5 4 10l3.5 3.5" />
+    </>
+  ),
+  redo: (
+    <>
+      <path d="M20 10h-9a5 5 0 0 0 0 10h3" />
+      <path d="M16.5 6.5 20 10l-3.5 3.5" />
+    </>
+  ),
+  rebuild: (
+    <>
+      <path d="M12 3.5 19 7.5v9L12 20.5 5 16.5v-9L12 3.5Z" />
+      <path d="M12 12v8.5M12 12 5 7.5M12 12l7-4.5" />
     </>
   ),
   sparkles: (
