@@ -17,6 +17,9 @@ import { peelSequence } from './layers';
  */
 
 export const NO_CAPABILITIES: SpatialCapabilities = {
+  supportsSelection: false,
+  supportsLabels: false,
+  supportsRelationships: false,
   supportsLayers: false,
   supportsIsolation: false,
   supportsGhosting: false,
@@ -44,6 +47,11 @@ export function deriveCapabilities(graph: SpatialModelGraph | null): SpatialCapa
     [...graph.objects.values()].some((object) => hasOffset(object.explodedOffset));
 
   const capabilities: SpatialCapabilities = {
+    supportsSelection: true,
+    // Labels anchor to semantic objects and VEO draws them, so a model with
+    // structures can be labelled without supplying any label data itself.
+    supportsLabels: true,
+    supportsRelationships: graph.relationships.length > 0,
     supportsLayers: hasLayers,
     supportsIsolation: hasSeveralObjects,
     // Anything that renders can be de-emphasised; ghosting needs no model data.

@@ -211,6 +211,18 @@ export interface ExplodedGroup {
  * something is exactly the kind of button that does nothing.
  */
 export interface SpatialCapabilities {
+  /** The model has addressable objects a learner can pick. */
+  readonly supportsSelection: boolean;
+  /**
+   * Labels can be anchored to this model's structures.
+   *
+   * Tracks selection rather than being a separate claim: VEO anchors labels to
+   * semantic objects and renders them itself, so a model needs only to have
+   * addressable structures with somewhere to put a label.
+   */
+  readonly supportsLabels: boolean;
+  /** The model declares typed edges between structures. */
+  readonly supportsRelationships: boolean;
   readonly supportsLayers: boolean;
   readonly supportsIsolation: boolean;
   readonly supportsGhosting: boolean;
