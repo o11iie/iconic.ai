@@ -54,6 +54,13 @@ export interface SpatialModel extends Timestamped {
   /** Declared level of detail / file weight, used to plan loading strategy. */
   readonly assetProfile: SpatialAssetProfile;
   readonly licence: SpatialLicence;
+  /**
+   * Optional restriction on what the model allows.
+   *
+   * Only `false` has any effect: capability is derived from the graph, and a
+   * model may switch something off but never on.
+   */
+  readonly capabilities?: Partial<SpatialCapabilities>;
   readonly metadata: Metadata;
 }
 
@@ -112,6 +119,14 @@ export interface SpatialObject {
   readonly layerIds: readonly string[];
   readonly providerMeshNames: readonly string[];
   readonly boundingBox: BoundingBox | null;
+  /**
+   * Displacement applied in an exploded view, in model units.
+   *
+   * Authored by the model when it knows how its parts come apart. Absent means
+   * zero offset unless an `ExplodedGroup` derives one — VEO never invents a
+   * separation it has no basis for.
+   */
+  readonly explodedOffset?: Vec3 | null;
   readonly description: string | null;
   readonly synonyms: readonly string[];
   readonly metadata: Metadata;
@@ -142,9 +157,67 @@ export interface SpatialLayer {
   readonly description: string | null;
   readonly objectIds: readonly SemanticId[];
   readonly defaultVisible: boolean;
-  /** Paint order for ghosting/transparency. Lower renders first. */
+  /**
+   * The layer's priority: lower is outermost.
+   *
+   * One number with one meaning, used for both paint order and the sequence a
+   * peel works through. A model that wants a different peel sequence from its
+   * paint order is describing two different layer sets, not two orderings.
+   */
   readonly order: number;
+  /** Opacity applied when this layer is ghosted rather than hidden. */
+  readonly opacity: number;
+  /** Whether a peel operation may remove this layer. */
+  readonly peelable: boolean;
+  /** What peeling this layer does to its objects. */
+  readonly peelMode: LayerPeelMode;
   readonly colorToken: string | null;
+}
+
+/**
+ * How a peel treats a layer's objects.
+ *
+ * `ghost` keeps outer structure faintly visible so the learner does not lose
+ * their bearings; `hide` removes it outright when it would still obstruct.
+ * The model chooses, because the right answer depends on the subject.
+ */
+export const LAYER_PEEL_MODES = ['ghost', 'hide'] as const;
+export type LayerPeelMode = (typeof LAYER_PEEL_MODES)[number];
+
+/**
+ * A set of objects that move apart together in an exploded view.
+ *
+ * Offsets are derived, never authored into the asset: an object's exploded
+ * position is its base transform plus a computed offset, so exiting the view
+ * restores the authored transform exactly.
+ */
+export interface ExplodedGroup {
+  readonly id: string;
+  readonly objectIds: readonly SemanticId[];
+  /** Point objects move away from. Null means the group's own centre. */
+  readonly center: Vec3 | null;
+  /** Multiplier on each object's displacement from the centre. */
+  readonly scale: number;
+  /** Constant distance added along the displacement direction. */
+  readonly spacing: number;
+}
+
+/**
+ * What a model supports being done to it.
+ *
+ * Declared capabilities may only ever REMOVE support the graph structurally
+ * provides — a manifest cannot claim a capability it has no data for. That
+ * direction is deliberate: a control that appears because a manifest asserted
+ * something is exactly the kind of button that does nothing.
+ */
+export interface SpatialCapabilities {
+  readonly supportsLayers: boolean;
+  readonly supportsIsolation: boolean;
+  readonly supportsGhosting: boolean;
+  readonly supportsPeeling: boolean;
+  readonly supportsDissection: boolean;
+  readonly supportsExplosion: boolean;
+  readonly supportsReconstruction: boolean;
 }
 
 /**
@@ -183,4 +256,6 @@ export interface SpatialModelGraph {
   readonly layers: readonly SpatialLayer[];
   readonly regions: readonly SpatialRegion[];
   readonly relationships: readonly Relationship[];
+  /** Groups that come apart together. Absent when the model does not explode. */
+  readonly explosion?: readonly ExplodedGroup[];
 }

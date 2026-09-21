@@ -6,9 +6,32 @@ import type { BoundingBox, Vec3 } from '@/types/domain/spatial';
  * knows what a heart, a molecule or a truss is.
  */
 
-/** How an object is currently being presented in the viewport. */
-export const VISUAL_STATES = ['default', 'hovered', 'selected', 'highlighted', 'ghosted', 'hidden'] as const;
+/**
+ * How an object is currently being presented in the viewport.
+ *
+ * One value per object, resolved from the whole manipulation state — not a
+ * collection of independent flags that can contradict each other. The three
+ * removal states are distinct although two of them do not render: they are
+ * undone by different operations and mean different things to the learner.
+ */
+export const VISUAL_STATES = [
+  'default',
+  'hovered',
+  'selected',
+  'highlighted',
+  'isolated',
+  'ghosted',
+  'peeled',
+  'dissected',
+  'hidden',
+] as const;
 export type VisualState = (typeof VISUAL_STATES)[number];
+
+/** States in which an object is not drawn at all. */
+export const NON_RENDERING_STATES: ReadonlySet<VisualState> = new Set<VisualState>([
+  'hidden',
+  'dissected',
+]);
 
 /** What a pointer interaction means right now. */
 export const INTERACTION_MODES = [
@@ -66,6 +89,10 @@ export interface SceneVisualState {
   readonly states: ReadonlyMap<SemanticId, VisualState>;
   readonly isolatedId: SemanticId | null;
   readonly hiddenLayerIds: ReadonlySet<string>;
+  readonly ghostedLayerIds: ReadonlySet<string>;
+  readonly peelLevel: number;
+  readonly dissectedIds: readonly SemanticId[];
+  readonly exploded: boolean;
 }
 
 export interface ObjectSummary {
