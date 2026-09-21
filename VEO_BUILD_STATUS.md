@@ -1,63 +1,107 @@
 # VEO — Build Status
 
-_Last updated: 2026-09-19_
+_Last updated: 2026-09-21_
 
 ---
 
 ## Current phase
 
-**Phase 3 — Core Spatial Engine**
+**Phase 3 — Core Spatial Engine → COMPLETE**
 
 ## Current gate
 
-**Gate 6 — Spatial Intelligence + Object Interaction → GREEN (verified)**
+**Gate 7 — Spatial Manipulation + Reconstruction → GREEN (verified)**
+**Gate 6 — Spatial Intelligence → GREEN (no regression)**
 **Gate 5 — Core Spatial / 3D Engine → GREEN (no regression)**
 **Gate 2 — Premium Product Shell → GREEN (no regression)**
 **Gate 1 — Application Foundation → GREEN (no regression)**
 
-Gate 6 was verified the way it demanded: unit tests, a production build, and a
-real browser driving real pointer, touch and keyboard input against the running
-engine. Every claim below is backed by an assertion that reads engine or DOM
-state, not by source inspection.
+Gate 7 was verified by taking a model apart in a running browser and putting it
+back: pointer, touch and toolbar input against the real engine, with every
+claim read from engine state rather than from the DOM.
 
-| # | Gate 6 criterion | Status | Evidence |
+| # | Gate 7 criterion | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | Semantic object registry operational | GREEN | 4 render nodes bound to a 7-object model |
-| 2 | Raycast → semantic resolution operational | GREEN | pointer probing resolves 4 distinct objects |
-| 3 | Selection states correct | GREEN | one selection, one hover, at all times |
-| 4 | Hover restrained | GREEN | 8 moves inside one object publish no new state |
-| 5 | Selection visualisation preserves materials | GREEN | ≤1 override per mesh, never cumulative |
-| 6 | Context panel driven by real object state | GREEN | renders descriptor-only facts (`region`, `kind`) |
-| 7 | Object hierarchy operational | GREEN | ancestors nearest-first to the model root |
-| 8 | Generic breadcrumb renderer | GREEN | navigates to a grouping structure in-browser |
-| 9 | Related structures via Relationship model | GREEN | resolvable targets only, 6 unit tests |
-| 10 | Camera targeting operational | GREEN | focus/fit/reset move the camera, verified by pose |
-| 11 | Object bounds API operational | GREEN | camera targets the centre the API reports |
-| 12 | Label foundation operational | GREEN | priority + budget, anchored to objects |
-| 13 | Pin foundation operational | GREEN | id/semanticId/position/title/type, pruned per model |
-| 14 | Spatial search foundation operational | GREEN | name, id, synonym, system, region |
-| 15 | Keyboard interaction operational | GREEN | Escape / R / F, never over a text field |
-| 16 | Mobile uses the same pipeline | GREEN | tap selects the same object at 360/390/430 |
-| 17 | Stale object references cannot resolve | GREEN | node held across replacement resolves to null |
-| 18 | Selection integrity under mutation | GREEN | hiding the selection invalidates it |
-| 19 | URL identifiers are not trusted | GREEN | foreign and malformed ids both refused |
-| 20 | No second registry or selection system | GREEN | one controller, one registry, one graph entry point |
-| 21 | No fake anatomy | GREEN | asserted over the whole diagnostic graph |
-| 22 | Diagnostic objects are not called anatomy | GREEN | `veo.diagnostic.*`, labelled in-viewport |
-| 23 | TypeScript | PASS | 0 errors |
-| 24 | ESLint | PASS | 0 errors, 0 warnings |
-| 25 | Unit tests | PASS | 297 passed / 297, 19 files |
-| 26 | Production build | PASS | 18 routes |
-| 27 | Gate 6 browser verification | PASS | 80 checks, 0 failures |
-| 28 | Gate 5 regression | PASS | 54 checks, 0 failures |
-| 29 | Gate 2 regression | PASS | 116 checks, 0 failures |
-| 30 | No console errors | PASS | 0 across desktop and 3 mobile widths |
-| 31 | Documentation updated | PASS | ARCHITECTURE.md §16 |
-| 32 | Git commit created | PASS | see history |
+| 1 | Visual state model implemented | GREEN | nine states, one value per object, twelve-rule precedence |
+| 2 | Layer system operational | GREEN | three declared layers, indexed membership |
+| 3 | Layer show / hide | GREEN | objects stop and resume rendering |
+| 4 | Layer ghost | GREEN | objects become faint rather than gone |
+| 5 | Layer restore | GREEN | returns to visible, nothing else disturbed |
+| 6 | Object hide / show | GREEN | subtree-aware, never unregisters |
+| 7 | Isolation | GREEN | context ghosted, selection survives, camera frames it |
+| 8 | Isolation restoration | GREEN | leaves a hand-hidden structure hidden |
+| 9 | Ghost mode | GREEN | spatially present, semantically intact |
+| 10 | Ghost restoration | GREEN | no residue |
+| 11 | Peel architecture | GREEN | sequence and step count come from the model |
+| 12 | Peel progression | GREEN | reveals the next layer, stops before emptying |
+| 13 | Peel reversal | GREEN | previous step restores the layer |
+| 14 | Peel reset | GREEN | returns to whole |
+| 15 | Dissection | GREEN | reveals context, preserves identity |
+| 16 | Dissection history | GREEN | ordered stack, undone last-first |
+| 17 | Dissection restoration | GREEN | one at a time or all at once |
+| 18 | Exploded view | GREEN | declared and group-derived offsets both verified |
+| 19 | Exact transform restoration | GREEN | identical coordinates after 5 cycles |
+| 20 | Reconstruction | GREEN | step and whole, keeping the learner's place |
+| 21 | Reset | GREEN | every axis, plus camera and history |
+| 22 | Reset is idempotent | GREEN | twice is byte-identical to once |
+| 23 | Capability discovery | GREEN | derived from the graph; a model may only restrict |
+| 24 | Context panel connected | GREEN | isolate / hide / ghost / dissect / restore on real ids |
+| 25 | Layers panel connected | GREEN | real state, real counts, three operations |
+| 26 | Mobile manipulation | GREEN | 360 / 390 / 430, toolbar and sheet |
+| 27 | No fake anatomy | GREEN | asserted over the whole diagnostic graph |
+| 28 | No semantic object destroyed | GREEN | re-asserted after every manipulation |
+| 29 | Source materials unmodified | GREEN | one override per mesh, authored material untouched |
+| 30 | No manipulation GPU leak | GREEN | geometry count flat over 60 manipulations |
+| 31 | TypeScript | PASS | 0 errors |
+| 32 | ESLint | PASS | 0 errors, 0 warnings |
+| 33 | Unit tests | PASS | 374 passed / 374, 20 files |
+| 34 | Production build | PASS | 18 routes |
+| 35 | Gate 7 browser verification | PASS | 158 checks, 0 failures |
+| 36 | Gate 6 regression | PASS | 80 checks, 0 failures |
+| 37 | Gate 5 regression | PASS | 54 checks, 0 failures |
+| 38 | Gate 2 regression | PASS | 116 checks, 0 failures |
+| 39 | No console errors | PASS | 0 across desktop and 3 mobile widths |
+| 40 | Documentation updated | PASS | ARCHITECTURE.md §17 |
+| 41 | Git commit created | PASS | see history |
 
 ---
 
 ## Completed
+
+### Gate 7 — spatial manipulation and reconstruction
+
+**A learner can take the model apart without taking the MODEL apart.** Every
+operation is a change of presentation: nothing is unregistered, no geometry is
+disposed, no authored material or transform is overwritten, and every semantic
+object stays queryable throughout.
+
+- **One state, eight axes** (`engine/spatial/manipulation.ts`) — hidden,
+  ghosted, dissected, isolated, hidden layers, ghosted layers, peel level,
+  exploded. Isolation, peel and layer state are held as what the learner asked
+  for rather than written into the hidden set, which is what makes each one
+  independently reversible.
+- **Twelve-rule precedence** (`visual-state.ts`) — removal beats emphasis, and
+  explicit intent beats incidental consequence. A structure hidden by hand
+  stays hidden when its layer comes back on.
+- **Layers** (`layers.ts`) — show / hide / ghost / toggle / restore, over an
+  indexed membership map built once per model. The diagnostic layers cut across
+  the hierarchy, so hiding a layer and hiding a system are visibly different.
+- **Peel** — the sequence and the number of steps come from the model's own
+  layers. Each layer declares whether peeling ghosts it or removes it.
+- **Dissection** — an ordered stack, undone last-first, with the registry,
+  hierarchy, relationships and metadata untouched.
+- **Exploded view** — an offset on top of the authored transform, never in
+  place of it. Declared offsets win; a group's members move radially from its
+  centre. `TransformStateManager` holds each base position and assigns it back,
+  so restoration is exact rather than close.
+- **Reconstruction and reset** — `reconstructStep` retraces the learner's path
+  in reverse; `resetScene` assigns a constant, which is what makes it
+  idempotent by construction rather than by care.
+- **History** (`manipulation-history.ts`) — semantic intents only, bounded at
+  50, with undo and redo.
+- **Capability discovery** (`capabilities.ts`) — derived from the graph. A
+  model may switch a capability off, never on: a manifest cannot assert its way
+  into a feature it has no data for.
 
 ### Gate 6 — spatial intelligence and object interaction
 
@@ -188,7 +232,7 @@ Gate 1 section of the git history for detail.
 
 ## In progress
 
-Nothing. Gate 6 is closed.
+Nothing. Gate 7 is closed, and with it Phase 3.
 
 ---
 
@@ -220,80 +264,65 @@ OpenAI, Stripe, OAuth providers.
 | --- | --- |
 | `npm run typecheck` | **PASS** — 0 errors |
 | `npm run lint` | **PASS** — 0 errors, 0 warnings |
-| `npm run test` | **PASS** — 297 passed / 297 total, 19 files |
+| `npm run test` | **PASS** — 374 passed / 374 total, 20 files |
 | `npm run build` | **PASS** — 18 routes |
+| `npm run test:spatial` | **PASS** — 158 live manipulation checks, 0 failures |
 | `npm run test:semantics` | **PASS** — 80 live semantic checks, 0 failures |
 | `npm run test:engine` | **PASS** — 54 live engine checks, 0 failures |
 | `npm run test:ui` | **PASS** — 116 live UI checks, 0 failures |
+| `npm run test:browser` | **PASS** — all four, 408 checks, 0 failures |
 
 ### Unit coverage
 
 | File | Tests | Covers |
 | --- | ---: | --- |
-| `engine/spatial/semantic.test.ts` | 52 | descriptors, generation safety, hierarchy, selection integrity, bounds, search, annotations, registration order |
-| `engine/3d/engine.test.ts` | 33 | materials, disposal, renderer policy, pointer rules, bounds, diagnostic graph |
-| `components/workspace/workspace.test.tsx` | 22 | context panel, breadcrumb, relationships, search, empty states |
+| `engine/spatial/manipulation.test.ts` | 70 | state model, layers, isolation, peel, dissection, exploded transforms, reconstruction, history, reset idempotence, capability discovery, contradictory states, material and transform safety |
+| `engine/spatial/semantic.test.ts` | 53 | descriptors, generation safety, hierarchy, selection integrity, bounds, search, annotations, registration order, one copy of the model |
+| `engine/3d/engine.test.ts` | 36 | materials, disposal, renderer policy, pointer rules, bounds, diagnostic graph, layer and explosion declarations |
+| `components/workspace/workspace.test.tsx` | 25 | context panel, breadcrumb, relationships, search, toolbar capability gating, layers panel |
 | `engine/spatial/scene-controller.test.ts` | 20 | selection, visibility, isolation, replacement, camera intents |
 | `engine/3d/camera/camera-math.test.ts` | 20 | zoom limits, initial framing, box guards |
-| `components/ui/primitives.test.tsx` | 18 | design-system primitives |
-| `lib/semantic-id.test.ts` | 17 | parsing, building, hierarchy operations |
-| `engine/spatial/model-lifecycle.test.ts` | 14 | every transition, generation guarding, terminal disposal |
-| `engine/spatial/visual-state.test.ts` | 14 | visual state resolution |
-| `anatomy/providers/gltf-anatomy-provider.test.ts` | 14 | provider contract |
-| 9 further files | 73 | stores, navigation, content, manifest, entitlements, tokens, database types |
+| 14 further files | 150 | primitives, semantic ids, lifecycle, visual state, provider, stores, navigation, content, manifest, entitlements, tokens, database types |
 
-Totals: **297 unit tests across 19 files** (Gate 6 added 55).
+Totals: **374 unit tests across 20 files** (Gate 7 added 71).
+
+### Live manipulation verification (`npm run test:spatial`)
+
+Drives a production build in Chromium and takes the diagnostic model apart:
+
+| Group | Checks |
+| --- | ---: |
+| Workspace and diagnostic model | 4 |
+| Capability discovery | 7 |
+| Isolation | 12 |
+| Ghosting | 5 |
+| Hide and show | 4 |
+| Layers | 10 |
+| Peel | 14 |
+| Dissection | 10 |
+| Exploded view | 13 |
+| Reconstruction | 8 |
+| Manipulation history | 4 |
+| Reset, twice | 10 |
+| GPU and resource stability | 5 |
+| Console | 1 |
+| Mobile 360 / 390 / 430 | 51 |
+| **Total** | **158 passed, 0 failed** |
+
+Two claims are measured rather than asserted. **Nothing is destroyed**: after
+every manipulation the script re-checks that all five objects are still
+registered, still have a parent, and are still findable by search.
+**Restoration is exact**: the authored coordinates are compared for equality,
+not closeness, after five explode/implode cycles — an offset added and
+subtracted would drift, and this would catch it.
 
 ### Live semantic verification (`npm run test:semantics`)
 
-Drives a production build in Chromium. Screen positions are discovered by
-moving the pointer and asking the engine what is under it, so nothing depends
-on hard-coded geometry:
-
-| Group | Checks |
-| --- | ---: |
-| Workspace opens with the diagnostic model | 3 |
-| Semantic model and hierarchy | 4 |
-| Hover resolves and clears | 7 |
-| Hover does not churn state | 1 |
-| Selection drives the interface | 10 |
-| Navigating the hierarchy | 3 |
-| The child wins over its parent group | 4 |
-| Camera targeting and bounds | 5 |
-| Spatial search | 4 |
-| Keyboard | 4 |
-| Material integrity | 5 |
-| Selection integrity | 3 |
-| Untrusted identifiers | 5 |
-| Stale references | 6 |
-| Console | 1 |
-| Mobile 360 / 390 / 430 | 15 |
-| **Total** | **80 passed, 0 failed** |
-
-The stale-reference claim is measured, not asserted: a real render node is
-captured from the live model, the model is replaced, and resolving that same
-node is required to return `null`.
+Gate 6's suite, re-run against the Gate 7 build: **80 passed, 0 failed**.
 
 ### Live engine verification (`npm run test:engine`)
 
-Gate 5's suite, re-run unchanged against the Gate 6 build:
-
-| Group | Checks |
-| --- | ---: |
-| Page, canvas, diagnostic scene | 8 |
-| Camera responds / orbit | 2 |
-| Zoom | 2 |
-| Pan | 1 |
-| Reset | 2 |
-| Targeting, selection, highlight | 9 |
-| Fit-to-selection and model replacement | 7 |
-| Console and layout | 3 |
-| Mobile viewport (4 sizes) | 16 |
-| Honest state without a licensed asset | 2 |
-| **Total** | **54 passed, 0 failed** |
-
-The memory claim is measured, not asserted: the scene is replaced four times
-and the renderer's own `gl.info.memory.geometries` is required not to grow.
+Gate 5's suite, re-run against the Gate 7 build: **54 passed, 0 failed**.
 
 ---
 
@@ -316,6 +345,64 @@ and the renderer's own `gl.info.memory.geometries` is required not to grow.
 - **Snapshot stability matters.** `SceneController.getSnapshot` returns the
   same object until something changes, and re-selecting the current selection
   does not notify — otherwise every no-op selection would cost a render.
+
+---
+
+## Issues found and fixed during Gate 7
+
+Two were real defects, both invisible to unit tests and found only by running
+the application.
+
+1. **The provider kept a second copy of the loaded model.** `ProviderSnapshot`
+   reported the provider's own `graph` field alongside the controller's, and a
+   model published straight to the controller — which is exactly what the
+   diagnostic path does — left that field null. So the layers panel listed
+   nothing while the engine was peeling those same layers, and everything
+   reading the provider saw a model with no layers, no regions and no
+   relationships.
+
+   *Fixed* by making `graph` a getter over `scene.getGraph()`, leaving the
+   controller as the only copy. A regression test publishes straight to the
+   controller and asserts the provider reports it.
+
+2. **Isolation wrote itself into the hidden set.** Isolating computed hidden
+   and ghosted sets and assigned them over the learner's own, so restoring
+   isolation un-hid a structure they had hidden deliberately. Isolation is now
+   held as the id alone and resolved at render time, which also makes the
+   `isolated` visual state possible.
+
+   *Fixed* alongside a wider change: peel level and layer state are held the
+   same way. That is what makes each axis independently reversible, and a
+   regression test hides a structure by hand, isolates, restores, and requires
+   the hand-hidden structure to still be hidden.
+
+3. **A test drag could sample a moving camera.** Gate 5's mobile orbit check
+   occasionally read a pose mid-transition and compared two moving values,
+   reading as no movement. It failed once in five runs. Rather than call it a
+   flake, the check now waits for the camera to settle first; it has since run
+   clean three times in a row and through the full chain.
+
+### Verified, not changed
+
+Four browser assertions failed on first run and were wrong about the engine
+rather than finding a defect. Each was made more specific, not less:
+
+- **Selection outranks isolation on the object carrying both.** `isolateObject`
+  selects and isolates in one step, so the object reports `selected`. The check
+  now asserts that precedence explicitly, and reads `isolated` from a member of
+  the subtree that is not itself selected.
+- **Undoing a dissection reveals the peel beneath it.** The test expected the
+  structure to return to normal, but it sat in a peeled layer. The removal
+  states are independent axes; putting one back does not silently put back
+  another. The check now states that.
+- **Selecting a structure in a hidden layer invalidates the selection.** The
+  mobile test hid a layer and never restored it, then selected a structure
+  inside it. The engine was right; the test now restores the layer, which also
+  covers restore-by-touch.
+- **Manipulating on a narrow screen happens in the details sheet.** Selecting
+  opens the sheet over the toolbar, which is the point: the controls for the
+  selected structure come to the thumb. The mobile checks now drive the sheet's
+  own controls, which is the real path a learner takes.
 
 ---
 
@@ -423,11 +510,11 @@ engine rather than finding a defect:
 
 ## Next action
 
-**Gate 7.** Gate 6 is GREEN, so the next gate is open. Gate 6 deliberately
-stopped short of: dissection, full peel mechanics, spaced repetition, AI tutor
-responses, and licensed anatomy asset integration. The semantic layer those
-features need is now in place — every one of them addresses structures by
-semantic id, not by mesh.
+**Phase 4.** Gate 7 is GREEN, which closes Phase 3: the spatial engine and
+everything built on it — semantics, interaction and manipulation — are complete
+and verified. Phase 3 deliberately stopped short of AI tutor responses, active
+recall, spaced repetition, generated study material, and licensed asset
+integration.
 
 To reproduce the verification locally:
 
@@ -436,30 +523,36 @@ To reproduce the verification locally:
 echo 'NEXT_PUBLIC_ENABLE_PIPELINE_DIAGNOSTIC=true' >> .env.local
 npm run verify
 npm start &
-npm run test:browser      # UI + engine + semantics, 250 checks
+npm run test:browser      # UI + engine + semantics + spatial, 408 checks
 ```
 
 **Decision still required from you:** the licensing route for subject content —
 license an SDK, license a GLB/GLTF asset set, or commission VEO-owned models.
 The provider layer supports all three; only the SDK path carries a code cost,
-and the abstraction for it already exists. This remains the critical path: the
-engine and its semantic layer are complete and every remaining gate builds on
-content this environment cannot yet display.
+and the abstraction for it already exists. This is now the only thing standing
+between the engine and a learner: everything Phase 4 builds sits on content
+this environment cannot yet display.
 
 ### What a licensed asset needs to supply
 
-Gate 6 makes the integration contract concrete. An asset set is ready for VEO
-when its `manifest.json` provides, for every structure:
+Gates 6 and 7 together make the integration contract concrete. An asset set is
+ready for VEO when its `manifest.json` provides, for every structure:
 
 | Field | Why it matters now |
 | --- | --- |
 | `semanticId` | VEO's permanent identity; never the vendor's mesh name |
-| `parentId` / `childIds` | drives hierarchy, breadcrumb and fit-to-group |
+| `parentId` / `childIds` | hierarchy, breadcrumb, fit-to-group, and subtree removal |
 | `name` | what the panel, search and labels display |
 | `synonyms` | search recall for the terms a learner actually types |
-| `system` / `region` | grouping, filtering and layer membership |
+| `system` / `region` | grouping and filtering |
 | `providerMeshNames` | the vendor-side mapping, kept at the edge |
 | `relationships` | related-structure navigation |
+| `layers` | what can be shown, hidden, ghosted and peeled |
+| `layers[].order` | the peel sequence, outermost first |
+| `layers[].peelable` / `peelMode` | whether a peel removes a layer, and how |
+| `explodedOffset` or `explosion` | how the model comes apart, when it does |
 
 Structures that render as bare grouping nodes are first-class: they need no
-geometry to be navigable, searchable, selectable or framable.
+geometry to be navigable, searchable, selectable, framable or removable.
+Anything the manifest omits simply switches a capability off — the interface
+offers only what the model can actually do.

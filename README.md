@@ -75,7 +75,8 @@ npm run verify      # all of the above, then a production build
 npm run test:ui        # live browser checks of the product shell
 npm run test:engine    # live browser checks of the spatial engine
 npm run test:semantics # live browser checks of semantic object interaction
-npm run test:browser   # all three, in order
+npm run test:spatial   # live browser checks of spatial manipulation
+npm run test:browser   # all four, in order
 npm run verify:full    # verify, then boot a production server and run test:ui
 ```
 
@@ -91,7 +92,13 @@ model, and that a render node held across a model replacement resolves to
 nothing. Screen positions are discovered by moving the pointer and asking the
 engine what is under it, so no assertion depends on hard-coded geometry.
 
-Both need the diagnostic scene enabled:
+`test:spatial` takes the model apart and puts it back: layers, isolation,
+ghosting, peel, dissection and an exploded view, then a reset run twice. Two
+claims there are measured rather than asserted — that every semantic object is
+still registered and searchable after each manipulation, and that an exploded
+part returns to the *exact* coordinates the asset shipped.
+
+All three need the diagnostic scene enabled:
 
 ```bash
 echo 'NEXT_PUBLIC_ENABLE_PIPELINE_DIAGNOSTIC=true' >> .env.local
@@ -150,7 +157,11 @@ src/
       model-lifecycle.ts    load/replace/dispose state machine
       search.ts             weighted spatial search index
       annotations.ts        labels and pins anchored to semantic objects
-    3d/                 renderer, camera rig, materials, disposal
+      manipulation.ts       visual state model, peel, explosion, reconstruction
+      manipulation-history.ts  bounded undo/redo over semantic intents
+      capabilities.ts       what the loaded model can be asked to do
+      layers.ts             layer defaults, peel sequence, membership index
+    3d/                 renderer, camera rig, materials, transforms, disposal
       renderer/         colour management, tone mapping, DPR policy
       scene/            scene root, GLTF loader
       interaction/      pointer and raycast rules
@@ -177,8 +188,16 @@ supabase/migrations/    schema + Row Level Security
 **Gate 2 — Premium Product Shell + Learning Workspace: complete and verified.**
 **Gate 5 — Core Spatial / 3D Engine: complete and verified.**
 **Gate 6 — Spatial Intelligence + Object Interaction: complete and verified.**
+**Gate 7 — Spatial Manipulation + Reconstruction: complete and verified.**
 
 Working today:
+
+- Spatial manipulation that never destroys the model: layers (show / hide /
+  ghost / restore), isolation, object hide and ghost, a peel driven by the
+  model's own layer sequence, reversible dissection, an exploded view that
+  restores authored transforms exactly, step-by-step reconstruction, bounded
+  undo and redo, and an idempotent reset. The interface offers only what the
+  loaded model can actually support.
 
 - A semantic object layer: structures, not meshes, drive selection, the context
   panel, hierarchy and breadcrumb, related structures, search, camera targeting
@@ -203,7 +222,7 @@ Working today:
   permanent VEO identity.
 - Supabase auth with session refresh and protected routes; Postgres schema and
   Row Level Security for all core tables.
-- 297 automated tests plus 250 live browser checks.
+- 374 automated tests plus 408 live browser checks.
 
 Deliberately **not** present:
 
@@ -214,10 +233,10 @@ Deliberately **not** present:
 - **No recall algorithm or spaced repetition yet.**
 - **No tutor responses yet** — the abstraction and context builder exist; the
   server route comes later.
-- **No dissection or exploded view yet** — the visual-state model supports
-  them; the interface does not drive them.
+- **No sectioning or cut planes yet** — the provider capability is declared in
+  the contract; nothing sits behind it.
 
-Next: **Gate 7** — see [VEO_BUILD_STATUS.md](./VEO_BUILD_STATUS.md).
+Next: **Phase 4** — see [VEO_BUILD_STATUS.md](./VEO_BUILD_STATUS.md).
 
 ## Note on this repository
 

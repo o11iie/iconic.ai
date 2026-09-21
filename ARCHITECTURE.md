@@ -512,9 +512,8 @@ exists so engineers can verify the engine, and it says so.
   and unit-tested against a stubbed manifest, but has not been exercised
   against a real licensed asset, because none exists yet. Draco and KTX2
   decoders are declared in the manifest schema but not yet wired.
-- **Ghost, isolate, peel and dissect** exist in the visual-state model and are
-  resolved correctly, but only `visible` / `hidden` / `ghosted` are driven by
-  the interface today. Isolation is disabled for the diagnostic scene.
+- **Sectioning and cut planes are not implemented.** The provider capability
+  exists in the contract; no engine or interface support sits behind it yet.
 - **The canvas is `aria-hidden`.** Arbitrary 3D geometry cannot be navigated by
   a screen reader, and claiming otherwise would be a false promise. The
   surrounding interface carries the information: camera controls are real
@@ -683,6 +682,186 @@ It does not know what a heart is. `veo.anatomy.heart.left_ventricle` and
 `veo.engineering.turbine.stage_two_rotor` are the same kind of thing to it. The
 diagnostic model — `veo.diagnostic.test_scene.system_a.object_1` — exercises
 every path in it, which is only possible because none of it is domain-specific.
+
+---
+
+## 17. Spatial manipulation
+
+Gate 6 made the engine mean something. This layer lets a learner take it apart.
+
+### The one rule
+
+**A manipulation changes how a model is presented, never what it is.**
+
+Nothing is unregistered, no geometry is disposed, no authored material or
+transform is overwritten, and every semantic object stays queryable throughout.
+A dissected structure still has a name, a parent, its relationships and its
+metadata; it simply is not being drawn at this moment. That is what makes every
+operation reversible without remembering what it destroyed — there is nothing
+to remember, because nothing was destroyed.
+
+### One state, eight axes
+
+```ts
+interface ManipulationState {
+  hiddenIds, ghostedIds        // explicit, per object
+  dissectedIds                 // ordered: last in, first out
+  isolatedId                   // one subtree, or null
+  hiddenLayerIds, ghostedLayerIds
+  peelLevel                    // how far through the model's own sequence
+  exploded
+}
+```
+
+Eight fields, each an independent axis of meaning rather than a pile of
+booleans, and one value per object resolved from all of them together.
+
+The important design decision is what is NOT here. Isolation does not write
+itself into `hiddenIds`. Peel does not write itself into `ghostedIds`. Layer
+state does not touch either. Each stays as what the learner asked for, and the
+rendered result is computed. That is what lets `restoreIsolation()` leave a
+structure the learner hid by hand still hidden — and it is what the first
+implementation got wrong.
+
+### Precedence
+
+Twelve rules, one fixed order, first match wins:
+
+```
+ 1. dissected          (subtree)      7. hovered
+ 2. hidden             (subtree)      8. highlighted
+ 3. peeled             (subtree)      9. isolated
+ 4. layer hidden                     10. layer ghosted
+ 5. outside isolation                11. ghosted
+ 6. selected                         12. default
+```
+
+Two principles decide that order, and every future addition has to fit them:
+
+**Removal beats emphasis.** Highlighting something the learner cannot see
+communicates nothing, and a selected-but-invisible object is the kind of
+contradiction that makes a viewport impossible to reason about. Selection and
+hover invalidate against `NON_RENDERING_STATES` rather than a list of names, so
+a state added later is covered by construction.
+
+**Explicit intent beats incidental consequence.** A structure hidden by hand
+stays hidden when its layer is switched back on. Otherwise turning a layer on
+would silently undo a decision made deliberately.
+
+Rules 1–3 apply to a structure and everything beneath it: removing an assembly
+that still showed its own parts would be incoherent.
+
+### Layers
+
+A layer is a meaningful grouping of objects — a system, a shell, a subassembly,
+a stratum. The model's manifest decides what exists and what it is called;
+nothing in the engine knows.
+
+Membership is indexed once per model, so a layer operation is a set lookup
+rather than a walk over every object. On a model with tens of thousands of
+parts that is the difference between a toggle and a stall.
+
+A layer has three states, not two: hiding removes it, ghosting keeps it faintly
+present so the learner can still see where what they are studying sits. Those
+are different questions and a checkbox can only answer one.
+
+An object in two layers stays visible while either is on. A layer is a way of
+looking at a model, not an owner of geometry.
+
+### Peel
+
+Peeling removes outer layers progressively to reveal what they cover. It is
+emphatically not arbitrary translation of meshes: it works from the model's own
+layer sequence, and each layer declares whether peeling ghosts it or removes
+it outright.
+
+The number of steps comes from the model. A layer marked unpeelable is what
+stops a peel ending in an empty viewport — the diagnostic model's core layer
+exists for exactly that reason.
+
+### Dissection
+
+An ordered stack, undone last-first. `dissectObject` pushes, `restoreDissection`
+pops one, `resetDissection` clears. The registry, hierarchy, relationships and
+metadata are untouched throughout: a dissected structure can still be searched
+for, navigated to and described.
+
+### Exploded view, and transform safety
+
+The same contract the material layer holds, for positions.
+
+An asset's authored transform is the truth about where a part belongs. A
+manipulation is a displacement **on top of** it:
+
+```
+currentTransform = baseTransform + manipulationTransform
+```
+
+`TransformStateManager` captures each node's base position once and assigns it
+back on restore. Restoration is therefore exact rather than close: the
+coordinates after a restore are the ones the asset shipped, however many times
+the view has been exploded and collapsed. Subtracting the offset instead would
+accumulate floating-point error, and the browser suite compares coordinates for
+equality specifically to catch that.
+
+Offsets are semantic: an object's own declared offset wins, otherwise its
+exploded group moves it radially from the group's centre by an amount the
+group's scale and spacing fix exactly. A structure with neither gets no offset.
+VEO does not invent a separation it has no basis for — a made-up explosion
+looks convincing and teaches something false about how the thing comes apart.
+
+They are computed once per explosion and cached. A group-derived offset is a
+function of where its members are, so reading it again once they had moved
+would compound, pushing them further out on every frame.
+
+### Reconstruction and reset
+
+`reconstructStep` retraces the learner's own path in reverse — dissection,
+then hidden, then peel, then isolation, then layers, then ghosts, then the
+exploded view — rather than jumping to an arbitrary intermediate state.
+`reconstructAll` makes the model whole while leaving the camera and the
+selection where they are.
+
+`resetScene` returns everything to the state a model loads in, reframes the
+camera and clears the history. It is **idempotent by construction**: it assigns
+a constant rather than reversing whatever happened to be in force, so calling
+it twice cannot differ from calling it once. That is a property of the
+implementation, not a thing to be careful about.
+
+### History
+
+Semantic intents only — never a frame, never a pointer position. Each entry
+holds the action and the state it produced, which makes undo exact: there is no
+inverse to re-derive and no chance of an operation that almost undoes itself.
+The states are small enough that the whole bounded stack costs less than one
+frame of geometry.
+
+This is deliberately not a document-editing history: no merges, no
+transactions, no persistence.
+
+### Capability discovery
+
+What the interface offers is decided by what the loaded model can support, not
+by which buttons exist. Capability is **derived from the graph**: layers need
+layers, peeling needs at least two peelable layers, explosion needs declared
+offsets.
+
+A model may then switch something off — a licence that forbids dissection, an
+asset whose geometry does not come apart cleanly — but it can never switch
+something on. A manifest cannot assert its way into a feature it has no data
+for, because that is precisely the button that appears and then does nothing.
+
+The toolbar hides what the model cannot do and disables, with a reason, what it
+can do but not yet.
+
+### One owner, still
+
+Components dispatch intents; the controller owns the resulting state. There is
+no second visibility store, no layer store, no dissection controller and no
+component-local copy of what is hidden. Every manipulation goes through one
+private method, so there is one place that decides what happens to the
+selection afterwards, one place that records history, and one place that
+publishes.
 
 ---
 
