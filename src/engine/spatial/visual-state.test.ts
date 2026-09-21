@@ -75,8 +75,12 @@ describe('precedence', () => {
 describe('isolation', () => {
   it('hides everything outside the isolated subtree', () => {
     const scene = resolveVisualState(input({ isolatedId: heart }));
-    expect(scene.states.get(heart)).toBe('default');
-    expect(scene.states.get(lv)).toBe('default');
+
+    // The subtree reports `isolated` rather than `default`: being the subject
+    // of isolation is a fact about the object, and the renderer and the
+    // interface both need to be able to tell.
+    expect(scene.states.get(heart)).toBe('isolated');
+    expect(scene.states.get(lv)).toBe('isolated');
     expect(scene.states.get(lung)).toBe('hidden');
   });
 
@@ -136,7 +140,7 @@ describe('isolation with preserved context', () => {
       input({ isolatedId: lv, ghostedIds: ghosted, hiddenIds: hidden }),
     );
 
-    expect(scene.states.get(lv)).toBe('default');
+    expect(scene.states.get(lv)).toBe('isolated');
     expect(scene.states.get(rv)).toBe('ghosted');
     expect(scene.states.get(lung)).toBe('ghosted');
   });

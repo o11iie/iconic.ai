@@ -40,6 +40,14 @@ describe('ContextPanel', () => {
     relationships: [] as never[],
     onSelectObject: () => {},
     onAction: () => {},
+    onManipulate: () => {},
+    manipulation: {
+      isolate: true,
+      hide: true,
+      ghost: true,
+      dissect: true,
+      restore: false,
+    },
   };
 
   it('invites selection when nothing is selected', () => {
@@ -239,85 +247,173 @@ describe('AIStudyPanel', () => {
 });
 
 describe('SpatialToolbar', () => {
-  const baseProps = {
-    mode: 'inspect' as const,
-    onModeChange: () => {},
-    onIsolate: () => {},
-    onReset: () => {},
-    onToggleLayers: () => {},
-    layersOpen: false,
-    canIsolate: true,
-    hasSelection: true,
+  const allCapabilities = {
+    supportsLayers: true,
+    supportsIsolation: true,
+    supportsGhosting: true,
+    supportsPeeling: true,
+    supportsDissection: true,
+    supportsExplosion: true,
+    supportsReconstruction: true,
   };
 
-  it('exposes every tool with an accessible name', () => {
+  const baseState = {
+    mode: 'inspect' as const,
+    capabilities: allCapabilities,
+    hasSelection: true,
+    layersOpen: false,
+    isolated: false,
+    exploded: false,
+    peelLevel: 0,
+    peelSteps: 2,
+  };
+
+  const baseProps = {
+    state: baseState,
+    onModeChange: () => {},
+    onAction: () => {},
+  };
+
+  it('exposes every supported tool with an accessible name', () => {
     render(<SpatialToolbar {...baseProps} />);
-    for (const label of ['Select', 'Explore', 'Layers', 'Isolate', 'Reset']) {
-      expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+    for (const label of ['Select', 'Explore', 'Layers', 'Isolate', 'Dissect', 'Explode', 'Reset']) {
+      expect(screen.getByRole('button', { name: new RegExp(label) })).toBeInTheDocument();
     }
   });
 
   it('marks the active mode', () => {
-    render(<SpatialToolbar {...baseProps} mode="orbit" />);
+    render(<SpatialToolbar {...baseProps} state={{ ...baseState, mode: 'orbit' }} />);
     expect(screen.getByRole('button', { name: 'Explore' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('disables isolate with an explanation rather than failing silently', () => {
-    render(<SpatialToolbar {...baseProps} canIsolate={false} />);
-    const isolate = screen.getByRole('button', { name: 'Isolate' });
-    expect(isolate).toBeDisabled();
+  it('omits a tool the loaded model cannot support', () => {
+    // A control the model has no data for is absent, not present-but-dead: a
+    // button that never does anything teaches a learner to distrust the rest.
+    render(
+      <SpatialToolbar
+        {...baseProps}
+        state={{
+          ...baseState,
+          capabilities: { ...allCapabilities, supportsExplosion: false, supportsPeeling: false },
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /Explode/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Peel/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Isolate' })).toBeInTheDocument();
   });
 
-  it('disables isolate until something is selected', () => {
-    render(<SpatialToolbar {...baseProps} hasSelection={false} />);
+  it('disables a supported tool that needs a selection first', () => {
+    render(
+      <SpatialToolbar {...baseProps} state={{ ...baseState, hasSelection: false }} />,
+    );
     expect(screen.getByRole('button', { name: 'Isolate' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Dissect' })).toBeDisabled();
+  });
+
+  it('reports how far a peel has progressed', () => {
+    render(<SpatialToolbar {...baseProps} state={{ ...baseState, peelLevel: 1 }} />);
+    expect(screen.getByRole('button', { name: 'Peel (1/2)' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 
   it('reports mode changes and actions', async () => {
     const onModeChange = vi.fn();
-    const onReset = vi.fn();
-    render(<SpatialToolbar {...baseProps} onModeChange={onModeChange} onReset={onReset} />);
+    const onAction = vi.fn();
+    render(<SpatialToolbar {...baseProps} onModeChange={onModeChange} onAction={onAction} />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Explore' }));
     expect(onModeChange).toHaveBeenCalledWith('orbit');
 
     await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
-    expect(onReset).toHaveBeenCalledOnce();
+    expect(onAction).toHaveBeenCalledWith('reset');
   });
 });
 
 describe('LayersPanel', () => {
+  const layer = {
+    id: 'cardiovascular',
+    modelId: 'm1',
+    name: 'Cardiovascular',
+    description: null,
+    objectIds: [lv, rv],
+    defaultVisible: true,
+    order: 0,
+    opacity: 0.15,
+    peelable: true,
+    peelMode: 'ghost' as const,
+    colorToken: null,
+  };
+
+  const handlers = { onShow: () => {}, onHide: () => {}, onGhost: () => {} };
+
   it('says the model declares none rather than listing invented systems', () => {
-    render(<LayersPanel layers={[]} hiddenLayerIds={new Set()} onToggle={() => {}} />);
+    render(
+      <LayersPanel layers={[]} stateOf={() => 'visible'} peeledLayerIds={[]} {...handlers} />,
+    );
     expect(screen.getByText(/declares no separate layers/)).toBeInTheDocument();
   });
 
-  it('renders declared layers as switches reflecting visibility', async () => {
-    const onToggle = vi.fn();
+  it('reports the real state of each declared layer', () => {
     render(
       <LayersPanel
-        layers={[
-          {
-            id: 'cardiovascular',
-            modelId: 'm1',
-            name: 'Cardiovascular',
-            description: null,
-            objectIds: [lv, rv],
-            defaultVisible: true,
-            order: 0,
-            colorToken: null,
-          },
-        ]}
-        hiddenLayerIds={new Set(['cardiovascular'])}
-        onToggle={onToggle}
+        layers={[layer]}
+        stateOf={() => 'hidden'}
+        peeledLayerIds={[]}
+        {...handlers}
       />,
     );
 
-    const toggle = screen.getByRole('switch', { name: /Cardiovascular/ });
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('button', { name: 'Hide Cardiovascular' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Show Cardiovascular' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    // The count is the layer's real membership, not a placeholder.
+    expect(screen.getByText('2')).toBeInTheDocument();
+  });
 
-    await userEvent.click(toggle);
-    expect(onToggle).toHaveBeenCalledWith('cardiovascular');
+  it('offers hide, ghost and show as distinct operations', async () => {
+    const onHide = vi.fn();
+    const onGhost = vi.fn();
+    const onShow = vi.fn();
+    render(
+      <LayersPanel
+        layers={[layer]}
+        stateOf={() => 'visible'}
+        peeledLayerIds={[]}
+        onShow={onShow}
+        onHide={onHide}
+        onGhost={onGhost}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ghost Cardiovascular' }));
+    expect(onGhost).toHaveBeenCalledWith('cardiovascular');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide Cardiovascular' }));
+    expect(onHide).toHaveBeenCalledWith('cardiovascular');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show Cardiovascular' }));
+    expect(onShow).toHaveBeenCalledWith('cardiovascular');
+  });
+
+  it('reports a layer the peel has taken away', () => {
+    render(
+      <LayersPanel
+        layers={[layer]}
+        stateOf={() => 'visible'}
+        peeledLayerIds={['cardiovascular']}
+        {...handlers}
+      />,
+    );
+    expect(screen.getByText('Peeled away')).toBeInTheDocument();
   });
 });

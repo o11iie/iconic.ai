@@ -113,15 +113,15 @@ async function runDesktop(page, errors) {
   // ------------------------------------------------- 3. the semantic model --
   console.log('\n=== 3. SEMANTIC MODEL ===');
   check(
-    booted.registry.length === 4,
-    'four objects are backed by live geometry',
+    booted.registry.length === 5,
+    'five objects are backed by live geometry',
     `${booted.registry.length}`,
   );
 
   const rootHierarchy = await page.evaluate((id) => window.__VEO_ENGINE__.hierarchy(id), ROOT_ID);
   check(
-    rootHierarchy.children.length === 2,
-    'the model root declares its two systems',
+    rootHierarchy.children.length === 3,
+    'the model root declares its three systems',
     JSON.stringify(rootHierarchy.children),
   );
 

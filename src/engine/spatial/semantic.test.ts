@@ -750,3 +750,62 @@ describe('regression: registration order', () => {
     expect(controller.registry.resolve(mesh)).toBeNull();
   });
 });
+
+/**
+ * Regression: the provider's view of the loaded model.
+ *
+ * A provider used to keep its own copy of the graph alongside the
+ * controller's. A model published straight to the controller — which is
+ * exactly what the diagnostic path does — left that copy null, so everything
+ * reading the provider saw a model with no layers while the engine was
+ * happily peeling those same layers. Two copies of the truth, and the
+ * interface read the wrong one.
+ */
+describe('regression: one copy of the loaded model', () => {
+  it('reports a graph published directly to the controller', async () => {
+    const { BaseSceneGraphProvider } = await import('./base-provider');
+    const { ok } = await import('@/lib/result');
+
+    /** The smallest provider that compiles: this tests the base class. */
+    class BareProvider extends BaseSceneGraphProvider {
+      readonly id = 'test';
+      readonly name = 'Test';
+      protected readonly capabilities = {
+        ownsRenderer: false,
+        supportsPartialLoad: false,
+        supportsGhosting: true,
+        supportsIsolation: true,
+        supportsCutPlanes: false,
+        supportsExplodedView: true,
+        supportsAnimation: false,
+        providesHierarchy: true,
+        providesRelationships: true,
+      };
+
+      async initialize() {
+        return ok(this.getStatus());
+      }
+
+      async loadModel() {
+        return ok(graphFixture());
+      }
+
+      getAssetUrl(): string | null {
+        return null;
+      }
+
+      getMeshMapping(): ReadonlyMap<string, SemanticId> {
+        return new Map();
+      }
+    }
+
+    const provider = new BareProvider();
+    const graph = graphFixture();
+
+    // Straight to the controller, bypassing the provider's own load path.
+    provider.scene.setGraph(graph);
+
+    expect(provider.getSnapshot().graph?.model.id).toBe('model-1');
+    expect(provider.getSnapshot().capabilities.supportsIsolation).toBe(true);
+  });
+});

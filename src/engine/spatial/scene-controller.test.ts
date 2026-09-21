@@ -117,8 +117,8 @@ describe('isolation', () => {
     controller.isolate(heart);
 
     const states = controller.getSnapshot().visual.states;
-    expect(states.get(heart)).toBe('default');
-    expect(states.get(lv)).toBe('default');
+    expect(states.get(heart)).toBe('isolated');
+    expect(states.get(lv)).toBe('isolated');
     expect(states.get(lung)).toBe('ghosted');
   });
 

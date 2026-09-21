@@ -88,7 +88,7 @@ try {
   check(booted.memory !== null && booted.memory.geometries > 0, 'renderer has live GPU geometry',
     JSON.stringify(booted.memory));
   check(
-    booted.registry.length === 4,
+    booted.registry.length === 5,
     'diagnostic scene registers its selectable nodes',
     `${booted.registry.length} registered`,
   );
@@ -380,6 +380,22 @@ try {
     check(mOverflow <= 2, `${name} has no horizontal overflow`, `${mOverflow}px`);
 
     // Touch orbit must move the camera.
+    //
+    // Wait for the camera to settle first: the initial framing animates, and
+    // sampling a pose mid-transition compares two moving values and can read
+    // as no movement at all. That was an intermittent failure here, and a
+    // test that sometimes measures the wrong thing is worse than no test.
+    await mpage.waitForFunction(
+      () => {
+        const camera = window.__VEO_ENGINE__?.state().camera;
+        if (!camera) return false;
+        const previous = window.__veoSettle;
+        window.__veoSettle = camera.position.join(',');
+        return previous === window.__veoSettle;
+      },
+      { timeout: 10000, polling: 250 },
+    );
+
     const beforeTouch = (await state(mpage)).camera;
     const tx = canvas.x + canvas.width / 2;
     const ty = canvas.y + canvas.height / 2;
@@ -390,7 +406,7 @@ try {
     await mpage.mouse.down();
     await mpage.mouse.move(tx + 90, ty + 40, { steps: 8 });
     await mpage.mouse.up();
-    await mpage.waitForTimeout(350);
+    await mpage.waitForTimeout(400);
 
     const afterTouch = (await state(mpage)).camera;
     check(

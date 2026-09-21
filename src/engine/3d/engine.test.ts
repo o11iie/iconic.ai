@@ -360,9 +360,10 @@ describe('diagnostic scene', () => {
   it('produces a real SpatialModelGraph with hierarchy and relationships', () => {
     const graph = buildDiagnosticGraph();
 
-    expect(graph.objects.size).toBe(7);
+    // Root, three systems, five objects.
+    expect(graph.objects.size).toBe(9);
     expect(graph.relationships.length).toBeGreaterThan(0);
-    expect(graph.layers.map((layer) => layer.id).sort()).toEqual(['system_a', 'system_b']);
+    expect(graph.layers.map((layer) => layer.id)).toEqual(['shell', 'frame', 'core']);
 
     const object1 = graph.objects.get(DIAGNOSTIC_IDS.object1);
     expect(object1?.parentId).toBe(DIAGNOSTIC_IDS.systemA);
@@ -372,6 +373,35 @@ describe('diagnostic scene', () => {
     const systemA = graph.objects.get(DIAGNOSTIC_IDS.systemA);
     expect(systemA?.childIds).toContain(DIAGNOSTIC_IDS.object1);
     expect(systemA?.parentId).toBe(DIAGNOSTIC_IDS.root);
+  });
+
+  it('layers cut across the hierarchy rather than mirroring it', () => {
+    // If a layer held exactly one system, hiding a layer and hiding a system
+    // would be the same operation and neither would be tested by the other.
+    const graph = buildDiagnosticGraph();
+    const shell = graph.layers.find((layer) => layer.id === 'shell');
+
+    expect(shell?.objectIds).toEqual([DIAGNOSTIC_IDS.object1, DIAGNOSTIC_IDS.object3]);
+    expect(graph.objects.get(DIAGNOSTIC_IDS.object1)?.system).toBe('system_a');
+    expect(graph.objects.get(DIAGNOSTIC_IDS.object3)?.system).toBe('system_b');
+  });
+
+  it('declares a peel sequence that stops before emptying the viewport', () => {
+    const graph = buildDiagnosticGraph();
+    const peelable = graph.layers.filter((layer) => layer.peelable).map((layer) => layer.id);
+
+    expect(peelable).toEqual(['shell', 'frame']);
+    expect(graph.layers.find((layer) => layer.id === 'core')?.peelable).toBe(false);
+  });
+
+  it('declares exploded offsets both directly and through a group', () => {
+    const graph = buildDiagnosticGraph();
+
+    // System A declares its own displacement...
+    expect(graph.objects.get(DIAGNOSTIC_IDS.object1)?.explodedOffset).toEqual([-1.3, 0, 0]);
+    // ...while System B's is derived from the group it belongs to.
+    expect(graph.objects.get(DIAGNOSTIC_IDS.object3)?.explodedOffset).toBeUndefined();
+    expect(graph.explosion?.[0]?.objectIds).toContain(DIAGNOSTIC_IDS.object3);
   });
 
   it('produces geometry with real bounds, so fitting is verifiable', () => {
