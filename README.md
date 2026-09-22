@@ -208,6 +208,12 @@ supabase/migrations/    schema + Row Level Security
 **Gate 6 — Spatial Intelligence + Object Interaction: complete and verified.**
 **Gate 7 — Spatial Manipulation + Reconstruction: complete and verified.**
 **Gate 8 — Anatomy Provider Integration: pipeline complete and verified.**
+**Gate 9 — Real Anatomy Rendering: RED, blocked by an external dependency.**
+
+> **No anatomical geometry has been rendered by this build.** No licensed
+> anatomy source exists in this environment. Everything upstream of the content
+> is built and verified; the content itself cannot be written, and VEO renders
+> nothing rather than a placeholder.
 
 Working today:
 
@@ -218,6 +224,10 @@ Working today:
   security boundary that keeps licence credentials out of the browser.
   **No licensed anatomy exists in this environment, so no anatomical geometry
   has been rendered.**
+- Asset-to-manifest reconciliation at load time, binary glTF transport verified
+  against a real GLB, progressive per-system and per-region loading, domain
+  containment, structure labels that follow their structures, and the load
+  instrumentation a real asset will be measured with.
 
 - Spatial manipulation that never destroys the model: layers (show / hide /
   ghost / restore), isolation, object hide and ghost, a peel driven by the
@@ -249,7 +259,7 @@ Working today:
   permanent VEO identity.
 - Supabase auth with session refresh and protected routes; Postgres schema and
   Row Level Security for all core tables.
-- 468 automated tests plus 435 live browser checks.
+- 500 automated tests plus 444 live browser checks.
 
 Deliberately **not** present:
 
@@ -263,7 +273,7 @@ Deliberately **not** present:
 - **No sectioning or cut planes yet** — the provider capability is declared in
   the contract; nothing sits behind it.
 
-Next: **Gate 9 — real licensed anatomy** — see [VEO_BUILD_STATUS.md](./VEO_BUILD_STATUS.md).
+Next: **a licensed anatomy source** — see [VEO_BUILD_STATUS.md](./VEO_BUILD_STATUS.md).
 
 ## Note on this repository
 

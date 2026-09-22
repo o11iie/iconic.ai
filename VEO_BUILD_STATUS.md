@@ -1,6 +1,6 @@
 # VEO — Build Status
 
-_Last updated: 2026-09-21_
+_Last updated: 2026-09-22_
 
 ---
 
@@ -10,57 +10,120 @@ _Last updated: 2026-09-21_
 
 ## Current gate
 
-**Gate 8 — Real Anatomy Provider Integration → GREEN (pipeline ready)**
+**Gate 9 — Real Anatomy Rendering → RED, blocked by an external dependency**
+
+**Gate 8 — Anatomy Provider Integration → GREEN (no regression)**
 **Gate 7 — Spatial Manipulation → GREEN (no regression)**
 **Gate 6 — Spatial Intelligence → GREEN (no regression)**
 **Gate 5 — Core Spatial / 3D Engine → GREEN (no regression)**
 **Gate 2 — Premium Product Shell → GREEN (no regression)**
 **Gate 1 — Application Foundation → GREEN (no regression)**
 
-> **Gate 8 GREEN does not mean real anatomy is integrated.** It means the
-> ingestion and provider pipeline is complete, tested and ready to accept
-> licensed anatomy. No licensed asset or provider credential exists in this
-> environment, so **no anatomical geometry has been rendered**. That is Gate 9,
-> and it is RED until a licensed model is actually loaded and validated.
+> ## Gate 9 is RED
+>
+> **No licensed anatomy source exists in this environment, so no anatomical
+> geometry has been rendered.** Gate 9's one acceptance condition — real
+> licensed anatomy rendering in a browser — cannot be met, and reporting
+> anything else would be a lie.
+>
+> This is not an engineering blocker. Everything upstream of the content is
+> built and verified. What is missing is anatomy, and it cannot be written.
 
-| # | Gate 8 criterion | Status | Evidence |
+### Environment classification
+
+Phase 1 of Gate 9 requires the anatomy source to be established by inspection
+rather than assumption. The result is **D — no real provider available**:
+
+| Checked | Found |
+| --- | --- |
+| `ANATOMY_*` server variables | none set |
+| `NEXT_PUBLIC_SPATIAL_ASSET_BASE_URL` | not set |
+| `.glb` / `.gltf` files in the repository | none |
+| `manifest.json` anywhere | none |
+| `public/` asset tree | empty |
+| Vendor references (any provider) in tracked files | none |
+| `GET /api/anatomy` on the running build | `configured: false`, `delivery: "none"` |
+| `GET /api/anatomy/heart` | `503 not_configured` |
+| Catalogue entries | all four `licensedAssetRequired: true` |
+
+### What Gate 9 completed anyway
+
+Everything that can be legitimately finished without the content was finished,
+so that the day a licence arrives is a day of loading a file rather than a day
+of writing the loader.
+
+| # | Gate 9 criterion | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | AnatomyProvider production interface | GREEN | 69 conformance assertions per implementation |
-| 2 | Provider selection / configuration | GREEN | two providers registered, selected by id |
-| 3 | GLTF provider operational | GREEN | passes the conformance suite |
-| 4 | Manifest schema operational | GREEN | model, provider, versions, body, systems, regions, structures, layers, relationships, capabilities |
-| 5 | Manifest validation operational | GREEN | 15 error classes, 25 tests, each proved by a refused manifest |
-| 6 | Semantic namespace established | GREEN | `veo.anatomy.<system>.<structure>`, provider ids never become identity |
-| 7 | Hierarchy normalisation | GREEN | Body → System → Region → Structure, derived from declared tags |
-| 8 | Layer mapping | GREEN | declared layers resolve to real structures |
-| 9 | Relationship mapping | GREEN | resolved and kind-filtered, unknown kinds warned |
-| 10 | Capability discovery | GREEN | derived from data, narrowed by provider, never widened by manifest |
-| 11 | Model versioning | GREEN | geometry and manifest versions checked against each other |
-| 12 | Asset loading lifecycle | GREEN | loading / progress / success / failure / retry |
-| 13 | Provider disposal | GREEN | no model, no selection, no stale objects |
-| 14 | Provider conformance tests | PASS | 69 × 2 implementations |
-| 15 | Security boundary verified | PASS | sentinel scan with a working positive control |
-| 16 | No provider secrets exposed | PASS | neither value nor variable name in the bundle |
-| 17 | No anatomy source exposed | PASS | catalogue allowlist, no asset served from VEO's origin |
-| 18 | Diagnostic stays separate | PASS | `veo.diagnostic.*` only, behind its own flag |
-| 19 | Missing-asset state honest | PASS | no canvas, no stand-in, an actionable reason |
-| 20 | Spatial engine integration | GREEN | selection, visibility, isolation, camera all reach the engine |
-| 21 | Anatomy validation command | PASS | `npm run validate:anatomy` |
-| 22 | TypeScript | PASS | 0 errors |
-| 23 | ESLint | PASS | 0 errors, 0 warnings |
-| 24 | Unit tests | PASS | 468 passed / 468, 22 files |
-| 25 | Production build | PASS | 20 routes |
-| 26 | Gate 8 browser verification | PASS | 27 checks, 0 failures |
-| 27 | Gate 7 regression | PASS | 158 checks |
-| 28 | Gate 6 regression | PASS | 80 checks |
-| 29 | Gate 5 regression | PASS | 54 checks |
-| 30 | Gate 2 regression | PASS | 116 checks |
-| 31 | Documentation updated | PASS | ARCHITECTURE.md §18 |
-| 32 | Git commit created | PASS | see history |
+| 1 | Actual licensed anatomy renders | **RED** | no licensed source exists |
+| 2 | Rendered geometry is provider geometry | **RED** | nothing is rendered |
+| 3 | AnatomyProvider remains the source of truth | GREEN | 69 conformance assertions × 2 providers |
+| 4 | Manifest validation passes | GREEN | 15 error classes, 25 tests |
+| 5 | Provider-independent semantic ids | GREEN | provider id never resolves as identity |
+| 6 | Asset ↔ manifest reconciliation | GREEN | 10 tests; refuses a mislabelled model |
+| 7 | Model version binding at load time | GREEN | asset stamp read and compared |
+| 8 | Binary glTF transport | GREEN | 9 tests over a real GLB round trip |
+| 9 | Progressive system / region loading | GREEN | 4 tests; declared part assets fetched |
+| 10 | Domain containment | GREEN | both providers refuse a non-anatomy manifest |
+| 11 | Selection through the semantic registry | GREEN | 80 live checks (Gate 6 suite) |
+| 12 | Camera framing from real bounds | GREEN | 54 live checks (Gate 5 suite) |
+| 13 | Layers / isolation / ghosting | GREEN | 164 live checks (Gate 7 suite) |
+| 14 | Peel / dissection / explosion / reconstruction | GREEN | same suite |
+| 15 | Labels render and track their structures | GREEN | 6 live checks, 5 unit tests |
+| 16 | Load instrumentation | GREEN | 5 tests; the harness a real asset is measured with |
+| 17 | Reset restores baseline | GREEN | idempotent, asserted twice over |
+| 18 | Disposal and replacement | GREEN | no stale objects, no geometry growth |
+| 19 | Mobile interaction | GREEN | 360 / 390 / 430, 51 live checks |
+| 20 | Security boundary | GREEN | 30 live checks with a positive control |
+| 21 | No credentials in storage, URL, cookies, HTML | GREEN | scanned on every anatomy surface |
+| 22 | TypeScript / ESLint | PASS | 0 errors, 0 warnings |
+| 23 | Unit tests | PASS | 500 passed / 500, 25 files |
+| 24 | Production build | PASS | 20 routes |
+| 25 | Full browser chain | PASS | 444 checks, 0 failures |
+| 26 | Documentation | PASS | ARCHITECTURE.md §18, this file |
+
+**Performance:** not measured. Measuring load time, time-to-interaction and
+geometry counts against a diagnostic scene would produce numbers that say
+nothing about a licensed asset. The instrumentation exists and is tested; the
+numbers wait for the model.
 
 ---
 
 ## Completed
+
+### Gate 9 — everything except the anatomy
+
+Gate 8 built the pipeline. Gate 9 closed the gaps between that pipeline and a
+real file arriving, and left the file itself as the only missing piece.
+
+- **Asset ↔ manifest reconciliation** (`anatomy/mapping/reconciliation.ts`) —
+  the check that runs when geometry actually arrives, as opposed to the offline
+  one. A structure whose mesh is absent from the asset keeps its name, its
+  parent and its context panel, and has nothing to show; the learner concludes
+  it does not exist, or reads its label off the structure beside it. Nothing
+  throws. The model is now refused instead, with the reason on screen.
+- **Model version binding at load time** — the asset's own version stamp is
+  carried from the loader to the reconciler, so geometry from one revision can
+  never be labelled with another's names.
+- **Binary glTF transport rehearsal** (`engine/3d/scene/gltf-transport.test.ts`)
+  — the one link nothing had ever exercised. Gates 5–7 tested a scene built in
+  memory; Gate 8 tested a stubbed network. This exports a real GLB, asserts its
+  container is spec-conformant, parses it with the real loader, and puts the
+  result through the real registry, bounds, material and disposal code. If that
+  step were broken it would have been discovered on the day a licence arrived.
+- **Progressive system and region loading** — a manifest may declare a separate
+  asset per system and per region, and the provider now fetches them. A whole
+  body is not one download; loading every system to look at the skeleton costs
+  a learner minutes and a phone its memory.
+- **Domain containment** — both providers refuse a manifest whose domain is not
+  `anatomy`. The anatomy workspace shows anatomy; diagnostic content has its own
+  labelled path and cannot arrive through this one.
+- **Labels** — the Gate 6 foundation is now drawn, as selectable DOM over the
+  canvas, off until asked for and bounded so a dense model stays readable. A
+  label whose structure is hidden, dissected or peeled away disappears with it;
+  a ghosted structure keeps its label, because it is still there.
+- **Load instrumentation** (`engine/3d/diagnostics/load-metrics.ts`) — what a
+  real asset will be measured with, built before one arrives so the numbers are
+  recorded rather than reconstructed from impressions afterwards.
 
 ### Gate 8 — anatomy provider integration
 
@@ -262,33 +325,58 @@ Gate 1 section of the git history for detail.
 
 ## In progress
 
-Nothing. Gate 8 is closed. Gate 9 — rendering real licensed anatomy —
-is RED and blocked on content, not on code.
+**Gate 9, blocked.** Every part of it that does not require the content is
+finished. The remaining part requires a licensed anatomy source that does not
+exist in this environment.
 
 ---
 
 ## Blocked
 
-**One external dependency, unchanged since Gate 1 — and now the only one.**
+### The one blocker: a licensed anatomy source
 
-- **No licensed anatomy source exists in this environment.** As of Gate 8 the
-  entire pipeline that would consume one is complete and verified: the provider
-  abstraction, the manifest contract, validation, hierarchy normalisation,
-  capability discovery, the security boundary and the conformance suite. What
-  is missing is anatomy.
+Gate 9 cannot be completed from inside this repository. It needs anatomy, and
+anatomy cannot be written — it is licensed, or commissioned, or it does not
+exist. VEO does not generate it, and will not render a placeholder in its
+place: a primitive standing in for an organ looks complete and teaches
+something false, which is worse than an empty viewport that says why.
 
-  This is a **content and licensing blocker, not an engineering one**. VEO does
-  not substitute procedurally generated anatomy, and it does not fill in
-  descriptive content a manifest omits. Every anatomy surface reports the
-  missing configuration explicitly, and the Learn catalogue marks every anatomy
-  category as *awaiting licensed assets*.
+**Exact remaining external action.** One of:
 
-  **No anatomical geometry has ever been rendered by this build.** Gate 9
-  remains RED and will stay RED until a licensed model is loaded and validated
-  in a browser.
+| Route | What must be supplied | Then |
+| --- | --- | --- |
+| **Licensed GLB/GLTF asset set** | the assets, plus an authored VEO manifest per model, on a host | set `ANATOMY_ASSET_BASE_URL`; no code change |
+| **Hosted anatomy API** | endpoint, credential, and the vendor's request shape | set `ANATOMY_PROVIDER_API_URL` / `_API_KEY`; one server-side adapter in `/api/anatomy` |
+| **VEO-owned models** | commissioned geometry, plus authored manifests | same path as a licensed asset set; no code change |
 
-  *To unblock:* see **Next action** below for the three routes and what each
-  one costs.
+In every case the manifest is the real work: mapping each vendor mesh onto a
+permanent VEO identity, and authoring the descriptive content with its
+citations. VEO refuses a manifest rather than filling one in, which is exactly
+why that work cannot be automated away.
+
+### Bringing up a licensed model
+
+```bash
+# 1. Validate before anything is served. --asset cross-checks mesh names and
+#    the version stamp against the geometry itself.
+npm run validate:anatomy -- ./models/heart/manifest.json --asset ./models/heart/heart.glb
+
+# 2. Configure the server. Never NEXT_PUBLIC_ for a credential.
+ANATOMY_PROVIDER=gltf-asset
+ANATOMY_ASSET_BASE_URL=https://<licensed-host>
+ANATOMY_LICENCE_HOLDER=<holder>
+ANATOMY_LICENCE_EXPIRES_AT=<iso-date>
+
+# 3. Prove the boundary still holds, then the pipeline end to end.
+npm run verify && npm start &
+npm run test:browser
+```
+
+On load the pipeline will, in order: fetch and validate the manifest, refuse a
+foreign domain or provider, project it into the semantic graph, load the
+binary asset, reconcile every mapped mesh against what actually arrived, refuse
+a version mismatch, register the structures, and hand the result to the same
+engine Gates 5–7 verified.
 
 **Not blockers, simply unconfigured** (each reports itself in the UI): Supabase,
 OpenAI, Stripe, OAuth providers.
@@ -301,52 +389,32 @@ OpenAI, Stripe, OAuth providers.
 | --- | --- |
 | `npm run typecheck` | **PASS** — 0 errors |
 | `npm run lint` | **PASS** — 0 errors, 0 warnings |
-| `npm run test` | **PASS** — 468 passed / 468 total, 22 files |
+| `npm run test` | **PASS** — 500 passed / 500 total, 25 files |
 | `npm run build` | **PASS** — 20 routes |
 | `npm run validate:anatomy` | **PASS** — contract fixture valid |
-| `npm run test:anatomy` | **PASS** — 27 live provider checks, 0 failures |
-| `npm run test:spatial` | **PASS** — 158 live manipulation checks |
+| `npm run test:anatomy` | **PASS** — 30 live provider checks |
+| `npm run test:spatial` | **PASS** — 164 live manipulation checks |
 | `npm run test:semantics` | **PASS** — 80 live semantic checks |
 | `npm run test:engine` | **PASS** — 54 live engine checks |
 | `npm run test:ui` | **PASS** — 116 live UI checks |
-| `npm run test:browser` | **PASS** — all five, 435 checks, 0 failures |
+| `npm run test:browser` | **PASS** — all five, 444 checks, 0 failures |
 
-### Unit coverage
+Gate 9 added 32 unit tests and 9 live checks.
 
-| File | Tests | Covers |
-| --- | ---: | --- |
-| `engine/spatial/manipulation.test.ts` | 70 | state model, layers, isolation, peel, dissection, exploded transforms, reconstruction, history, reset, capability discovery, contradictory states |
-| `anatomy/providers/conformance.test.ts` | 69 | the contract every provider must pass, run against both implementations, plus fixture-safety |
-| `engine/spatial/semantic.test.ts` | 53 | descriptors, generation safety, hierarchy, selection integrity, bounds, search, registration order |
-| `engine/3d/engine.test.ts` | 36 | materials, disposal, renderer policy, pointer rules, bounds, diagnostic graph |
-| `anatomy/mapping/validation.test.ts` | 25 | every manifest error class, each proved by a manifest that must be refused |
-| `components/workspace/workspace.test.tsx` | 25 | context panel, breadcrumb, search, toolbar capability gating, layers panel |
-| 16 further files | 190 | camera, primitives, semantic ids, lifecycle, visual state, provider, stores, navigation, content, manifest, entitlements, tokens, database types |
+### What has NOT been tested
 
-Totals: **468 unit tests across 22 files** (Gate 8 added 94).
+Honesty about coverage matters more here than anywhere else in this file.
 
-### Live anatomy verification (`npm run test:anatomy`)
-
-| Group | Checks |
-| --- | ---: |
-| Provider configuration | 5 |
-| Honest unavailable state | 4 |
-| Diagnostic stays separate from anatomy | 4 |
-| The catalogue is the allowlist | 4 |
-| No provider secret reaches the browser | 7 |
-| No anatomy source file is downloadable | 2 |
-| Console | 1 |
-| **Total** | **27 passed, 0 failed** |
-
-The secret scan runs with a **positive control**: it must first find the value
-of a public variable, which the build inlines by design. A scan that finds no
-secret may simply be a scan that finds nothing, and every "no leak" result
-below it would then be worthless.
-
-### Regression suites
-
-Gate 7 (158), Gate 6 (80), Gate 5 (54) and Gate 2 (116) all re-run unchanged
-against the Gate 8 build: **408 checks, 0 failures**.
+- **No anatomical geometry has been rendered**, so nothing about how a real
+  model looks, frames, selects or performs has been verified.
+- **Performance is unmeasured.** The instrumentation exists and is tested; the
+  numbers require an asset.
+- **The hosted provider has never spoken to a vendor.** It passes the
+  conformance suite against a controlled fixture; the vendor-specific request
+  shaping in the server route is unwritten because no vendor is chosen.
+- **The GLB transport rehearsal is not an anatomy test.** It proves a real
+  binary glTF parses and binds; it says nothing about a licensed model's
+  structure, naming or scale.
 
 ---
 
@@ -369,6 +437,53 @@ against the Gate 8 build: **408 checks, 0 failures**.
 - **Snapshot stability matters.** `SceneController.getSnapshot` returns the
   same object until something changes, and re-selecting the current selection
   does not notify — otherwise every no-op selection would cost a render.
+
+---
+
+## Issues found and fixed during Gate 9
+
+Three real defects, all in code that would have failed on the day a licence
+arrived.
+
+1. **A mesh the manifest named and the asset lacked failed silently.** The
+   registry recorded meshes it could not map, but nothing checked the reverse:
+   a structure whose geometry was absent kept its name, its parent, its
+   relationships and its context panel while having nothing to draw. It could
+   be searched for and navigated to and never seen. Nothing threw.
+
+   *Fixed* by reconciling the manifest against the asset that actually arrived,
+   and refusing the model when they disagree. Ten tests, including the case
+   where only some of a structure's meshes are missing — visible but wrong,
+   which is a different fact from absent.
+
+2. **The asset's own version stamp never reached the check that needed it.**
+   `validate:anatomy --asset` compared versions offline, but at runtime the
+   loader discarded `asset.extras` — three.js keeps it on the parsed result, and
+   the scene is all the renderer sees. So geometry from one revision could be
+   labelled with another revision's names, which looks exactly like working
+   software.
+
+   *Fixed* by stamping the version onto the loaded root and carrying it through
+   to reconciliation.
+
+3. **Turning labels on drew nothing.** Gate 6 seeded every label
+   `visible: false` so a dense model would not be unreadable, and Gate 9 added
+   a master switch for the same reason. Two gates for one intent meant the
+   switch was inert.
+
+   *Fixed* by keeping the switch, which is where the guarantee is actually
+   enforced, and seeding labels as not-individually-suppressed. The Gate 6 test
+   now asserts the property at that level rather than at the seed.
+
+### Also hardened
+
+- **Both providers now refuse a manifest whose domain is not `anatomy`.** The
+  anatomy workspace shows anatomy; without this, any manifest could put
+  non-anatomical structures in front of a learner there.
+- **A declared part asset that the host does not have is an error**, not a
+  viewport that mounts a 404 and renders nothing with no explanation.
+- **The secret scan now covers** localStorage, sessionStorage, the URL, cookies
+  and the server-rendered HTML, not only the script bundle.
 
 ---
 
@@ -577,61 +692,12 @@ engine rather than finding a defect:
 
 ## Next action
 
-**Gate 9 — render real licensed anatomy.** Everything upstream of the content
-is done: the provider abstraction, the manifest contract, validation, the
-security boundary, hierarchy normalisation and the conformance suite are
-complete and verified. What is missing is anatomy.
+**Supply a licensed anatomy source.** Nothing else in Gate 9 remains, and Gate
+10 must not begin until Gate 9 is independently green.
 
-### What is actually blocking
+See **Blocked** above for the three routes, what each requires, and the
+bring-up procedure. Two of the three need no code at all.
 
-A licensed anatomy source. One of:
-
-| Route | What VEO needs | Code cost |
-| --- | --- | --- |
-| Licensed GLB/GLTF asset set | assets + an authored manifest per model, at a host | none — `gltf-asset` is ready |
-| Hosted anatomy API | endpoint, credential, and the vendor's request shape | one server-side adapter in `/api/anatomy` |
-| VEO-owned models | commissioned geometry + authored manifests | none — same path as a licensed asset set |
-
-In every case the manifest is the work: mapping vendor meshes onto permanent
-VEO identities, and authoring the descriptive content with its citations. VEO
-will not generate that content, which is the whole reason the pipeline refuses
-a manifest rather than filling one in.
-
-### Bringing up a licensed model
-
-```bash
-# 1. Validate the manifest before it is ever served.
-npm run validate:anatomy -- ./models/heart/manifest.json --asset ./models/heart/heart.glb
-
-# 2. Point the server at the licensed host. Never NEXT_PUBLIC_ for a credential.
-echo 'ANATOMY_PROVIDER=gltf-asset'                >> .env.local
-echo 'ANATOMY_ASSET_BASE_URL=https://<host>'      >> .env.local
-echo 'ANATOMY_LICENCE_HOLDER=<holder>'            >> .env.local
-echo 'ANATOMY_LICENCE_EXPIRES_AT=<iso-date>'      >> .env.local
-
-# 3. Confirm the boundary still holds, then the pipeline end to end.
-npm run verify && npm start &
-npm run test:browser
-```
-
-**Decision still required from you:** which of the three routes above. The
-provider layer supports all of them; only the hosted-API route carries a code
-cost, and it is one adapter behind an interface that already exists.
-
-### What a licensed manifest must supply
-
-| Field | Why |
-| --- | --- |
-| `semanticId` | VEO's permanent identity; never the vendor's mesh name |
-| `providerId` and/or `meshes` | at least one way to find the geometry |
-| `parentId` | hierarchy, breadcrumb, fit-to-group, subtree removal |
-| `name`, `officialName`, `synonyms` | display and search recall |
-| `system`, `region` | grouping, filtering, hierarchy normalisation |
-| `description`, `function`, `references` | authored content with its provenance |
-| `layers[]` with `order`, `peelable`, `peelMode` | what can be shown, hidden, ghosted and peeled |
-| `explodedOffset` or `explosion` | how the model comes apart, when it does |
-| `relationships[]` | related-structure navigation |
-| `modelVersion`, `manifestVersion` | so geometry and semantics can never be mixed across revisions |
-
-Anything omitted simply switches a capability off. The interface offers only
-what the model can actually do.
+Until then the product behaves exactly as it should with no content: `/explore`
+renders no geometry, says why in words an operator can act on, and offers
+nothing it cannot do.

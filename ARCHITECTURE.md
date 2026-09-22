@@ -518,9 +518,12 @@ exists so engineers can verify the engine, and it says so.
   a screen reader, and claiming otherwise would be a false promise. The
   surrounding interface carries the information: camera controls are real
   focusable buttons, and selection is announced through a live region.
-- **Labels and pins are a foundation, not a feature.** The data model,
-  anchoring, priority and visibility budget exist and are tested, but nothing
-  is drawn in the viewport yet.
+- **No anatomical geometry has ever been rendered by this build.** Every
+  spatial capability above is verified against the diagnostic model. What a
+  licensed asset does — how it frames, how it performs, how its structures are
+  named and nested — is unverified because none exists here.
+- **Pins are a foundation, not a feature.** Labels are drawn; pins have a data
+  model, anchoring and pruning, and nothing renders them yet.
 - **Instancing and LOD are not implemented.** Neither is needed at current
   scene complexity, and both would be premature before a real asset sets the
   performance budget.
@@ -1014,6 +1017,118 @@ accept it. **No anatomical geometry has been rendered by this build**, because
 no licensed source exists in this environment. When none is configured the
 product says so and renders nothing — no canvas, no stand-in, no primitive
 standing in for an organ.
+
+---
+
+## 19. Between the pipeline and the asset
+
+Gate 8 built the pipeline. This is what sits between it and a real file
+arriving — the parts that only matter once geometry is involved.
+
+### Reconciliation: the check that runs when geometry arrives
+
+`validate:anatomy` checks a manifest against an asset offline. Reconciliation
+asks the same question at load time, against the scene the renderer really
+received — which is not always the file the author validated. A CDN serves a
+stale revision; a deploy ships the manifest before the asset; a vendor
+re-exports and renames three meshes.
+
+Without it, a structure whose mesh is missing keeps its name, its parent, its
+relationships and its context panel, and has nothing to draw. It can be
+searched for and navigated to and never seen. Nothing throws. The learner
+concludes the structure does not exist, or clicks the structure beside it and
+reads the missing one's label.
+
+Three separate facts come out of a load, and they mean different things:
+
+| Fact | Meaning | Outcome |
+| --- | --- | --- |
+| `missingMeshes` | the manifest promised geometry the asset lacks | **refuse the model** |
+| `unmappedMeshes` | the asset carries geometry nothing names | report it; assets legitimately carry scenery and armature |
+| `versionMismatch` | asset and manifest describe different revisions | **refuse the model** |
+
+A structure with *some* of its meshes still renders, partially — visible but
+wrong, which is a different fact from absent, and reported separately.
+
+### Version binding
+
+Geometry and semantics version separately. The asset's own stamp lives in
+`asset.extras`, which three.js keeps on the parsed result rather than on the
+scene — and the scene is all the renderer sees. So the loader copies it onto
+the root, and reconciliation compares it with the manifest.
+
+Mixing revisions is the failure that looks most like working software: every
+structure renders, every selection responds, and the names are wrong.
+
+### Progressive loading
+
+A whole body is not one download. Fetching every system to look at the skeleton
+costs a learner minutes and a phone its memory, so a manifest may declare a
+separate asset per system and per region, and `loadSystem` / `loadAnatomyRegion`
+fetch them.
+
+A declared part the host does not have is an error the learner can read, not a
+viewport that mounts a 404 and renders nothing.
+
+### Domain containment
+
+Both providers refuse a manifest whose `domain` is not `anatomy`. The anatomy
+workspace shows anatomy; diagnostic content has its own clearly-labelled path
+and cannot arrive through this one. Without the guard, any manifest could put
+non-anatomical structures in front of a learner as though they were body
+structures.
+
+### Labels
+
+Drawn as DOM over the canvas rather than as 3D text, for three reasons in
+order: legibility at any camera distance, which billboarded geometry does not
+have; screen-reader access, since the canvas is `aria-hidden`; and selectable
+text, because copying a structure's name into a search is a thing people do.
+
+Positions come from each object's live bounds through the controller. No label
+carries a coordinate — that would be wrong the moment the asset is re-exported.
+
+Two rules decide what is drawn:
+
+- **Off until asked.** A dense model with every structure labelled is
+  unreadable, and a learner who cannot see the anatomy for the text has been
+  given nothing.
+- **A label follows its structure.** Hidden, dissected or peeled away, the
+  label goes too: a name floating over nothing is worse than no name. A ghosted
+  structure keeps its label, because it is still there — faint, and often
+  exactly what a learner is orienting by.
+
+The selected structure always survives the budget. Losing its label would be
+the one omission anyone would notice.
+
+### The transport rehearsal
+
+One link in the chain had never been exercised: a real binary glTF arriving,
+parsing into a three.js scene, and that scene's meshes binding to the
+identities a manifest declared for them. Gates 5–7 tested a scene built in
+memory; Gate 8 tested a stubbed network.
+
+`gltf-transport.test.ts` exports a real GLB, asserts its container is
+spec-conformant down to the chunk headers, parses it with the real loader, and
+runs the result through the real registry, bounds, material and disposal code.
+If that step were broken it would have surfaced on the day a licence arrived —
+the worst possible day.
+
+Its geometry is abstract and exists to carry mesh names through a file format.
+It is never mounted in a viewport and never given an anatomy identity, and a
+test asserts that both providers refuse it.
+
+### Instrumentation
+
+`LoadMetricsRecorder` measures the two things a learner feels — time to
+something on screen, time to being able to do something with it — and the
+counts that explain a bad answer to either. A model that loads slowly because
+it has 400 000 triangles needs a different fix from one shipping 40
+uncompressed textures, and without the counts both look the same.
+
+Deliberately not a budget. Numbers are recorded, not enforced: the right
+threshold depends on an asset nobody has seen, and a limit guessed now would
+either never fire or fire on everything.
 
 ---
 
