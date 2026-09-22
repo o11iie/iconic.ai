@@ -5,6 +5,7 @@ import type * as THREE from 'three';
 import { SpatialCanvas } from '@/engine/3d/canvas/SpatialCanvas';
 import { SpatialCameraRig } from '@/engine/3d/camera/SpatialCameraRig';
 import { SpatialSceneRoot } from '@/engine/3d/scene/SpatialSceneRoot';
+import { SpatialLabels } from '@/engine/3d/scene/SpatialLabels';
 import { ModelLoader } from '@/engine/3d/scene/ModelLoader';
 import {
   buildDiagnosticGraph,
@@ -16,6 +17,7 @@ import { registerSceneDebug } from '@/engine/3d/diagnostics/engine-debug';
 import { ErrorState } from '@/components/ui/states';
 import type { SceneController } from '@/engine/spatial/scene-controller';
 import type { SceneVisualState } from '@/engine/spatial/types';
+import type { PositionedAnnotation, SpatialLabel } from '@/engine/spatial/annotations';
 import { isSemanticId, type SemanticId } from '@/lib/semantic-id';
 import type { BoundingBox } from '@/types/domain/spatial';
 import type { MaterialStats } from '@/engine/3d/materials/material-state';
@@ -40,10 +42,17 @@ export interface SpatialStageProps {
   readonly visual: SceneVisualState;
   /** Manipulation displacements by semantic id. Empty when nothing is moved. */
   readonly offsets: ReadonlyMap<SemanticId, readonly [number, number, number]>;
+  /** Labels to draw, already resolved to world positions by the controller. */
+  readonly labels: readonly PositionedAnnotation<SpatialLabel>[];
   readonly controller: SceneController;
   readonly interactionMode: string;
   readonly reducedMotion: boolean;
   readonly onUnmappedMeshes?: (names: readonly string[]) => void;
+  /** What the loaded asset actually contains, for manifest reconciliation. */
+  readonly onAssetInventory?: (inventory: {
+    readonly names: ReadonlySet<string>;
+    readonly modelVersion: string | null;
+  }) => void;
   readonly onRegistryReady?: (count: number) => void;
   readonly onContextLost?: () => void;
   /** Mounts the labelled VEO SPATIAL ENGINE TEST scene instead of a model. */
@@ -55,10 +64,12 @@ export function SpatialStage({
   meshMapping,
   visual,
   offsets,
+  labels,
   controller,
   interactionMode,
   reducedMotion,
   onUnmappedMeshes,
+  onAssetInventory,
   onRegistryReady,
   onContextLost,
   diagnostic = false,
@@ -286,10 +297,17 @@ export function SpatialStage({
         interactionMode={interactionMode}
         onModelBounds={setModelBox}
         {...(onUnmappedMeshes ? { onUnmappedMeshes } : {})}
+        {...(onAssetInventory ? { onAssetInventory } : {})}
         {...(onRegistryReady ? { onRegistryReady } : {})}
         {...(diagnostic
           ? { onMaterialStats: readMaterialStats, onTransformStats: readTransformStats }
           : {})}
+      />
+
+      <SpatialLabels
+        labels={labels}
+        selectedId={controller.getSnapshot().selectedId}
+        onSelect={(id) => controller.focusObject(id as SemanticId, { reducedMotion })}
       />
 
       {diagnostic ? <EngineDebugBridge /> : null}

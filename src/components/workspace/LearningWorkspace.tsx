@@ -10,8 +10,10 @@ import { ErrorState, LoadingState, NotConfiguredState } from '@/components/ui/st
 import { ViewportShell } from '@/components/spatial/ViewportShell';
 import { useAnatomyModel } from '@/hooks/use-anatomy-model';
 import { DIAGNOSTIC_LABEL } from '@/engine/3d/diagnostics/diagnostic-scene';
+import { describeReconciliation, reconcile } from '@/anatomy/mapping/reconciliation';
 import { isSemanticId, semanticIdToLabel, type SemanticId } from '@/lib/semantic-id';
 import type { InteractionMode, SceneVisualState } from '@/engine/spatial/types';
+import type { PositionedAnnotation, SpatialLabel } from '@/engine/spatial/annotations';
 import { NO_CAPABILITIES as NO_MODEL_CAPABILITIES } from '@/engine/spatial/capabilities';
 import type { SpatialCapabilities } from '@/types/domain/spatial';
 import { useReducedMotion } from '@/store/ui-store';
@@ -75,6 +77,7 @@ export function LearningWorkspace({
     useAnatomyModel(activeModel);
 
   const [unmapped, setUnmapped] = useState<readonly string[]>([]);
+  const [mismatch, setMismatch] = useState<string | null>(null);
   const [registrySize, setRegistrySize] = useState(0);
   const [contextLost, setContextLost] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -234,11 +237,41 @@ export function LearningWorkspace({
     }));
   }, [controller, selectedId, revision]);
 
+  /*
+   * Labels are resolved from live geometry, so they are recomputed whenever
+   * the scene changes — a manipulation, a selection, a camera move. The
+   * controller filters out labels whose structure is no longer drawn.
+   */
+  const labels = useMemo(
+    () => controller?.getVisibleLabels() ?? EMPTY_LABELS,
+    [controller, revision],
+  );
+
   const runSearch = useCallback(
     (query: string) => controller?.search(query) ?? [],
     [controller, revision],
   );
   /* eslint-enable react-hooks/exhaustive-deps */
+
+  /**
+   * Check the geometry that arrived against the semantic data that described it.
+   *
+   * A structure whose mesh is absent from the asset keeps its name, its parent
+   * and its context panel, and has nothing to show — so a learner concludes it
+   * does not exist, or reads its label off the structure next to it. VEO
+   * refuses the model rather than presenting an incomplete one as complete.
+   */
+  const handleAssetInventory = useCallback(
+    (inventory: { readonly names: ReadonlySet<string>; readonly modelVersion: string | null }) => {
+      const manifest = provider?.getManifest() ?? null;
+      if (!manifest) {
+        setMismatch(null);
+        return;
+      }
+      setMismatch(describeReconciliation(reconcile(manifest, inventory)));
+    },
+    [provider],
+  );
 
   /** One entry point for every route to a structure: click, search, related. */
   const focusObject = useCallback(
@@ -250,6 +283,8 @@ export function LearningWorkspace({
 
   const handleModelChange = useCallback(
     (nextModel: string) => {
+      setMismatch(null);
+      setUnmapped([]);
       setModelRef(nextModel);
       router.replace(`/explore?model=${encodeURIComponent(nextModel)}`, { scroll: false });
     },
@@ -324,6 +359,9 @@ export function LearningWorkspace({
           break;
         case 'dissect':
           if (selectedId) controller.dissectObject(selectedId);
+          break;
+        case 'labels':
+          controller.toggleLabels();
           break;
         case 'explode':
           if (controller.isExploded()) {
@@ -430,6 +468,7 @@ export function LearningWorkspace({
             exploded: snapshot?.manipulation.exploded ?? false,
             peelLevel: snapshot?.manipulation.peelLevel ?? 0,
             peelSteps: snapshot?.peelSteps ?? 0,
+            labelsOn: labels.length > 0 || (controller?.areLabelsEnabled() ?? false),
           }}
           onModeChange={(mode: InteractionMode) => setInteractionMode(mode)}
           onAction={handleTool}
@@ -451,9 +490,11 @@ export function LearningWorkspace({
                 controller={controller}
                 visual={snapshot?.visual ?? EMPTY_VISUAL}
                 offsets={offsets}
+                labels={labels}
                 interactionMode={interactionMode}
                 reducedMotion={reducedMotion}
                 onUnmappedMeshes={setUnmapped}
+                onAssetInventory={handleAssetInventory}
                 onRegistryReady={setRegistrySize}
                 onContextLost={() => setContextLost(true)}
                 onRetry={retry}
@@ -481,6 +522,33 @@ export function LearningWorkspace({
                 {unmapped.length} mesh{unmapped.length === 1 ? '' : 'es'} have no semantic mapping
                 and cannot be selected. Update the model manifest to address them.
               </p>
+            ) : null}
+
+            {/*
+              A model whose geometry does not match its semantic data is
+              refused outright, over the top of whatever did render. Showing
+              the parts that happened to arrive would be presenting an
+              incomplete model as a complete one.
+            */}
+            {mismatch ? (
+              <div className="absolute inset-0 grid place-items-center bg-obsidian/90 p-6">
+                <ErrorState
+                  className="max-w-lg"
+                  title="This model cannot be shown"
+                  description={mismatch}
+                  action={
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setMismatch(null);
+                        retry();
+                      }}
+                    >
+                      Reload the model
+                    </Button>
+                  }
+                />
+              </div>
             ) : null}
 
             {contextLost ? (
@@ -584,6 +652,7 @@ export function LearningWorkspace({
 const EMPTY_LAYER_SET: ReadonlySet<string> = new Set<string>();
 const EMPTY_OFFSETS: ReadonlyMap<SemanticId, readonly [number, number, number]> = new Map();
 const EMPTY_PEELED: readonly string[] = [];
+const EMPTY_LABELS: readonly PositionedAnnotation<SpatialLabel>[] = [];
 const EMPTY_VISUAL: SceneVisualState = {
   states: new Map(),
   isolatedId: null,
@@ -603,6 +672,7 @@ const EMPTY_VISUAL: SceneVisualState = {
 function WorkspaceCanvas({
   diagnostic,
   offsets,
+  labels,
   status,
   error,
   progress,
@@ -614,6 +684,7 @@ function WorkspaceCanvas({
   interactionMode,
   reducedMotion,
   onUnmappedMeshes,
+  onAssetInventory,
   onRegistryReady,
   onContextLost,
   onRetry,
@@ -628,9 +699,14 @@ function WorkspaceCanvas({
   readonly controller: NonNullable<ReturnType<typeof useAnatomyModel>['controller']>;
   readonly visual: SceneVisualState;
   readonly offsets: ReadonlyMap<SemanticId, readonly [number, number, number]>;
+  readonly labels: readonly PositionedAnnotation<SpatialLabel>[];
   readonly interactionMode: string;
   readonly reducedMotion: boolean;
   readonly onUnmappedMeshes: (names: readonly string[]) => void;
+  readonly onAssetInventory: (inventory: {
+    readonly names: ReadonlySet<string>;
+    readonly modelVersion: string | null;
+  }) => void;
   readonly onRegistryReady: (count: number) => void;
   readonly onContextLost: () => void;
   readonly onRetry: () => void;
@@ -641,10 +717,12 @@ function WorkspaceCanvas({
       meshMapping={meshMapping}
       visual={visual}
       offsets={offsets}
+      labels={labels}
       controller={controller}
       interactionMode={interactionMode}
       reducedMotion={reducedMotion}
       onUnmappedMeshes={onUnmappedMeshes}
+      onAssetInventory={onAssetInventory}
       onRegistryReady={onRegistryReady}
       onContextLost={onContextLost}
       diagnostic={diagnostic}

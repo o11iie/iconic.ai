@@ -16,12 +16,32 @@ import * as THREE from 'three';
  * drei's loader does not surface per-URL byte progress.
  */
 
+/** Key under which an asset's own version stamp is carried on its root. */
+export const ASSET_VERSION_KEY = 'veoAssetVersion';
+
 export function useClonedGLTF(assetUrl: string): THREE.Object3D {
-  const { scene } = useGLTF(assetUrl);
+  const gltf = useGLTF(assetUrl);
 
   // Clone per mount. The cached original is never handed to the scene root,
   // so nothing the viewport does can corrupt it for the next consumer.
-  return useMemo(() => scene.clone(true), [scene]);
+  return useMemo(() => {
+    const root = gltf.scene.clone(true);
+
+    /*
+     * Carry the asset's own version stamp on the root.
+     *
+     * A vendor records it in `asset.extras`; three.js keeps it on the parsed
+     * result rather than on the scene, and the scene is all the renderer sees.
+     * Stamping it here is what lets the layer above check that this geometry
+     * and its semantic data describe the same revision — the check that stops
+     * one revision's meshes being labelled with another's names.
+     */
+    const asset = (gltf as unknown as { asset?: { extras?: Record<string, unknown> } }).asset;
+    const stamped = asset?.extras?.modelVersion ?? asset?.extras?.version ?? null;
+    if (typeof stamped === 'string') root.userData[ASSET_VERSION_KEY] = stamped;
+
+    return root;
+  }, [gltf]);
 }
 
 export function ModelLoader({

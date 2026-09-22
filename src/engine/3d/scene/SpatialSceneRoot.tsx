@@ -7,6 +7,7 @@ import type * as THREE from 'three';
 import type { SemanticId } from '@/lib/semantic-id';
 import type { SceneController } from '@/engine/spatial/scene-controller';
 import { buildRegistryFromMapping, collectMeshes, readTag } from '@/engine/spatial/object-registry';
+import { ASSET_VERSION_KEY } from './ModelLoader';
 import type { SceneVisualState } from '@/engine/spatial/types';
 import type { BoundingBox } from '@/types/domain/spatial';
 import { boundsOf, boundsOfAll } from '../bounds';
@@ -45,6 +46,17 @@ export interface SpatialSceneRootProps {
   readonly interactionMode: string;
   readonly onModelBounds: (box: BoundingBox | null) => void;
   readonly onUnmappedMeshes?: (names: readonly string[]) => void;
+  /**
+   * Everything the loaded asset actually contains.
+   *
+   * Reported so the layer that owns the manifest can check that the geometry
+   * which arrived is the geometry that was promised. The engine states what it
+   * received; it does not know what was meant.
+   */
+  readonly onAssetInventory?: (inventory: {
+    readonly names: ReadonlySet<string>;
+    readonly modelVersion: string | null;
+  }) => void;
   readonly onRegistryReady?: (count: number) => void;
   /**
    * Publishes a live reader for material bookkeeping.
@@ -67,6 +79,7 @@ export function SpatialSceneRoot({
   interactionMode,
   onModelBounds,
   onUnmappedMeshes,
+  onAssetInventory,
   onRegistryReady,
   onMaterialStats,
   onTransformStats,
@@ -129,6 +142,24 @@ export function SpatialSceneRoot({
     const unmapped = registry.unmappedNames();
     if (unmapped.length > 0) onUnmappedMeshes?.(unmapped);
 
+    /*
+     * The inventory covers every named node, not only meshes. A manifest maps
+     * whatever the vendor named, and vendors name groups as often as meshes;
+     * checking only meshes would report a whole assembly as missing.
+     */
+    if (onAssetInventory) {
+      const names = new Set<string>();
+      root.traverse((node) => {
+        if (node.name) names.add(node.name);
+      });
+
+      const stamped = root.userData[ASSET_VERSION_KEY];
+      onAssetInventory({
+        names,
+        modelVersion: typeof stamped === 'string' ? stamped : null,
+      });
+    }
+
     /**
      * Real bounds from real geometry — never hard-coded coordinates, so the
      * same framing works for a diagnostic node and a licensed asset.
@@ -148,7 +179,16 @@ export function SpatialSceneRoot({
     // No local state to bump: the controller notified its subscribers when
     // setObjects ran, and the canvas only needs one more frame.
     invalidate();
-  }, [root, meshMapping, controller, onModelBounds, onUnmappedMeshes, onRegistryReady, invalidate]);
+  }, [
+    root,
+    meshMapping,
+    controller,
+    onModelBounds,
+    onUnmappedMeshes,
+    onAssetInventory,
+    onRegistryReady,
+    invalidate,
+  ]);
 
   /**
    * Install the live bounds resolver.
