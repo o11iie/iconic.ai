@@ -245,7 +245,13 @@ try {
   ].join('\n');
 
   for (const [name, value] of secrets) {
-    if (!value) continue;
+    if (!value) {
+      // Say so rather than skipping silently. A scan that quietly runs zero
+      // times is indistinguishable from a scan that passed, and this suite's
+      // whole claim is that it looked.
+      check(true, `${name}: not set, so no client surface can carry it`);
+      continue;
+    }
     check(
       !surfaces.includes(value),
       `${name}: absent from storage, URL, cookies and rendered HTML`,

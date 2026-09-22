@@ -73,8 +73,8 @@ of writing the loader.
 | 17 | Reset restores baseline | GREEN | idempotent, asserted twice over |
 | 18 | Disposal and replacement | GREEN | no stale objects, no geometry growth |
 | 19 | Mobile interaction | GREEN | 360 / 390 / 430, 51 live checks |
-| 20 | Security boundary | GREEN | 30 live checks with a positive control |
-| 21 | No credentials in storage, URL, cookies, HTML | GREEN | scanned on every anatomy surface |
+| 20 | Security boundary | GREEN | 31 live checks, positive control + mutation test |
+| 21 | No credentials in storage, URL, cookies, HTML | GREEN | scanned with a real secret in the server env; a planted leak was caught |
 | 22 | TypeScript / ESLint | PASS | 0 errors, 0 warnings |
 | 23 | Unit tests | PASS | 500 passed / 500, 25 files |
 | 24 | Production build | PASS | 20 routes |
@@ -392,14 +392,30 @@ OpenAI, Stripe, OAuth providers.
 | `npm run test` | **PASS** — 500 passed / 500 total, 25 files |
 | `npm run build` | **PASS** — 20 routes |
 | `npm run validate:anatomy` | **PASS** — contract fixture valid |
-| `npm run test:anatomy` | **PASS** — 30 live provider checks |
+| `npm run test:anatomy` | **PASS** — 31 live provider checks |
 | `npm run test:spatial` | **PASS** — 164 live manipulation checks |
 | `npm run test:semantics` | **PASS** — 80 live semantic checks |
 | `npm run test:engine` | **PASS** — 54 live engine checks |
 | `npm run test:ui` | **PASS** — 116 live UI checks |
-| `npm run test:browser` | **PASS** — all five, 444 checks, 0 failures |
+| `npm run test:browser` | **PASS** — all five, 445 checks, 0 failures |
 
-Gate 9 added 32 unit tests and 9 live checks.
+Gate 9 added 32 unit tests and 12 live checks.
+
+**Running the secret scan so that it means something.** In a bare environment
+no `ANATOMY_*` variable is set, so the scan has no real value to hunt for and
+three of its checks report only that there is nothing to leak. To exercise it
+properly, put a credential in the *server's* environment for both the build and
+the run:
+
+```bash
+export ANATOMY_PROVIDER_API_KEY='<any distinctive value>'
+npm run build && npx next start -p 3410 &
+npm run test:anatomy
+```
+
+A key on its own does not make the deployment `configured` — that needs a URL
+too — so every other assertion in the suite still holds, while a leak of this
+value would now be visible. This is the run that was mutation-tested.
 
 ### What has NOT been tested
 
@@ -484,6 +500,17 @@ arrived.
   viewport that mounts a 404 and renders nothing with no explanation.
 - **The secret scan now covers** localStorage, sessionStorage, the URL, cookies
   and the server-rendered HTML, not only the script bundle.
+- **The client-surface scan no longer skips silently.** It ran zero times when
+  no secret was set, which is indistinguishable in the output from a scan that
+  ran and passed. It now says so, which is also why the anatomy suite reports
+  31 checks rather than 28 — three that were previously invisible.
+- **The secret boundary was mutation-tested, not just run.** A scan that finds
+  nothing may be a scan that cannot find anything. The bundle scan already had
+  a positive control; the client-surface scan had none. So a server-only
+  credential was deliberately rendered into `/dashboard`, the suite was run,
+  and both checks *failed* as they should. The leak was reverted and the suite
+  returned to green. The boundary is now known to be observed, not merely
+  asserted.
 
 ---
 
