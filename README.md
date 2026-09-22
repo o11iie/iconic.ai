@@ -77,7 +77,8 @@ npm run test:engine    # live browser checks of the spatial engine
 npm run test:semantics # live browser checks of semantic object interaction
 npm run test:spatial   # live browser checks of spatial manipulation
 npm run test:anatomy   # live browser checks of the anatomy provider boundary
-npm run test:browser   # all five, in order
+npm run test:tutor     # live browser checks of the contextual AI tutor
+npm run test:browser   # all six, in order
 
 npm run validate:anatomy                      # validate the contract fixture
 npm run validate:anatomy -- <manifest.json>    # validate a real manifest
@@ -109,6 +110,34 @@ diagnostic scene stays out of the anatomy path, that the model catalogue is the
 allowlist, and that no provider secret reaches the browser — with a positive
 control, because a scan that finds no secret may simply be a scan that finds
 nothing.
+
+`test:tutor` proves the tutor understands what the learner has selected. Its
+governing rule is that **an answer appearing is not a pass** — a tutor ignoring
+the selection entirely would still render text. So it asserts that the reply
+names the real structure, its real parent and its real relationship targets,
+all resolved server-side from VEO's own model; that a structure the model
+describes poorly produces an honest "not in this model" rather than a
+confident answer; that a proposed action aimed at a structure which does not
+exist is rejected before it reaches the browser; and that neither the API key
+nor the system prompt appears on any browser surface.
+
+It runs against a deterministic provider rather than a live model, enabled by
+`VEO_TUTOR_STUB=1` at build time:
+
+```bash
+VEO_TUTOR_STUB=1 npm run build
+VEO_TUTOR_STUB=1 npm start &
+npm run test:tutor
+```
+
+A live model would make every run different, so no assertion could be stronger
+than "some text appeared". The stub replaces only the network call — request
+validation, model resolution, context building, prompt assembly, output
+validation, grounding and dispatch all run for real — and it composes its reply
+out of the context it was handed, which is what makes the correspondence
+assertable. It refuses to run when `OPENAI_API_KEY` is set, and every answer
+it gives is marked in the response, in the message, and by a banner in the
+workspace.
 
 `validate:anatomy` checks a manifest before it is ever served, and with
 `--asset` cross-checks mesh names and the version stamp against the geometry
@@ -189,7 +218,13 @@ src/
     mapping/            manifest schema, validation, graph projection, hierarchy
     fixtures/           provider conformance fixture (test content, not anatomy)
     models/             declared model catalogue
-  ai/                   LLMClient abstraction, OpenAI adapter, tutor prompts
+  ai/                   the contextual tutor
+    context/            SpatialContext builder, server-side model resolution
+    tutor/              request/response contracts, prompt, service, conversation
+    safety/             prompt-injection defence, grounding validation
+    actions/            spatial action dispatch into SceneController
+    providers/          LLMClient abstraction, OpenAI adapter, verification stub
+    fixtures/           VEO AI TUTOR TEST FIXTURE (test content, not anatomy)
   store/                viewer / learning / auth / ui Zustand stores
   lib/                  semantic ids, Result, errors, Supabase, Stripe
   types/domain/         all core domain entities
@@ -209,11 +244,17 @@ supabase/migrations/    schema + Row Level Security
 **Gate 7 — Spatial Manipulation + Reconstruction: complete and verified.**
 **Gate 8 — Anatomy Provider Integration: pipeline complete and verified.**
 **Gate 9 — Real Anatomy Rendering: RED, blocked by an external dependency.**
+**Gate 10 — Contextual AI Tutor: complete and verified.**
 
 > **No anatomical geometry has been rendered by this build.** No licensed
 > anatomy source exists in this environment. Everything upstream of the content
 > is built and verified; the content itself cannot be written, and VEO renders
 > nothing rather than a placeholder.
+>
+> Gate 10 did not change this. The tutor is proved against clearly labelled
+> test content, because that is the only honest way to prove it while the
+> anatomy dependency is outstanding. It has never explained a real anatomical
+> structure, and the product does not suggest otherwise.
 
 Working today:
 

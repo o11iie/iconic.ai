@@ -1132,6 +1132,116 @@ either never fire or fire on everything.
 
 ---
 
+## 20. The contextual tutor
+
+VEO's tutor is not a chat panel beside a model. It is a tutor that knows what
+the learner is looking at, and the architecture exists to make that claim
+defensible rather than merely plausible.
+
+```
+UI → TutorRequest → [server] resolve model → build context → prompt
+   → provider → validate output → ground against context → TutorResponse
+   → UI → optional SpatialAction → SceneController → renderer
+```
+
+### The model is resolved on the server
+
+The browser sends a model REFERENCE and a semantic id. It never sends a graph.
+
+This is the load-bearing decision. A client-supplied graph would let a client
+describe any structure it liked — inventing names, descriptions and
+relationships — and VEO would hand the invention to the model as though it
+were licensed content. Every honesty guarantee downstream would then be worth
+nothing, because the thing being honest ABOUT would be attacker-controlled.
+
+Scene state (what is hidden, isolated, which layers are on) does come from the
+browser, because that is the only place that knows it. It cannot invent a
+structure; it can only describe the display of one the server already
+resolved. Capabilities the browser claims are intersected with the model's
+own, never trusted.
+
+### Grounding is measured, not reported
+
+`buildSpatialContext` records how much the model actually supplied about a
+structure:
+
+| Level | Means | Ceiling on `sourceStatus` |
+| --- | --- | --- |
+| `rich` | description and/or function | `grounded` |
+| `structural` | hierarchy, systems, relationships, no prose | `partially-grounded` |
+| `bare` | a name and a parent | `insufficient-context` |
+
+The language model also reports its own grounding, and a model is not a
+reliable witness to its own confidence. So the two are reconciled: a claim may
+be worse than VEO measured, never better. An answer that sounds authoritative
+about a structure carrying nothing but a name is downgraded to
+`insufficient-context` before the UI ever sees it.
+
+That is what turns "never fabricate" from an instruction in a prompt into a
+property of the system.
+
+### Everything untrusted is data
+
+Structure names, descriptions, synonyms, provider metadata and the learner's
+own words are fenced between `<<<VEO_DATA` and `VEO_DATA>>>`, and the system
+prompt states that fenced content is never an instruction.
+
+The fence alone is a suggestion. What makes it enforceable:
+
+1. Values that contain the fence are neutralised, so nothing can close it.
+2. Text imitating the transcript's own framing is defanged — but only where a
+   turn could start. "The cardiovascular system: a network of vessels" is a
+   description and survives intact; the same words after a sentence boundary
+   do not. A sanitiser that corrupts real content to defend against an attack
+   it is not carrying has cost more than it saved.
+3. Chat-template markers, control characters and zero-width characters are
+   stripped.
+
+VEO does not match phrases like "ignore previous instructions". Denylists on
+natural language fail open on the phrasing nobody thought of, and fail closed
+on a learner legitimately asking about one.
+
+### Responses are validated twice
+
+A schema check proves the model returned the right SHAPE. It says nothing
+about whether the content refers to anything real, so a second pass checks
+every id against the context that was actually sent.
+
+Unknown ids are DROPPED, not fatal. A model may produce a good explanation and
+then invent a structure in its related list; failing the turn would discard a
+correct answer, and passing it through would put a button in the UI that
+cannot resolve. Where VEO's name and the model's disagree, VEO's wins — a
+renamed structure is one the learner cannot find again in the tree.
+
+### The AI never touches the renderer
+
+```
+AI → validated SpatialAction → dispatcher → SceneController → renderer
+```
+
+Gate 7 left ONE authority over scene state. An AI that mutated the scene
+directly would be a second one, and the first thing it would break is undo.
+
+The dispatcher validates against the LIVE controller, not against what was
+true when the answer was generated — a learner can switch models while a
+response is in flight. It returns a result rather than throwing, because an
+action that no longer applies is an expected outcome, and the UI renders it as
+a disabled control rather than an error.
+
+### Bounded by design
+
+A whole-body model has tens of thousands of structures. Sending the graph
+would blow the context window, cost real money per question, and bury the one
+structure the learner asked about. Children, relationships, related structures
+and ancestors are each capped, and what was dropped is stated in the context
+so the tutor cannot claim its list is complete.
+
+Conversation history is bounded twice: once by the client as a UX choice, and
+again by the server, because a client is not a trustworthy place to enforce a
+cost ceiling.
+
+---
+
 ## Appendix: version pinning rationale
 
 Two pins are not "latest", for concrete compatibility reasons found by checking

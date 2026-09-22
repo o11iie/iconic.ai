@@ -22,9 +22,10 @@
     "test:semantics": "node scripts/verify-semantics.mjs",
     "test:spatial": "node scripts/verify-spatial.mjs",
     "test:anatomy": "node scripts/verify-anatomy.mjs",
-    "test:browser": "npm run test:ui && npm run test:engine && npm run test:semantics && npm run test:spatial && npm run test:anatomy",
-    "verify:full": "npm run verify && npm run start:verify",
-    "start:verify": "next start -p 3410 & sleep 5 && npm run test:browser; kill %1"
+    "test:browser": "npm run test:ui && npm run test:engine && npm run test:semantics && npm run test:spatial && npm run test:anatomy && npm run test:tutor",
+    "verify:full": "VEO_TUTOR_STUB=1 npm run verify && npm run start:verify",
+    "start:verify": "VEO_TUTOR_STUB=1 next start -p 3410 & sleep 5 && npm run test:browser; kill %1",
+    "test:tutor": "node scripts/verify-tutor.mjs"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",

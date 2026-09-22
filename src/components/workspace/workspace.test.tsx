@@ -260,6 +260,8 @@ describe('AIStudyPanel', () => {
       expect(control).toBeInTheDocument();
       expect(control).toBeDisabled();
       expect(control).toHaveAttribute('data-veo-study-available', 'false');
+      // The reason is announced with the control, not left to a tooltip.
+      expect(control.getAttribute('aria-label')).toMatch(/later VEO gate/);
     }
   });
 

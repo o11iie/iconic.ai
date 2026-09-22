@@ -121,11 +121,15 @@ export function AIStudyPanel({
     <section
       aria-label="AI study"
       className={cn(
-        'flex flex-col gap-2 border-t border-hairline px-3 py-2.5',
+        // min-w-0 at every level down to the scroll container. Without it a
+        // flex item's default min-width:auto lets this row grow to fit its
+        // content, the overflow-x-auto below never gets a width to scroll
+        // within, and the whole page scrolls sideways on a phone instead.
+        'flex min-w-0 flex-col gap-2 border-t border-hairline px-3 py-2.5',
         className,
       )}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         {/* Modes scroll rather than wrap: wrapping costs a second row of height. */}
         <div
           role="radiogroup"
@@ -142,6 +146,19 @@ export function AIStudyPanel({
                 role="radio"
                 aria-checked={active}
                 aria-disabled={!item.available}
+                /*
+                 * The reason rides on the label rather than in a visually
+                 * hidden span inside the button.
+                 *
+                 * `veo-sr-only` is position:absolute with no positioned
+                 * ancestor here, so inside a chip scrolled off the end of this
+                 * strip it lands outside the viewport and extends the
+                 * DOCUMENT's scrollable width — the page scrolls sideways on a
+                 * phone because of text nobody can see. An aria-label has no
+                 * box at all, and announces the reason with the control rather
+                 * than after it.
+                 */
+                aria-label={item.available ? item.label : `${item.label} — ${item.unavailable}`}
                 disabled={!usable}
                 data-veo-study-mode={item.id}
                 data-veo-study-available={item.available ? 'true' : 'false'}
@@ -158,9 +175,6 @@ export function AIStudyPanel({
               >
                 <Icon name={item.icon} size={14} />
                 {item.label}
-                {item.available ? null : (
-                  <span className="veo-sr-only">{item.unavailable}</span>
-                )}
               </button>
             );
           })}

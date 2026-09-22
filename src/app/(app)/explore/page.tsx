@@ -5,6 +5,7 @@ import { LearningWorkspace } from '@/components/workspace/LearningWorkspace';
 import { LoadingState } from '@/components/ui/states';
 import { capabilities } from '@/config/env';
 import { serverCapabilities } from '@/config/env.server';
+import { stubEnabled } from '@/ai/providers/verification-stub';
 
 export const metadata: Metadata = { title: 'Explore' };
 
@@ -25,7 +26,15 @@ export default async function ExplorePage({
 }) {
   const params = await searchParams;
   const diagnostic = capabilities.pipelineDiagnostic && params.diagnostic === '1';
-  const aiConfigured = serverCapabilities().openai;
+  /*
+   * Resolved on the server: OPENAI_API_KEY is server-only and must never be
+   * readable from the browser, so only the boolean crosses.
+   *
+   * The verification stub counts as configured, and says so separately, so a
+   * run against it is never mistaken for the real provider answering.
+   */
+  const usingStub = stubEnabled();
+  const aiConfigured = serverCapabilities().openai || usingStub;
 
   return (
     <WorkspaceShell>
@@ -36,7 +45,11 @@ export default async function ExplorePage({
           </div>
         }
       >
-        <LearningWorkspace diagnostic={diagnostic} aiConfigured={aiConfigured} />
+        <LearningWorkspace
+          diagnostic={diagnostic}
+          aiConfigured={aiConfigured}
+          tutorStub={usingStub}
+        />
       </Suspense>
     </WorkspaceShell>
   );

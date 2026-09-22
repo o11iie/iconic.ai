@@ -55,6 +55,7 @@ import { ViewportControls } from './ViewportControls';
 export function LearningWorkspace({
   diagnostic = false,
   aiConfigured,
+  tutorStub = false,
 }: {
   readonly diagnostic?: boolean;
   /**
@@ -62,6 +63,12 @@ export function LearningWorkspace({
    * readable from the browser, so the page passes the boolean down.
    */
   readonly aiConfigured: boolean;
+  /**
+   * True when the tutor is backed by the verification stub rather than a real
+   * model. Surfaced in the UI, because an answer from a test double must never
+   * be mistaken for the product working.
+   */
+  readonly tutorStub?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -725,6 +732,16 @@ export function LearningWorkspace({
           <p aria-live="polite" className="veo-sr-only">
             {selectedId ? `Selected ${semanticIdToLabel(selectedId)}` : 'No structure selected'}
           </p>
+
+          {tutorStub ? (
+            <p
+              data-veo-tutor-stub
+              className="shrink-0 border-t border-warning/25 bg-warning/[0.06] px-3 py-1.5 text-[11px] leading-snug text-ink-muted"
+            >
+              <strong className="font-semibold text-warning">VEO VERIFICATION STUB</strong> — tutor
+              answers on this page come from a deterministic test double, not a language model.
+            </p>
+          ) : null}
 
           <AIStudyPanel
             selectedId={selectedId}

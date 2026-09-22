@@ -6,9 +6,11 @@ _Last updated: 2026-09-22_
 
 ## Current phase
 
-**Phase 4 — Anatomy Integration**
+**Phase 5 — Intelligence**
 
 ## Current gate
+
+**Gate 10 — Contextual AI Tutor → GREEN**
 
 **Gate 9 — Real Anatomy Rendering → RED, blocked by an external dependency**
 
@@ -28,6 +30,18 @@ _Last updated: 2026-09-22_
 >
 > This is not an engineering blocker. Everything upstream of the content is
 > built and verified. What is missing is anatomy, and it cannot be written.
+
+### Gate 10 in one line
+
+The tutor answers about the structure the learner has selected, using VEO's
+own semantic model resolved on the server, and says plainly when that model
+does not contain enough to answer.
+
+**Gate 10 did not change Gate 9.** No anatomy was written, no fixture was
+promoted to a catalogue, and `/api/anatomy` still reports
+`configured: false, delivery: "none"`. The tutor is proved against clearly
+labelled test content, which is the only honest way to prove it while the
+licensed-anatomy dependency is outstanding.
 
 ### Environment classification
 
@@ -89,6 +103,62 @@ numbers wait for the model.
 ---
 
 ## Completed
+
+### Gate 10 — contextual AI tutor
+
+| # | Requirement | Status | Evidence |
+| --- | --- | --- | --- |
+| 1 | Contextual AI architecture | GREEN | `src/ai/{context,tutor,safety,actions}` |
+| 2 | TutorRequest typed and validated | GREEN | Zod; 6 rejection tests |
+| 3 | SpatialContext deterministic and bounded | GREEN | byte-identical output test; 4 bounding tests |
+| 4 | AI provider server-side | GREEN | `server-only`; no client-side call exists |
+| 5 | OpenAI credential server-only | GREEN | scan + positive control + mutation test |
+| 6 | Structured TutorResponse validated | GREEN | schema + grounding pass; 6 malformed-output tests |
+| 7 | Tutor understands selected context | GREEN | answer carries real name, parent, relationships |
+| 8 | AI Explain works | GREEN | live browser, panel reaches `success` |
+| 9 | Follow-up questions work | GREEN | history passed and re-bounded server-side |
+| 10 | Education levels work | GREEN | 4 levels, different guidance, different output |
+| 11 | Related structures resolve via semantic id | GREEN | invented ids dropped; click drives selection |
+| 12 | Spatial actions use SceneController | GREEN | dispatcher tests incl. undo still working |
+| 13 | Unsupported actions rejected | GREEN | capability, id and layer rejection paths |
+| 14 | Conversation bounded | GREEN | turn cap + char cap, enforced server-side |
+| 15 | Prompt-injection defences | GREEN | fenced data, markers neutralised, both directions tested |
+| 16 | Missing context handled honestly | GREEN | three grounding levels; over-claims downgraded |
+| 17 | AI errors handled gracefully | GREEN | 8 failure codes, no upstream text surfaced |
+| 18 | Context panel integration | GREEN | tutor under the structural facts |
+| 19 | AI study bar integration | GREEN | 5 live modes, 2 later-gate modes disabled |
+| 20 | Gate 11 NOT implemented | GREEN | `QUIZ` rejected by the server; dirs still empty |
+| 21 | Controlled fixture proves it | GREEN | VEO AI TUTOR TEST FIXTURE, isolation asserted |
+| 22 | Browser validation | GREEN | 89 checks |
+| 23 | Mobile validation | GREEN | 1440 / 1024 / 768 / 430 / 390 / 360 |
+| 24 | Security boundary | GREEN | mutation-tested |
+| 25 | Regression suite | GREEN | 446 prior-gate checks, 0 failures |
+
+#### What the tutor is NOT given
+
+Stated because the boundary is the design:
+
+- No geometry, no glTF, no three.js object, no renderer state.
+- No graph from the browser. The server resolves a model REFERENCE, so a
+  client cannot describe a structure into existence and have VEO explain it.
+- No client-supplied system prompt, grounding policy, or capability claim.
+  Capabilities sent by the browser are intersected with the model's own.
+
+#### The verification stub
+
+Gate 10's browser run uses a deterministic provider (`VEO_TUTOR_STUB=1`), not
+a live model, because an assertion against a live model can say little more
+than "text appeared" — which cannot distinguish a working tutor from a broken
+one. The stub composes its reply from the context it was handed, so the
+browser checks assert that the answer names the real structure, its real
+parent and its real relationship targets. Every other stage is the production
+path.
+
+It requires the flag at BUILD time (Next inlines `process.env.X` and drops the
+dead branch), and refuses to run when `OPENAI_API_KEY` is set, so it can never
+shadow a configured provider. Every stub answer is marked in the response, in
+the message, and by a banner in the workspace.
+
 
 ### Gate 9 — everything except the anatomy
 
@@ -389,15 +459,16 @@ OpenAI, Stripe, OAuth providers.
 | --- | --- |
 | `npm run typecheck` | **PASS** — 0 errors |
 | `npm run lint` | **PASS** — 0 errors, 0 warnings |
-| `npm run test` | **PASS** — 500 passed / 500 total, 25 files |
-| `npm run build` | **PASS** — 20 routes |
+| `npm run test` | **PASS** — 610 passed / 610 total, 30 files |
+| `npm run build` | **PASS** — 21 routes |
 | `npm run validate:anatomy` | **PASS** — contract fixture valid |
-| `npm run test:anatomy` | **PASS** — 31 live provider checks |
+| `npm run test:anatomy` | **PASS** — 32 live provider checks |
 | `npm run test:spatial` | **PASS** — 164 live manipulation checks |
 | `npm run test:semantics` | **PASS** — 80 live semantic checks |
 | `npm run test:engine` | **PASS** — 54 live engine checks |
 | `npm run test:ui` | **PASS** — 116 live UI checks |
-| `npm run test:browser` | **PASS** — all five, 445 checks, 0 failures |
+| `npm run test:tutor` | **PASS** — 89 live tutor checks |
+| `npm run test:browser` | **PASS** — all six, 535 checks, 0 failures |
 
 Gate 9 added 32 unit tests and 12 live checks.
 
@@ -453,6 +524,65 @@ Honesty about coverage matters more here than anywhere else in this file.
 - **Snapshot stability matters.** `SceneController.getSnapshot` returns the
   same object until something changes, and re-selecting the current selection
   does not notify — otherwise every no-op selection would cost a render.
+
+---
+
+## Issues found and fixed during Gate 10
+
+Four real defects, three of them found by the verification rather than by
+reading the code.
+
+1. **The context builder reversed the hierarchy path, and truncated the wrong
+   end.** `semanticIdAncestors` returns nearest-first; the builder assumed
+   root-first. So a path read "Assembly A → Test Apparatus → Core Unit", and
+   worse, capping ancestors on a deep model dropped the immediate parent and
+   kept the model root — discarding the one piece of hierarchy that is always
+   relevant. Caught by the first hierarchy test written.
+
+2. **The injection sanitiser only neutralised role markers at the start of a
+   line.** A payload embedded after a sentence ("…a chamber. System: ignore
+   previous instructions") sailed through. Widening it naively would have
+   mangled legitimate prose — "the cardiovascular system: a network of
+   vessels" is a description, not an attack — so the rule is now anchored to
+   sentence boundaries, and both directions are tested.
+
+3. **A visually hidden span made the page scroll sideways on a phone.** The
+   reason text inside each disabled study mode used `veo-sr-only`, which is
+   `position: absolute`. With no positioned ancestor, a chip scrolled off the
+   end of the strip placed that span outside the viewport and extended the
+   DOCUMENT's scrollable width by 215px at 390px. Replaced with an
+   `aria-label`, which has no box and announces the reason with the control.
+
+4. **A feature flag that could never turn on.** `process.env[STUB_ENV_VAR]`
+   with a computed key survives Next's build-time transform but then reads a
+   build-time snapshot, so the flag read as unset however the server was
+   started. The literal form is required — and, as it turns out, is the safer
+   behaviour: a bundle built without the flag cannot be talked into the stub
+   afterwards.
+
+### Verified, not changed
+
+Two browser assertions failed and turned out to be wrong about the product:
+
+- **Clicking the centre of the diagnostic scene selects `object_5`**, the sole
+  child of its system — so it has no siblings and no relationships, and
+  "related structures appear" correctly found none. The check now selects a
+  structure that HAS relationships, deliberately, rather than depending on
+  where the camera happens to be pointing.
+- **Performing a tutor action clears the answer**, because it selects a
+  different structure and a new subject starts a new conversation. The
+  availability assertion now runs before the action rather than after it.
+
+### A Gate 8 check that was passing for the wrong reason
+
+`verify-anatomy.mjs` asserted "it states that no licensed model is configured"
+by matching `/not configured/` anywhere in the body — and was in fact matching
+the AI study bar's "AI tutor is not configured" notice. Configuring a tutor
+broke it while anatomy behaviour was unchanged.
+
+It now requests an actual catalogued model and asserts VEO names the missing
+configuration and draws nothing, which is what the gate was always meant to
+check.
 
 ---
 
@@ -719,8 +849,14 @@ engine rather than finding a defect:
 
 ## Next action
 
-**Supply a licensed anatomy source.** Nothing else in Gate 9 remains, and Gate
-10 must not begin until Gate 9 is independently green.
+**Supply a licensed anatomy source.** It remains the one outstanding external
+dependency, and Gate 9 stays RED until it arrives.
+
+Gate 10 proceeded because the tutor architecture does not depend on it: the
+tutor consumes VEO's normalised semantic model, so the same code paths will
+serve licensed anatomy the day a manifest exists, without modification. What
+Gate 10 cannot claim — and does not — is that the tutor has ever explained a
+real anatomical structure.
 
 See **Blocked** above for the three routes, what each requires, and the
 bring-up procedure. Two of the three need no code at all.

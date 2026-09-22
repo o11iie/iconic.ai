@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { resolveModelGraph } from '@/ai/context/model-resolver';
 import type { SceneStateView } from '@/ai/context/spatial-context';
 import { OpenAIClient } from '@/ai/providers/openai';
+import { stubEnabled, VerificationStubClient } from '@/ai/providers/verification-stub';
 import { runTutorTurn } from '@/ai/tutor/tutor-service';
 import { TUTOR_ERROR_MESSAGES, type TutorErrorCode } from '@/ai/tutor/tutor-types';
 import { NO_CAPABILITIES } from '@/engine/spatial/capabilities';
@@ -119,7 +120,7 @@ export async function POST(request: Request) {
   // ---- run the turn -------------------------------------------------------
 
   const { result } = await runTutorTurn(payload, {
-    client: new OpenAIClient(),
+    client: tutorClient(),
     graph: resolved.graph,
     scene,
     isFixture: resolved.isFixture,
@@ -137,12 +138,28 @@ export async function POST(request: Request) {
     ok: true,
     response:
       process.env.NODE_ENV === 'development' ? { ...response, notices } : response,
+    // States plainly which model answered, so a verification run can never
+    // mistake the stub for the real provider, or the reverse.
+    ...(stubEnabled() ? { verificationStub: true } : {}),
   });
+}
+
+/**
+ * Which model backs the tutor.
+ *
+ * The verification stub is used ONLY when explicitly enabled and never in a
+ * production build, so the path a learner reaches is always the real one.
+ * It exists because a browser check against a live model can assert little
+ * more than "text appeared", which cannot tell a working tutor from a broken
+ * one.
+ */
+function tutorClient() {
+  return stubEnabled() ? new VerificationStubClient() : new OpenAIClient();
 }
 
 /** Whether the tutor can answer at all, for the UI's unavailable state. */
 export function GET() {
-  const status = new OpenAIClient().getStatus();
+  const status = tutorClient().getStatus();
   return NextResponse.json({
     configured: status.ready,
     // The reason names the variable, never its value.

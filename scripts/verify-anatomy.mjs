@@ -89,11 +89,32 @@ try {
   const explore = await page.goto(`${BASE}/explore`, { waitUntil: 'networkidle' });
   check(explore?.status() === 200, 'the workspace opens without a licensed asset');
 
+  /*
+   * Ask for a REAL catalogue model.
+   *
+   * Bare /explore has chosen no model, so it says "choose a model" — which is
+   * correct but says nothing about licensing. This check previously matched
+   * `/not configured/` anywhere in the body and was in fact matching the AI
+   * study bar's "AI tutor is not configured" notice; the moment a tutor was
+   * configured, the check failed while anatomy behaviour was unchanged. It was
+   * passing for the wrong reason.
+   *
+   * Requesting a catalogued model forces the question the gate actually asks:
+   * when a learner asks for anatomy VEO is not licensed to serve, does VEO say
+   * so, and does it refuse to draw anything?
+   */
+  await page.goto(`${BASE}/explore?model=heart`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
   const body = await page.locator('body').innerText();
+
   check(
-    /not configured|no licensed|awaiting licensed|unavailable/i.test(body),
-    'it states that no licensed model is configured',
-    body.split('\n').filter(Boolean).slice(0, 3).join(' / '),
+    /model unavailable|not configured in this environment/i.test(body),
+    'asking for a catalogued model states plainly that it cannot be served',
+    body.split('\n').filter(Boolean).slice(8, 11).join(' / '),
+  );
+  check(
+    /NEXT_PUBLIC_SPATIAL_ASSET_BASE_URL|ANATOMY_ASSET_BASE_URL/.test(body),
+    'and names the exact configuration the deployment is missing',
   );
   check(
     (await page.locator('canvas').count()) === 0,
