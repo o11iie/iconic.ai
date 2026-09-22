@@ -407,6 +407,50 @@ async function runDesktop(page, errors) {
   await act(page, 'redo');
   check(await visual(page, OBJ_4) === 'ghosted', 'redo reapplies it');
 
+  // ------------------------------------------- LABELS ----------------------
+  console.log('\n=== LABELS ===');
+  await act(page, 'resetScene');
+  await page.waitForTimeout(400);
+
+  const labelsBefore = await page.locator('[data-veo-label]').count();
+  check(labelsBefore === 0, 'labels are off until asked for', `${labelsBefore} drawn`);
+
+  await toolbar.getByRole('button', { name: /^Labels$/ }).click();
+  await page.waitForTimeout(500);
+
+  const labelTexts = await page.locator('[data-veo-label]').allInnerTexts();
+  check(labelTexts.length > 0, 'turning labels on draws them', `${labelTexts.length} drawn`);
+  check(
+    labelTexts.every((text) => /^(Object \d|System [ABC]|Test Scene)$/.test(text.trim())),
+    'every label is a name the model supplied',
+    labelTexts.join(', '),
+  );
+
+  // A label over a structure that is no longer drawn is worse than no label.
+  await act(page, 'hideObject', OBJ_1);
+  await page.waitForTimeout(400);
+  const afterHide = await page.locator('[data-veo-label]').allInnerTexts();
+  check(
+    !afterHide.some((text) => text.trim() === 'Object 1'),
+    "a hidden structure's label disappears with it",
+    afterHide.join(', '),
+  );
+
+  await act(page, 'showObject', OBJ_1);
+  await page.waitForTimeout(400);
+  const afterShow = await page.locator('[data-veo-label]').allInnerTexts();
+  check(
+    afterShow.some((text) => text.trim() === 'Object 1'),
+    'and returns when the structure does',
+  );
+
+  await toolbar.getByRole('button', { name: /^Labels$/ }).click();
+  await page.waitForTimeout(400);
+  check(
+    (await page.locator('[data-veo-label]').count()) === 0,
+    'turning labels off removes them',
+  );
+
   // ------------------------------------------- 31-34. reset ----------------
   console.log('\n=== 31-34. RESET, TWICE ===');
   await act(page, 'select', OBJ_1);

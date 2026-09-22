@@ -203,7 +203,16 @@ export function defaultLabelsFor(
     // Shallower structures are more useful as orientation, so they win the
     // limited label budget over deeply nested detail.
     priority: Math.max(0, 100 - object.depth * 10),
-    visible: false,
+    /*
+     * Not individually suppressed.
+     *
+     * Whether ANY label is drawn is the controller's master switch, which is
+     * off until a learner asks — that is what keeps a dense model readable.
+     * This flag is the narrower question of whether this particular label has
+     * been turned off, and seeding it false made the switch inert: turning
+     * labels on drew nothing.
+     */
+    visible: true,
     anchor: 'top' as const,
   }));
 }

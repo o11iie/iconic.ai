@@ -540,9 +540,63 @@ describe('annotations', () => {
     expect(visible[0]?.semanticId).toBe(ROOT);
   });
 
-  it('seeds labels hidden, so a dense model is not unreadable by default', () => {
+  it('draws no labels until asked, so a dense model is not unreadable by default', () => {
+    // The guarantee lives in the controller's master switch. Seeding each
+    // label hidden as well made the switch inert — turning labels on drew
+    // nothing — so the property is asserted where it is enforced.
     const { controller } = loadedController();
-    expect(controller.annotations.visibleLabels()).toHaveLength(0);
+    controller.setBoundsResolver(() => ({ min: [0, 0, 0], max: [1, 1, 1] }));
+
+    expect(controller.areLabelsEnabled()).toBe(false);
+    expect(controller.getVisibleLabels()).toHaveLength(0);
+
+    controller.setLabelsEnabled(true);
+    expect(controller.getVisibleLabels().length).toBeGreaterThan(0);
+  });
+
+  it('drops a label whose structure has no position to anchor to', () => {
+    // Without live geometry there is nowhere to put it, and a label at the
+    // origin would point at the wrong thing rather than at nothing.
+    const { controller } = loadedController();
+    controller.setLabelsEnabled(true);
+
+    expect(controller.getVisibleLabels()).toHaveLength(0);
+  });
+
+  it('drops a label whose structure is no longer drawn', () => {
+    // A name floating over nothing is worse than no name.
+    const { controller } = loadedController();
+    controller.setLabelsEnabled(true);
+    controller.setBoundsResolver(() => ({ min: [0, 0, 0], max: [1, 1, 1] }));
+
+    const named = () => controller.getVisibleLabels().map((l) => l.annotation.semanticId);
+    expect(named()).toContain(OBJ_1);
+
+    controller.hideObject(OBJ_1);
+    expect(named()).not.toContain(OBJ_1);
+
+    controller.showObject(OBJ_1);
+    expect(named()).toContain(OBJ_1);
+  });
+
+  it('keeps a ghosted structure labelled, because it is still there', () => {
+    const { controller } = loadedController();
+    controller.setLabelsEnabled(true);
+    controller.setBoundsResolver(() => ({ min: [0, 0, 0], max: [1, 1, 1] }));
+
+    controller.ghostObject(OBJ_1);
+    expect(controller.getVisibleLabels().map((l) => l.annotation.semanticId)).toContain(OBJ_1);
+  });
+
+  it('never drops the selected structure to the budget', () => {
+    const { controller } = loadedController();
+    controller.setLabelsEnabled(true);
+    controller.setBoundsResolver(() => ({ min: [0, 0, 0], max: [1, 1, 1] }));
+    controller.select(OBJ_3);
+
+    // OBJ_3 is the deepest, so priority alone would drop it first.
+    const only = controller.getVisibleLabels(1);
+    expect(only[0]?.annotation.semanticId).toBe(OBJ_3);
   });
 
   it('anchors a pin to a semantic object', () => {

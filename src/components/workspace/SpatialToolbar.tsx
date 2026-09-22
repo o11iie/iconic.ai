@@ -29,6 +29,7 @@ export type WorkspaceTool =
   | 'peel'
   | 'dissect'
   | 'explode'
+  | 'labels'
   | 'reset';
 
 export interface ToolbarState {
@@ -40,6 +41,7 @@ export interface ToolbarState {
   readonly exploded: boolean;
   readonly peelLevel: number;
   readonly peelSteps: number;
+  readonly labelsOn: boolean;
 }
 
 interface ToolDef {
@@ -127,6 +129,15 @@ const TOOLS: readonly ToolDef[] = [
     kind: 'action',
     available: (state) => state.capabilities.supportsExplosion,
     active: (state) => state.exploded,
+  },
+  {
+    id: 'labels',
+    icon: 'note',
+    label: 'Labels',
+    hint: 'Name the structures on screen',
+    kind: 'action',
+    available: (state) => state.capabilities.supportsLabels,
+    active: (state) => state.labelsOn,
   },
   {
     id: 'reset',

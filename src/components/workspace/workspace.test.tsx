@@ -269,6 +269,7 @@ describe('SpatialToolbar', () => {
     exploded: false,
     peelLevel: 0,
     peelSteps: 2,
+    labelsOn: false,
   };
 
   const baseProps = {
@@ -279,7 +280,16 @@ describe('SpatialToolbar', () => {
 
   it('exposes every supported tool with an accessible name', () => {
     render(<SpatialToolbar {...baseProps} />);
-    for (const label of ['Select', 'Explore', 'Layers', 'Isolate', 'Dissect', 'Explode', 'Reset']) {
+    for (const label of [
+      'Select',
+      'Explore',
+      'Layers',
+      'Isolate',
+      'Dissect',
+      'Explode',
+      'Labels',
+      'Reset',
+    ]) {
       expect(screen.getByRole('button', { name: new RegExp(label) })).toBeInTheDocument();
     }
   });

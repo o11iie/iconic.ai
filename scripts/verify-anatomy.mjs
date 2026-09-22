@@ -42,6 +42,9 @@ function captureConsole(page) {
     errors.push(text);
   });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  // An unhandled rejection never reaches console.error, so a load that failed
+  // inside a promise would otherwise look like a clean run.
+  page.on('crash', () => errors.push('page crashed'));
   return errors;
 }
 
@@ -213,6 +216,47 @@ try {
   for (const name of ['ANATOMY_PROVIDER_API_KEY', 'ANATOMY_ASSET_SIGNING_SECRET']) {
     check(!haystack.includes(name), `${name}: not even its name is inlined into the bundle`);
   }
+
+  // Gate 9 extends the scan past the bundle to every surface a credential
+  // could reach: storage the page writes, the URL it navigates to, and the
+  // HTML the server rendered.
+  const storage = await page.evaluate(() => {
+    const read = (store) => {
+      try {
+        return Object.entries({ ...store });
+      } catch {
+        return [];
+      }
+    };
+    return {
+      local: read(window.localStorage),
+      session: read(window.sessionStorage),
+      url: window.location.href,
+      cookies: document.cookie,
+    };
+  });
+
+  const surfaces = [
+    JSON.stringify(storage.local),
+    JSON.stringify(storage.session),
+    storage.url,
+    storage.cookies,
+    await page.content(),
+  ].join('\n');
+
+  for (const [name, value] of secrets) {
+    if (!value) continue;
+    check(
+      !surfaces.includes(value),
+      `${name}: absent from storage, URL, cookies and rendered HTML`,
+    );
+  }
+
+  check(
+    !/api[_-]?key=|token=|secret=/i.test(storage.url),
+    'no credential is carried in the URL',
+    storage.url,
+  );
 
   // ------------------------------------------- 7. no source files exposed ---
   console.log('\n=== 7. NO ANATOMY SOURCE FILE IS DOWNLOADABLE ===');

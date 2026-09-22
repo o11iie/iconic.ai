@@ -8,7 +8,13 @@ import type {
   Vec3,
 } from '@/types/domain/spatial';
 import type { Relationship, RelationshipKind } from '@/types/domain/spatial';
-import { AnnotationRegistry, anchorPosition, defaultLabelsFor } from './annotations';
+import {
+  AnnotationRegistry,
+  anchorPosition,
+  defaultLabelsFor,
+  type PositionedAnnotation,
+  type SpatialLabel,
+} from './annotations';
 import { resolveCapabilities } from './capabilities';
 import { layerMembershipIndex } from './layers';
 import {
@@ -122,6 +128,7 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
   private graph: SpatialModelGraph | null = null;
   private boundsResolver: BoundsResolver | null = null;
   private layers: readonly SpatialLayer[] = [];
+  private labelsEnabled = false;
   private capabilities: SpatialCapabilities = resolveCapabilities(null);
 
   /**
@@ -992,6 +999,70 @@ export class SceneController<TNode extends SceneNode = SceneNode> {
     return Math.hypot(half[0], half[1], half[2]);
   }
 
+  // ---- labels -------------------------------------------------------------
+
+  /**
+   * Whether labels are drawn at all.
+   *
+   * Off by default. A dense model with every structure labelled is unreadable,
+   * and a learner who cannot see the anatomy for the text has been given
+   * nothing. Turning them on is a deliberate act.
+   */
+  setLabelsEnabled(enabled: boolean): void {
+    if (this.labelsEnabled === enabled) return;
+    this.labelsEnabled = enabled;
+    this.invalidate();
+  }
+
+  areLabelsEnabled(): boolean {
+    return this.labelsEnabled;
+  }
+
+  toggleLabels(): void {
+    this.setLabelsEnabled(!this.labelsEnabled);
+  }
+
+  /**
+   * Labels to draw right now, resolved to world positions.
+   *
+   * Filtered by what is actually on screen: a label belonging to a structure
+   * that has been hidden, dissected or peeled away is not shown, because a
+   * name floating over nothing is worse than no name. Ghosted structures keep
+   * their labels — they are still there, just faint, and that is often exactly
+   * what a learner is orienting by.
+   *
+   * The budget keeps a dense model readable. Priority decides who survives it,
+   * and the selected structure always does.
+   */
+  getVisibleLabels(budget = DEFAULT_LABEL_BUDGET): readonly PositionedAnnotation<SpatialLabel>[] {
+    if (!this.labelsEnabled) return EMPTY_LABELS;
+
+    const states = this.getSnapshot().visual.states;
+    const positioned: PositionedAnnotation<SpatialLabel>[] = [];
+
+    for (const label of this.annotations.visibleLabels()) {
+      const state = states.get(label.semanticId);
+      if (state !== undefined && NON_RENDERING_STATES.has(state)) continue;
+      if (state === 'peeled') continue;
+
+      const position = this.getObjectWorldPosition(label.semanticId, label.anchor);
+      if (!position) continue;
+
+      positioned.push({ annotation: label, position });
+    }
+
+    // The selected structure is the one the learner is looking at; losing its
+    // label to a budget would be the one omission they would notice.
+    positioned.sort((a, b) => {
+      const aSelected = a.annotation.semanticId === this.selectedId ? 1 : 0;
+      const bSelected = b.annotation.semanticId === this.selectedId ? 1 : 0;
+      if (aSelected !== bSelected) return bSelected - aSelected;
+      return b.annotation.priority - a.annotation.priority;
+    });
+
+    return positioned.slice(0, Math.max(0, budget));
+  }
+
   // ---- camera intents -----------------------------------------------------
 
   private issueCamera(
@@ -1043,6 +1114,16 @@ function intersect(
 }
 
 const EMPTY_OFFSETS: ReadonlyMap<SemanticId, Vec3> = new Map();
+const EMPTY_LABELS: readonly PositionedAnnotation<SpatialLabel>[] = [];
+
+/**
+ * How many labels a viewport draws at once.
+ *
+ * Chosen to stay readable rather than to be generous: past roughly a dozen,
+ * labels overlap each other faster than they inform, and the model disappears
+ * behind its own annotation.
+ */
+export const DEFAULT_LABEL_BUDGET = 12;
 
 /**
  * True when a state means the object is not drawn.
