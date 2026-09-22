@@ -220,4 +220,106 @@ describe('with a configured asset source', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('model_unavailable');
   });
+
+  // ---- progressive loading ------------------------------------------------
+
+  describe('progressive loading', () => {
+    /**
+     * A whole body is not one download.
+     *
+     * Fetching every system to look at the skeleton costs a learner minutes
+     * and a phone its memory, so a manifest may declare a separate asset per
+     * system and per region. These prove the provider actually fetches them
+     * rather than quietly serving the whole-model asset instead.
+     */
+    const PARTIAL_MANIFEST = {
+      ...MANIFEST,
+      systems: [
+        {
+          id: 'cardiovascular',
+          name: 'Cardiovascular',
+          description: null,
+          assetPath: 'cardiovascular.glb',
+        },
+      ],
+      regions: [
+        {
+          id: 'thorax',
+          semanticId: heart,
+          name: 'Thorax',
+          description: null,
+          objectIds: [lv, rv],
+          assetPath: 'thorax.glb',
+          boundingBox: null,
+        },
+      ],
+    };
+
+    /** Serves the manifest, and answers HEAD for whichever parts exist. */
+    function stubPartial(available: readonly string[]) {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, init?: { method?: string }) => {
+          if (init?.method === 'HEAD') {
+            const found = available.some((path) => url.endsWith(path));
+            return { ok: found, status: found ? 200 : 404, json: async () => ({}) };
+          }
+          return { ok: true, status: 200, json: async () => PARTIAL_MANIFEST };
+        }),
+      );
+    }
+
+    async function partialProvider(available: readonly string[]) {
+      stubPartial(available);
+      const provider = new GltfAnatomyProvider({ baseUrl: TEST_BASE_URL });
+      await provider.initialize();
+      const loaded = await provider.loadModel('heart');
+      expect(loaded.ok).toBe(true);
+      return provider;
+    }
+
+    it('points the viewport at a system asset the manifest declares', async () => {
+      const provider = await partialProvider(['cardiovascular.glb']);
+      expect(provider.getAssetUrl()).toBe(`${TEST_BASE_URL}/heart/heart.glb`);
+
+      const result = await provider.loadSystem('cardiovascular');
+
+      expect(result.ok).toBe(true);
+      expect(provider.getAssetUrl()).toBe(`${TEST_BASE_URL}/heart/cardiovascular.glb`);
+    });
+
+    it('points the viewport at a region asset the manifest declares', async () => {
+      const provider = await partialProvider(['thorax.glb']);
+
+      const result = await provider.loadAnatomyRegion('thorax');
+
+      expect(result.ok).toBe(true);
+      expect(provider.getAssetUrl()).toBe(`${TEST_BASE_URL}/heart/thorax.glb`);
+    });
+
+    it('refuses a declared part the host does not have, rather than blanking the viewport', async () => {
+      // Mounting a URL that 404s renders nothing, with no explanation. An
+      // error the learner can read is the only honest outcome.
+      const provider = await partialProvider([]);
+      const before = provider.getAssetUrl();
+
+      const result = await provider.loadSystem('cardiovascular');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.message).toContain('404');
+      expect(provider.getAssetUrl()).toBe(before);
+    });
+
+    it('keeps the whole-model asset when no part is declared', async () => {
+      stubFetch(MANIFEST);
+      const provider = new GltfAnatomyProvider({ baseUrl: TEST_BASE_URL });
+      await provider.initialize();
+      await provider.loadModel('heart');
+
+      const result = await provider.loadSystem('cardiovascular');
+
+      expect(result.ok).toBe(true);
+      expect(provider.getAssetUrl()).toBe(`${TEST_BASE_URL}/heart/heart.glb`);
+    });
+  });
 });

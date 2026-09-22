@@ -39,6 +39,7 @@ import type {
   AnatomyProvider,
   AnatomyStructureMetadata,
 } from './anatomy-provider';
+import { ANATOMY_DOMAIN } from '../taxonomy';
 import type {
   AnatomyRegion,
   AnatomyRelationshipKind,
@@ -91,6 +92,8 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
   private hierarchy: HierarchyNode | null = null;
   private assetUrl: string | null = null;
   private baseUrl: string | null = null;
+  /** The model currently loaded, so partial assets resolve against it. */
+  private modelRef: string | null = null;
   private readonly configuredBaseUrl: string | undefined;
 
   /**
@@ -187,6 +190,21 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
      * that were never meant for it — the exact silent mislabelling the
      * manifest contract exists to prevent.
      */
+    /*
+     * This is the ANATOMY provider. A manifest from another domain describes
+     * structures that are not body structures, and loading one here would put
+     * them in front of a learner inside the anatomy workspace. Diagnostic
+     * content has its own clearly-labelled path and does not come through here.
+     */
+    if (manifest.domain !== ANATOMY_DOMAIN) {
+      const failure = SpatialError.modelUnavailable(
+        modelRef,
+        `manifest declares domain "${manifest.domain}"; the anatomy provider loads only anatomy`,
+      );
+      this.scene.dispatchLifecycle({ type: 'fail', error: failure.message, generation });
+      return err(failure);
+    }
+
     if (manifest.provider !== this.id) {
       const failure = SpatialError.modelUnavailable(
         modelRef,
@@ -200,6 +218,7 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     this.meshMapping = buildMeshMapping(manifest);
     this.providerMapping = buildProviderMapping(manifest);
     this.hierarchy = normalizeHierarchy(manifest);
+    this.modelRef = modelRef;
     this.assetUrl = `${this.baseUrl}/${modelRef}/${manifest.assetPath}`;
 
     const graph = manifestToGraph(manifest, { providerId: this.id, baseUrl: this.baseUrl });
@@ -214,7 +233,27 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
 
   // ---- AnatomyProvider ------------------------------------------------------
 
+  /**
+   * Load one body system.
+   *
+   * A manifest may declare a separate asset per system, which is how a whole
+   * body becomes loadable at all: downloading every system to look at the
+   * skeleton would cost a learner minutes and a phone its memory. When such an
+   * asset is declared, it is fetched and its URL becomes the one the viewport
+   * mounts. When it is not, the system is a grouping over structures already
+   * loaded — real data, narrower view.
+   */
   async loadSystem(system: AnatomySystem, options?: LoadModelOptions): SpatialResult<SpatialLayer> {
+    const declared = this.manifest?.systems.find((candidate) => candidate.id === system);
+
+    if (declared?.assetPath && this.baseUrl && this.modelRef) {
+      const url = `${this.baseUrl}/${this.modelRef}/${declared.assetPath}`;
+      const reachable = await this.confirmAsset(url, options?.signal ?? null);
+      if (!reachable.ok) return reachable;
+      this.assetUrl = url;
+      this.touch();
+    }
+
     const layer = this.graph?.layers.find((candidate) => candidate.id === system);
     if (layer) return ok(layer);
 
@@ -245,10 +284,26 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
     );
   }
 
+  /**
+   * Load one body region.
+   *
+   * The same progressive path as `loadSystem`, cutting the model the other
+   * way: a learner studying the thorax should not wait for the lower limb.
+   */
   async loadAnatomyRegion(
     region: AnatomyRegion,
     options?: LoadModelOptions,
   ): SpatialResult<SpatialRegion> {
+    const declared = this.manifest?.regions.find((candidate) => candidate.id === region);
+
+    if (declared?.assetPath && this.baseUrl && this.modelRef) {
+      const url = `${this.baseUrl}/${this.modelRef}/${declared.assetPath}`;
+      const reachable = await this.confirmAsset(url, options?.signal ?? null);
+      if (!reachable.ok) return reachable;
+      this.assetUrl = url;
+      this.touch();
+    }
+
     const existing = this.graph?.regions.find((candidate) => candidate.id === region);
     if (existing) return ok(existing);
 
@@ -355,6 +410,30 @@ export class GltfAnatomyProvider extends BaseSceneGraphProvider implements Anato
       supportsRelationships:
         derived.supportsRelationships && this.capabilities.providesRelationships,
     };
+  }
+
+  /**
+   * Confirm a partial asset exists before pointing the viewport at it.
+   *
+   * A HEAD request, so a missing file is an error the learner can read rather
+   * than a viewport that mounts a URL and renders nothing. Cheap enough to be
+   * worth it; the alternative is a blank canvas with no explanation.
+   */
+  private async confirmAsset(url: string, signal: AbortSignal | null): SpatialResult<true> {
+    try {
+      const response = await fetch(url, { method: 'HEAD', signal });
+      if (!response.ok) {
+        return err(
+          SpatialError.modelUnavailable(
+            url,
+            `the licensed asset host returned HTTP ${response.status} for this part of the model`,
+          ),
+        );
+      }
+      return ok(true);
+    } catch (cause) {
+      return err(SpatialError.assetLoadFailed(url, cause));
+    }
   }
 
   getModelVersion(): AnatomyModelVersion | null {

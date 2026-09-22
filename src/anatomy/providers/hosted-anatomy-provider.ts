@@ -37,6 +37,7 @@ import type {
   AnatomyProvider,
   AnatomyStructureMetadata,
 } from './anatomy-provider';
+import { ANATOMY_DOMAIN } from '../taxonomy';
 import type { AnatomyRegion, AnatomyRelationshipKind, AnatomySystem } from '../taxonomy';
 
 /**
@@ -202,6 +203,17 @@ export class HostedAnatomyProvider extends BaseSceneGraphProvider implements Ana
     }
 
     const manifest = parsed.value;
+
+    // The anatomy workspace shows anatomy. See the note on the GLTF provider.
+    if (manifest.domain !== ANATOMY_DOMAIN) {
+      const failure = SpatialError.modelUnavailable(
+        modelRef,
+        `manifest declares domain "${manifest.domain}"; the anatomy provider loads only anatomy`,
+      );
+      this.scene.dispatchLifecycle({ type: 'fail', error: failure.message, generation });
+      return err(failure);
+    }
+
     if (manifest.provider !== this.id && manifest.provider !== 'gltf-asset') {
       const failure = SpatialError.modelUnavailable(
         modelRef,
