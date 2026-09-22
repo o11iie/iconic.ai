@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SemanticId } from '@/lib/semantic-id';
 import type { Relationship, SpatialObject } from '@/types/domain/spatial';
@@ -238,11 +238,70 @@ describe('AIStudyPanel', () => {
     expect(screen.getByRole('button', { name: 'Ask' })).toBeDisabled();
   });
 
-  it('offers every study mode', () => {
-    render(<AIStudyPanel selectedId={lv} modelName="Heart" aiConfigured hasModel />);
-    for (const label of ['Explain', 'Teach me', 'Ask', 'Quiz me', 'Give me a hint']) {
-      expect(screen.getByRole('radio', { name: label })).toBeInTheDocument();
+  it('offers every Gate 10 study mode as usable', () => {
+    render(
+      <AIStudyPanel selectedId={lv} modelName="Heart" aiConfigured hasModel onAsk={() => {}} />,
+    );
+    for (const label of ['Explain', 'Simplify', 'Deep dive', 'Function', 'Relationships']) {
+      expect(screen.getByRole('radio', { name: label })).toBeEnabled();
     }
+  });
+
+  it('shows the later-gate modes, disabled, rather than hiding or faking them', () => {
+    // A hidden control makes the product look smaller than it is; an enabled
+    // one that does nothing is worse. Present and disabled, with a reason, is
+    // the only honest option while question generation is unbuilt.
+    render(
+      <AIStudyPanel selectedId={lv} modelName="Heart" aiConfigured hasModel onAsk={() => {}} />,
+    );
+
+    for (const label of ['Quiz me', 'Flashcard']) {
+      const control = screen.getByRole('radio', { name: new RegExp(label) });
+      expect(control).toBeInTheDocument();
+      expect(control).toBeDisabled();
+      expect(control).toHaveAttribute('data-veo-study-available', 'false');
+    }
+  });
+
+  it('asks the tutor when a Gate 10 mode is chosen', () => {
+    const asked: string[] = [];
+    render(
+      <AIStudyPanel
+        selectedId={lv}
+        modelName="Heart"
+        aiConfigured
+        hasModel
+        onAsk={(action) => asked.push(action)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Function' }));
+    expect(asked).toEqual(['FUNCTION']);
+  });
+
+  it('sends a typed question as a follow-up about the selected structure', () => {
+    const asked: [string, string | undefined][] = [];
+    render(
+      <AIStudyPanel
+        selectedId={lv}
+        modelName="Heart"
+        aiConfigured
+        hasModel
+        onAsk={(action, message) => asked.push([action, message])}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Why does it matter?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+
+    expect(asked).toEqual([['FOLLOW_UP', 'Why does it matter?']]);
+  });
+
+  it('will not ask without a selected structure, so it cannot become a chatbot', () => {
+    render(
+      <AIStudyPanel selectedId={null} modelName="Heart" aiConfigured hasModel onAsk={() => {}} />,
+    );
+    expect(screen.getByRole('radio', { name: 'Explain' })).toBeDisabled();
   });
 });
 

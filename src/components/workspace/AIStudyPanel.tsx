@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { cn } from '@/lib/cn';
 import { semanticIdToLabel, type SemanticId } from '@/lib/semantic-id';
+import type { TutorAction } from '@/ai/tutor/tutor-types';
 
 /**
  * AI study bar.
@@ -21,30 +22,82 @@ import { semanticIdToLabel, type SemanticId } from '@/lib/semantic-id';
  * never implies a focus it does not.
  */
 
-export type StudyMode = 'explain' | 'teach' | 'ask' | 'quiz' | 'hint';
+export type StudyMode =
+  | 'explain'
+  | 'simplify'
+  | 'deep_dive'
+  | 'function'
+  | 'relationships'
+  | 'quiz'
+  | 'flashcard';
 
-const MODES: readonly { id: StudyMode; label: string; icon: IconName }[] = [
-  { id: 'explain', label: 'Explain', icon: 'sparkles' },
-  { id: 'teach', label: 'Teach me', icon: 'learn' },
-  { id: 'ask', label: 'Ask', icon: 'quiz' },
-  { id: 'quiz', label: 'Quiz me', icon: 'flashcard' },
-  { id: 'hint', label: 'Give me a hint', icon: 'info' },
+/**
+ * Study modes.
+ *
+ * `available: false` marks a mode whose behaviour belongs to a later gate. It
+ * is shown, disabled, with a reason — rather than hidden, which would make the
+ * product look smaller than it is, or enabled, which would make a control that
+ * does nothing. A learner who clicks it learns when it arrives.
+ */
+const MODES: readonly {
+  id: StudyMode;
+  label: string;
+  icon: IconName;
+  available: boolean;
+  unavailable?: string;
+}[] = [
+  { id: 'explain', label: 'Explain', icon: 'sparkles', available: true },
+  { id: 'simplify', label: 'Simplify', icon: 'info', available: true },
+  { id: 'deep_dive', label: 'Deep dive', icon: 'learn', available: true },
+  { id: 'function', label: 'Function', icon: 'select', available: true },
+  { id: 'relationships', label: 'Relationships', icon: 'link', available: true },
+  {
+    id: 'quiz',
+    label: 'Quiz me',
+    icon: 'quiz',
+    available: false,
+    unavailable: 'Question generation arrives in a later VEO gate.',
+  },
+  {
+    id: 'flashcard',
+    label: 'Flashcard',
+    icon: 'flashcard',
+    available: false,
+    unavailable: 'Flashcard generation arrives in a later VEO gate.',
+  },
 ];
+
+/** Study modes that map onto a Gate 10 tutor action. */
+export const STUDY_MODE_ACTIONS = {
+  explain: 'EXPLAIN',
+  simplify: 'SIMPLIFY',
+  deep_dive: 'DEEP_DIVE',
+  function: 'FUNCTION',
+  relationships: 'RELATIONSHIPS',
+} as const;
 
 export function AIStudyPanel({
   selectedId,
   modelName,
   aiConfigured,
   hasModel,
+  onAsk,
+  busy = false,
   className,
 }: {
   readonly selectedId: SemanticId | null;
   readonly modelName: string | null;
   readonly aiConfigured: boolean;
   readonly hasModel: boolean;
+  /**
+   * Ask the tutor. Omitted where the bar is rendered without one — the bar
+   * then keeps its honest disabled state rather than throwing on click.
+   */
+  readonly onAsk?: (action: TutorAction, message?: string) => void;
+  readonly busy?: boolean;
   readonly className?: string;
 }) {
-  const [mode, setMode] = useState<StudyMode>('ask');
+  const [mode, setMode] = useState<StudyMode>('explain');
   const [question, setQuestion] = useState('');
 
   const contextLabel = selectedId
@@ -53,7 +106,16 @@ export function AIStudyPanel({
       ? `Ask about ${modelName ?? 'this model'}`
       : 'Ask about the selected structure';
 
-  const disabled = !aiConfigured || !hasModel;
+  // A question needs something to be about. Without a selection the tutor
+  // would be a general chatbot, which is the one thing it must not become.
+  const disabled = !aiConfigured || !hasModel || !selectedId || !onAsk || busy;
+
+  const runMode = (next: StudyMode) => {
+    setMode(next);
+    const action = STUDY_MODE_ACTIONS[next as keyof typeof STUDY_MODE_ACTIONS];
+    if (!action || disabled) return;
+    onAsk?.(action);
+  };
 
   return (
     <section
@@ -71,23 +133,34 @@ export function AIStudyPanel({
           className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {MODES.map((item) => {
-            const active = item.id === mode;
+            const active = item.id === mode && item.available;
+            const usable = item.available && !disabled;
             return (
               <button
                 key={item.id}
                 type="button"
                 role="radio"
                 aria-checked={active}
-                onClick={() => setMode(item.id)}
+                aria-disabled={!item.available}
+                disabled={!usable}
+                data-veo-study-mode={item.id}
+                data-veo-study-available={item.available ? 'true' : 'false'}
+                title={item.available ? item.label : item.unavailable}
+                onClick={() => runMode(item.id)}
                 className={cn(
                   'flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors duration-150',
                   active
                     ? 'bg-accent/16 text-accent'
                     : 'text-ink-subtle hover:bg-surface-raised hover:text-ink',
+                  !item.available && 'cursor-not-allowed opacity-45 hover:bg-transparent hover:text-ink-subtle',
+                  item.available && disabled && 'cursor-not-allowed opacity-50',
                 )}
               >
                 <Icon name={item.icon} size={14} />
                 {item.label}
+                {item.available ? null : (
+                  <span className="veo-sr-only">{item.unavailable}</span>
+                )}
               </button>
             );
           })}
@@ -104,8 +177,13 @@ export function AIStudyPanel({
           className="flex items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            // Tutor responses are wired in the gate that implements generation.
-            // Until then the control is disabled rather than silently no-op.
+            const text = question.trim();
+            if (!text || disabled) return;
+            // A typed question is always a follow-up: it arrives with the
+            // selected structure as its subject, which is what keeps the
+            // tutor spatial rather than general.
+            onAsk?.('FOLLOW_UP', text);
+            setQuestion('');
           }}
         >
           <label htmlFor="veo-ai-question" className="veo-sr-only">
@@ -125,7 +203,7 @@ export function AIStudyPanel({
             )}
           />
           <Button type="submit" size="sm" disabled={disabled || question.trim().length === 0}>
-            Ask
+            {busy ? 'Asking…' : 'Ask'}
           </Button>
         </form>
       ) : (

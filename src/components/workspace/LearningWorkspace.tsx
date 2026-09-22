@@ -9,7 +9,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { ErrorState, LoadingState, NotConfiguredState } from '@/components/ui/states';
 import { ViewportShell } from '@/components/spatial/ViewportShell';
 import { useAnatomyModel } from '@/hooks/use-anatomy-model';
-import { DIAGNOSTIC_LABEL } from '@/engine/3d/diagnostics/diagnostic-scene';
+import { DIAGNOSTIC_LABEL, DIAGNOSTIC_MODEL_REF } from '@/engine/3d/diagnostics/diagnostic-scene';
 import { describeReconciliation, reconcile } from '@/anatomy/mapping/reconciliation';
 import { isSemanticId, semanticIdToLabel, type SemanticId } from '@/lib/semantic-id';
 import type { InteractionMode, SceneVisualState } from '@/engine/spatial/types';
@@ -19,6 +19,11 @@ import type { SpatialCapabilities } from '@/types/domain/spatial';
 import { useReducedMotion } from '@/store/ui-store';
 import { useViewerStore } from '@/store/viewer-store';
 import { AIStudyPanel } from './AIStudyPanel';
+import { TutorPanel } from './TutorPanel';
+import { useTutor } from '@/hooks/useTutor';
+import { canDispatch, dispatchSpatialAction } from '@/ai/actions/dispatcher';
+import { TUTOR_FIXTURE_MODEL_REF } from '@/ai/fixtures/tutor-fixture-ref';
+import type { EducationLevel, TutorAction, ValidatedSpatialAction } from '@/ai/tutor/tutor-types';
 import {
   ContextPanel,
   type ContextActionPayload,
@@ -291,18 +296,100 @@ export function LearningWorkspace({
     [router, setModelRef],
   );
 
-  /**
-   * Study actions.
+  /*
+   * ---- the tutor ----------------------------------------------------------
    *
-   * Implemented in the gate that builds generation and scheduling. The full
-   * semantic payload is already assembled and passed, so wiring them later is
-   * a change of handler rather than a change of architecture. Nothing here
-   * fabricates a result.
+   * The tutor is given a model REFERENCE, never the graph. The server resolves
+   * what that reference contains, so a browser cannot describe a structure into
+   * existence and have VEO explain it as though it were licensed content.
    */
-  const handleAction = useCallback((payload: ContextActionPayload) => {
-    setContextOpen(false);
-    void payload;
-  }, []);
+  const tutorModelRef = diagnostic ? DIAGNOSTIC_MODEL_REF : (activeModel ?? TUTOR_FIXTURE_MODEL_REF);
+  const { state: tutorState, ask: askTutor, reset: resetTutor } = useTutor(controller);
+  const [educationLevel, setEducationLevel] = useState<EducationLevel>('intermediate');
+
+  /** The last thing asked, so "Try again" repeats it rather than guessing. */
+  const lastAsk = useRef<{ action: TutorAction; message?: string } | null>(null);
+
+  const ask = useCallback(
+    (action: TutorAction, message?: string) => {
+      if (!selectedId) return;
+      lastAsk.current = message === undefined ? { action } : { action, message };
+      void askTutor({
+        semanticId: selectedId,
+        action,
+        ...(message === undefined ? {} : { message }),
+        educationLevel,
+        modelRef: tutorModelRef,
+      });
+    },
+    [askTutor, educationLevel, selectedId, tutorModelRef],
+  );
+
+  const retryTutor = useCallback(() => {
+    const previous = lastAsk.current;
+    if (previous) ask(previous.action, previous.message);
+  }, [ask]);
+
+  /**
+   * Study actions from the context panel.
+   *
+   * Only `explain` is a Gate 10 action. The others belong to gates that build
+   * generation and scheduling; the panel already marks them unavailable, and
+   * this handler does not pretend otherwise by silently doing nothing useful.
+   */
+  const handleAction = useCallback(
+    (payload: ContextActionPayload) => {
+      if (payload.action !== 'explain') return;
+      ask('EXPLAIN');
+    },
+    [ask],
+  );
+
+  /**
+   * A tutor-proposed action, performed through the controller.
+   *
+   * Gate 7 left ONE authority over scene state, and this is how the tutor
+   * reaches it: as an intent, validated against the live model, exactly like a
+   * click on a toolbar button. Nothing here touches three.js.
+   */
+  const performSpatialAction = useCallback(
+    (action: ValidatedSpatialAction) => {
+      const result = dispatchSpatialAction(controller, action, {
+        durationMs: reducedMotion ? 0 : 600,
+      });
+      // A refused action is expected — the model may have changed since the
+      // answer was generated — and the panel already renders it as refused.
+      void result;
+    },
+    [controller, reducedMotion],
+  );
+
+  const canPerformSpatialAction = useCallback(
+    (action: ValidatedSpatialAction) => canDispatch(controller, action),
+    [controller],
+  );
+
+  /*
+   * A new subject clears the old answer.
+   *
+   * Without this the panel would show an explanation of the previous structure
+   * under the new one's name for as long as it took the learner to notice.
+   * The hook also starts a fresh conversation; this is the visible half.
+   */
+  useEffect(() => {
+    if (!selectedId) return;
+    if (tutorState.subjectId && tutorState.subjectId !== selectedId) resetTutor();
+  }, [selectedId, tutorState.subjectId, resetTutor]);
+
+  /** Explore a related structure through the existing selection pipeline. */
+  const exploreStructure = useCallback(
+    (semanticId: SemanticId) => {
+      if (!controller?.isSelectable(semanticId)) return;
+      controller.select(semanticId);
+      controller.focusObject(semanticId, { reducedMotion });
+    },
+    [controller, reducedMotion],
+  );
 
   /**
    * Manipulating the selected structure.
@@ -381,24 +468,45 @@ export function LearningWorkspace({
   );
 
   const contextPanel = (
-    <ContextPanel
-      selectedId={selectedId}
-      object={selectedObject}
-      trail={trail}
-      childObjects={childNodes}
-      relationships={relationships}
-      onSelectObject={focusObject}
-      onAction={handleAction}
-      onManipulate={handleManipulate}
-      manipulation={{
-        isolate: capabilities.supportsIsolation,
-        hide: sceneReady,
-        ghost: capabilities.supportsGhosting,
-        dissect: capabilities.supportsDissection,
-        restore: (snapshot?.manipulation && controller?.getNextReconstructionStage() !== null) ?? false,
-      }}
-      actionsEnabled={sceneReady}
-    />
+    <div className="flex min-h-0 flex-col gap-4">
+      <ContextPanel
+        selectedId={selectedId}
+        object={selectedObject}
+        trail={trail}
+        childObjects={childNodes}
+        relationships={relationships}
+        onSelectObject={focusObject}
+        onAction={handleAction}
+        onManipulate={handleManipulate}
+        manipulation={{
+          isolate: capabilities.supportsIsolation,
+          hide: sceneReady,
+          ghost: capabilities.supportsGhosting,
+          dissect: capabilities.supportsDissection,
+          restore: (snapshot?.manipulation && controller?.getNextReconstructionStage() !== null) ?? false,
+        }}
+        actionsEnabled={sceneReady}
+      />
+
+      {/*
+        The tutor sits under the structural facts, not beside them.
+        A learner reads what VEO knows first, then what VEO explains — which
+        also makes it visible when the explanation outruns the facts.
+      */}
+      {selectedId ? (
+        <TutorPanel
+          state={tutorState}
+          educationLevel={educationLevel}
+          onEducationLevelChange={setEducationLevel}
+          onAsk={ask}
+          onExploreStructure={exploreStructure}
+          onSpatialAction={performSpatialAction}
+          canPerform={canPerformSpatialAction}
+          onRetry={retryTutor}
+          className="border-t border-hairline pt-3"
+        />
+      ) : null}
+    </div>
   );
 
   return (
@@ -622,7 +730,15 @@ export function LearningWorkspace({
             selectedId={selectedId}
             modelName={diagnostic ? DIAGNOSTIC_LABEL : (provider?.getModel()?.name ?? null)}
             aiConfigured={aiConfigured}
-            hasModel={sceneReady && !diagnostic}
+            /*
+              The tutor works against any model VEO's server can resolve,
+              including the labelled diagnostic scene. It does not need
+              licensed anatomy to be useful, and gating it on that would leave
+              the whole gate unverifiable while Gate 9 is blocked.
+            */
+            hasModel={sceneReady}
+            onAsk={ask}
+            busy={tutorState.status === 'loading'}
             className="shrink-0"
           />
         </div>
