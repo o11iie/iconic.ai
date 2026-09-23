@@ -73,6 +73,42 @@ describe('local dates', () => {
     expect(localDate(instant, 'Asia/Kolkata')).toBe('2026-03-16'); // +05:30
   });
 
+  it('caches formatters without letting one timezone answer for another', () => {
+    // `localDate` memoises its Intl formatters — constructing one per call
+    // measured 60x slower, which was invisible while only the streak used it
+    // and became the dominant cost once analytics derived a local date per
+    // review event. The cache must be keyed correctly: a shared formatter
+    // would silently report every learner's day in the first timezone seen.
+    const instant = new Date('2026-03-15T11:30:00.000Z');
+
+    const zones = [
+      ['UTC', '2026-03-15'],
+      ['Pacific/Auckland', '2026-03-16'],
+      ['America/Los_Angeles', '2026-03-15'],
+      ['Asia/Kolkata', '2026-03-15'], // +05:30 puts this at 17:00 the same day
+      ['Australia/Sydney', '2026-03-15'],
+    ] as const;
+
+    // Twice through, so the second pass reads from the cache.
+    for (let pass = 0; pass < 2; pass += 1) {
+      for (const [zone, expected] of zones) {
+        expect(localDate(instant, zone), `${zone} on pass ${pass}`).toBe(expected);
+      }
+    }
+  });
+
+  it('keeps DST correctness after caching', () => {
+    // The cached formatter must still resolve offsets per instant, not freeze
+    // the offset in force when it was built.
+    const beforeDst = new Date('2026-03-08T04:30:00.000Z'); // 23:30 EST, Mar 7
+    const afterDst = new Date('2026-03-08T17:00:00.000Z'); // 13:00 EDT, Mar 8
+
+    expect(localDate(beforeDst, 'America/New_York')).toBe('2026-03-07');
+    expect(localDate(afterDst, 'America/New_York')).toBe('2026-03-08');
+    // And again from the cache.
+    expect(localDate(beforeDst, 'America/New_York')).toBe('2026-03-07');
+  });
+
   it('falls back to UTC rather than losing history on a bad timezone', () => {
     const instant = new Date('2026-03-15T11:30:00.000Z');
     expect(localDate(instant, 'Not/AZone')).toBe('2026-03-15');

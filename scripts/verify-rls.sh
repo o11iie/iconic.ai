@@ -286,7 +286,62 @@ check "1" "$(as "$ALICE" "select repetitions from public.review_states
   "and her repetitions are unchanged by his attempt"
 
 echo
-echo "=== 11. NEGATIVE CONTROL: THE CHECK CAN FAIL ==="
+echo "=== 11. ANALYTICS READS ARE SCOPED THE SAME WAY ==="
+# Gate 13 reads the same tables through the same policies. These prove the
+# analytics queries specifically — the ones that pull whole histories rather
+# than single rows — cannot cross a learner boundary.
+
+as "$ALICE" "
+insert into public.learning_items (id, user_id, content_ref, content_type, semantic_id, model_ref)
+values ('dddddddd-0000-4000-8000-000000000001','$ALICE','analytics-item','question',
+        'veo.diagnostic.analytics.system_a.unit_one','fixture-model');
+insert into public.review_states (item_id, user_id, phase, repetitions, interval_days)
+values ('dddddddd-0000-4000-8000-000000000001','$ALICE','review',3,5);
+insert into public.review_events
+  (user_id, item_id, content_ref, rating, correct, response_ms,
+   previous_phase, next_phase, next_due_at, idempotency_key)
+values ('$ALICE','dddddddd-0000-4000-8000-000000000001','analytics-item','good',true,4000,
+        'review','review', now() + interval '5 days','analytics-ev-1'),
+       ('$ALICE','dddddddd-0000-4000-8000-000000000001','analytics-item','again',false,9000,
+        'review','relearning', now() + interval '10 minutes','analytics-ev-2');" >/dev/null
+
+# The four reads an analytics snapshot performs, as the owner.
+check "1" "$(as "$ALICE" "select count(*) from public.learning_items
+             where content_ref='analytics-item';" | lastline)" \
+  "the owner's analytics read returns their items"
+check "2" "$(as "$ALICE" "select count(*) from public.review_events
+             where item_id='dddddddd-0000-4000-8000-000000000001';" | lastline)" \
+  "and their full event history"
+
+# The same four reads as another learner. Not "fewer rows" — zero.
+check "0" "$(as "$BOB" "select count(*) from public.learning_items
+             where content_ref='analytics-item';" | lastline)" \
+  "another learner's analytics read returns none of her items"
+check "0" "$(as "$BOB" "select count(*) from public.review_events
+             where item_id='dddddddd-0000-4000-8000-000000000001';" | lastline)" \
+  "and none of her review history"
+check "0" "$(as "$BOB" "select count(*) from public.review_sessions;" | lastline)" \
+  "and none of her sessions"
+check "0" "$(as "$BOB" "select count(*) from public.learning_daily_activity;" | lastline)" \
+  "and none of her daily activity"
+
+# An unscoped aggregate is the shape an analytics query actually takes. RLS
+# must bound it too, or a single COUNT would leak the size of someone's history.
+check "0" "$(as "$BOB" "select coalesce(sum(reviews_completed),0)
+             from public.learning_daily_activity;" | lastline)" \
+  "an unscoped aggregate cannot total another learner's activity"
+check "0" "$(as "$BOB" "select count(*) from public.review_events
+             where rating = 'again';" | lastline)" \
+  "nor count another learner's failures"
+
+# A forged item id in a filter is still bounded by the policy, not by the
+# filter: the WHERE clause is the caller's, the row visibility is not.
+check "0" "$(as "$BOB" "select count(*) from public.review_states
+             where item_id='dddddddd-0000-4000-8000-000000000001';" | lastline)" \
+  "guessing an item id does not expose its scheduling state"
+
+echo
+echo "=== 12. NEGATIVE CONTROL: THE CHECK CAN FAIL ==="
 # Without this, every assertion above could be passing because the harness is
 # broken rather than because the policies work.
 $PSQL -d "$DB" -c "create table if not exists public.rls_control (user_id uuid, note text);
