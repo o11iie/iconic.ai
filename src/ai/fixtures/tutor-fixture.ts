@@ -14,6 +14,15 @@ import type {
  * relationships, descriptions, functions, synonyms and varying richness, all
  * in one graph so every path through the context builder is exercised.
  *
+ * ## It serves the learning-content engine too
+ *
+ * Gate 11 generates questions and flashcards from this same fixture rather
+ * than a second one of its own. The variation below is exactly what a content
+ * generator needs to be tested against — a structure that can support a DEFINE
+ * question, one that cannot, and one that can support nothing at all — and two
+ * near-identical fixtures would drift apart, at which point a test passing
+ * against one would say nothing about the other.
+ *
  * It describes an ABSTRACT TEST APPARATUS. It is not a model of a body, an
  * organ, a machine or anything else that exists. Its parts are called
  * "Primary Housing" and "Transfer Conduit", and every description in it
@@ -41,6 +50,20 @@ import type {
  *
  * It is absent from every production catalogue, and a test asserts that.
  * ============================================================================
+ */
+
+/**
+ * The objectives each fixture structure can support, for reference:
+ *
+ *   coreUnit          IDENTIFY DEFINE FUNCTION RELATE DISTINGUISH LOCATE
+ *   outerShell        IDENTIFY DEFINE FUNCTION RELATE DISTINGUISH LOCATE
+ *   transferConduit   IDENTIFY RELATE LOCATE          (no prose, so no DEFINE)
+ *   unmarkedElement   nothing                          (insufficient context)
+ *
+ * Those last two lines are the ones that matter. A fixture where every
+ * structure was well described would prove only that generation works when
+ * everything is available, and the refusal behaviour — the part of this gate
+ * that protects a learner from invented facts — would never run.
  */
 
 export const TUTOR_FIXTURE_LABEL = 'VEO AI TUTOR TEST FIXTURE';

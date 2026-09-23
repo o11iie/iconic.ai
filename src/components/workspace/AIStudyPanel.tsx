@@ -34,15 +34,20 @@ export type StudyMode =
 /**
  * Study modes.
  *
- * `available: false` marks a mode whose behaviour belongs to a later gate. It
- * is shown, disabled, with a reason — rather than hidden, which would make the
- * product look smaller than it is, or enabled, which would make a control that
- * does nothing. A learner who clicks it learns when it arrives.
+ * Two destinations. The first five ask the tutor to explain something; the
+ * last two generate study material, which is a different engine with stricter
+ * grounding.
+ *
+ * `available: false` remains supported for a mode whose behaviour belongs to a
+ * gate that is not built: shown, disabled, with a reason — rather than hidden,
+ * which would make the product look smaller than it is, or enabled, which
+ * would make a control that does nothing.
  */
 const MODES: readonly {
   id: StudyMode;
   label: string;
   icon: IconName;
+  /** False for a mode whose behaviour belongs to a gate that is not built. */
   available: boolean;
   unavailable?: string;
 }[] = [
@@ -51,23 +56,11 @@ const MODES: readonly {
   { id: 'deep_dive', label: 'Deep dive', icon: 'learn', available: true },
   { id: 'function', label: 'Function', icon: 'select', available: true },
   { id: 'relationships', label: 'Relationships', icon: 'link', available: true },
-  {
-    id: 'quiz',
-    label: 'Quiz me',
-    icon: 'quiz',
-    available: false,
-    unavailable: 'Question generation arrives in a later VEO gate.',
-  },
-  {
-    id: 'flashcard',
-    label: 'Flashcard',
-    icon: 'flashcard',
-    available: false,
-    unavailable: 'Flashcard generation arrives in a later VEO gate.',
-  },
+  { id: 'quiz', label: 'Quiz me', icon: 'quiz', available: true },
+  { id: 'flashcard', label: 'Flashcard', icon: 'flashcard', available: true },
 ];
 
-/** Study modes that map onto a Gate 10 tutor action. */
+/** Study modes that ask the tutor a question. */
 export const STUDY_MODE_ACTIONS = {
   explain: 'EXPLAIN',
   simplify: 'SIMPLIFY',
@@ -76,12 +69,26 @@ export const STUDY_MODE_ACTIONS = {
   relationships: 'RELATIONSHIPS',
 } as const;
 
+/**
+ * Study modes that generate learning material instead.
+ *
+ * A different destination, not a different tutor action: these produce
+ * questions and flashcards through the content engine, which has its own
+ * grounding rules because a question has no room for the caveat an
+ * explanation can carry.
+ */
+export const STUDY_MODE_CONTENT = {
+  quiz: 'question',
+  flashcard: 'flashcard',
+} as const;
+
 export function AIStudyPanel({
   selectedId,
   modelName,
   aiConfigured,
   hasModel,
   onAsk,
+  onGenerate,
   busy = false,
   className,
 }: {
@@ -94,6 +101,11 @@ export function AIStudyPanel({
    * then keeps its honest disabled state rather than throwing on click.
    */
   readonly onAsk?: (action: TutorAction, message?: string) => void;
+  /**
+   * Generate study material. Separate from `onAsk` because it goes to a
+   * different engine with different grounding rules, not to the tutor.
+   */
+  readonly onGenerate?: (contentType: 'question' | 'flashcard') => void;
   readonly busy?: boolean;
   readonly className?: string;
 }) {
@@ -110,11 +122,24 @@ export function AIStudyPanel({
   // would be a general chatbot, which is the one thing it must not become.
   const disabled = !aiConfigured || !hasModel || !selectedId || !onAsk || busy;
 
+  /** A mode is usable only when its destination is actually wired. */
+  const modeUsable = (id: StudyMode, available: boolean) => {
+    if (!available || disabled) return false;
+    return id in STUDY_MODE_CONTENT ? Boolean(onGenerate) : Boolean(onAsk);
+  };
+
   const runMode = (next: StudyMode) => {
     setMode(next);
+    if (disabled) return;
+
+    const contentType = STUDY_MODE_CONTENT[next as keyof typeof STUDY_MODE_CONTENT];
+    if (contentType) {
+      onGenerate?.(contentType);
+      return;
+    }
+
     const action = STUDY_MODE_ACTIONS[next as keyof typeof STUDY_MODE_ACTIONS];
-    if (!action || disabled) return;
-    onAsk?.(action);
+    if (action) onAsk?.(action);
   };
 
   return (
@@ -138,7 +163,7 @@ export function AIStudyPanel({
         >
           {MODES.map((item) => {
             const active = item.id === mode && item.available;
-            const usable = item.available && !disabled;
+            const usable = modeUsable(item.id, item.available);
             return (
               <button
                 key={item.id}

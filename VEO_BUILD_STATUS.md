@@ -10,7 +10,9 @@ _Last updated: 2026-09-22_
 
 ## Current gate
 
-**Gate 10 — Contextual AI Tutor → GREEN**
+**Gate 11 — AI Questions, Flashcards & Learning Content → GREEN**
+
+**Gate 10 — Contextual AI Tutor → GREEN (no regression)**
 
 **Gate 9 — Real Anatomy Rendering → RED, blocked by an external dependency**
 
@@ -30,6 +32,18 @@ _Last updated: 2026-09-22_
 >
 > This is not an engineering blocker. Everything upstream of the content is
 > built and verified. What is missing is anatomy, and it cannot be written.
+
+### Gate 11 in one line
+
+VEO builds questions and flashcards about a selected structure from facts the
+model actually supplies — and refuses, with a reason, when it cannot.
+
+**Gate 11 did not change Gate 9.** No anatomy was written, no fixture was
+promoted to a catalogue, and `/api/anatomy` still reports
+`configured: false, delivery: "none"`.
+
+**Gate 12 was not started.** No scheduling, no scoring, no streaks, no memory
+state. A test asserts the generated payload contains none of those fields.
 
 ### Gate 10 in one line
 
@@ -103,6 +117,67 @@ numbers wait for the model.
 ---
 
 ## Completed
+
+### Gate 11 — learning content
+
+| # | Requirement | Status | Evidence |
+| --- | --- | --- | --- |
+| 1 | Learning-content domain model | GREEN | objectives added to the EXISTING `learning.ts` |
+| 2 | Question schemas | GREEN | discriminated union per kind |
+| 3 | Flashcard schemas | GREEN | Zod, validated both ways |
+| 4 | Objectives typed | GREEN | closed set of 6 |
+| 5 | Difficulty typed | GREEN | reuses the platform's `DIFFICULTIES` |
+| 6 | Education levels reuse platform types | GREEN | reuses `LEARNING_LEVELS`; no second enum |
+| 7 | LearningContext derived server-side | GREEN | built on Gate 10's `SpatialContext` |
+| 8 | Client cannot inject facts | GREEN | unit + browser: facts, context and prompt all ignored |
+| 9 | Gate 10 LLMClient reused | GREEN | no second vendor client exists |
+| 10 | Question generation | GREEN | 4 kinds, live |
+| 11 | Flashcard generation | GREEN | front/reveal/back |
+| 12 | Structured output validated | GREEN | schema, then content, then grounding |
+| 13 | Grounding validated | GREEN | model claim capped at what VEO measured |
+| 14 | Content consistency checks | GREEN | 12 deterministic rules |
+| 15 | Duplicate detection | GREEN | normalised signature + token overlap |
+| 16 | Generation limits | GREEN | 1–20, enforced server-side |
+| 17 | Invalid semantic ids rejected | GREEN | shape AND membership |
+| 18 | Invalid related ids rejected | GREEN | item dropped with a reason |
+| 19 | Insufficient context handled honestly | GREEN | refusal, not a caveat |
+| 20 | Quiz Me UI | GREEN | live |
+| 21 | Flashcard UI | GREEN | live |
+| 22 | Gate 12 NOT implemented | GREEN | asserted by test |
+| 23 | Browser validation | GREEN | 94 checks |
+| 24 | Mobile validation | GREEN | 1440 / 1024 / 768 / 430 / 390 / 360 |
+| 25 | Security | GREEN | mutation-tested |
+| 26 | Regression | GREEN | 535 prior-gate checks, 0 failures |
+
+#### The decision that carries this gate
+
+**Objective support is derived from the data, before the model is called.**
+
+A structure with no description cannot support a DEFINE question; one with no
+function cannot support FUNCTION. Asking a model anyway would get an answer —
+plausible, fluent and invented — so VEO checks first and refuses with a
+message naming what is missing. That check runs *before* the provider call,
+which also means it costs nothing.
+
+#### Why there is no separate learning fixture
+
+Gate 11 reuses the Gate 10 tutor fixture rather than adding a second one. Its
+variation is exactly what a content generator must be tested against — a
+structure that can support DEFINE, one that cannot, and one that can support
+nothing — and two near-identical fixtures drift apart, at which point a test
+passing against one says nothing about the other.
+
+#### What Gate 11 deliberately does NOT do
+
+- No score, streak, or performance history, in state or in the payload.
+- No scheduling, interval, due date, stability or retrievability.
+- No persistence of generated content. It lives for the session.
+
+A score kept in the content panel would be a learner's performance record in
+component state: it would vanish on navigation and disagree with whatever the
+real memory model later stores. The recall experience and the memory model
+arrive together, in their own gates, or not at all.
+
 
 ### Gate 10 — contextual AI tutor
 
@@ -459,8 +534,8 @@ OpenAI, Stripe, OAuth providers.
 | --- | --- |
 | `npm run typecheck` | **PASS** — 0 errors |
 | `npm run lint` | **PASS** — 0 errors, 0 warnings |
-| `npm run test` | **PASS** — 610 passed / 610 total, 30 files |
-| `npm run build` | **PASS** — 21 routes |
+| `npm run test` | **PASS** — 683 passed / 683 total, 32 files |
+| `npm run build` | **PASS** — 23 routes |
 | `npm run validate:anatomy` | **PASS** — contract fixture valid |
 | `npm run test:anatomy` | **PASS** — 32 live provider checks |
 | `npm run test:spatial` | **PASS** — 164 live manipulation checks |
@@ -468,7 +543,8 @@ OpenAI, Stripe, OAuth providers.
 | `npm run test:engine` | **PASS** — 54 live engine checks |
 | `npm run test:ui` | **PASS** — 116 live UI checks |
 | `npm run test:tutor` | **PASS** — 89 live tutor checks |
-| `npm run test:browser` | **PASS** — all six, 535 checks, 0 failures |
+| `npm run test:learning` | **PASS** — 94 live content checks |
+| `npm run test:browser` | **PASS** — all seven, 629 checks, 0 failures |
 
 Gate 9 added 32 unit tests and 12 live checks.
 
@@ -524,6 +600,60 @@ Honesty about coverage matters more here than anywhere else in this file.
 - **Snapshot stability matters.** `SceneController.getSnapshot` returns the
   same object until something changes, and re-selecting the current selection
   does not notify — otherwise every no-op selection would cost a render.
+
+---
+
+## Issues found and fixed during Gate 11
+
+Two real defects, both found by the verification.
+
+1. **An injection payload survived because VEO's own phrasing created the
+   boundary.** The role-marker sanitiser neutralised markers after a sentence
+   end, a newline or a quote — but not after a COLON. VEO's fact template ends
+   `"…is also known as: "`, the payload in a synonym list began `"System:"`,
+   and together they read exactly like a turn boundary. Neither half was
+   dangerous alone; the shape was formed at the join. A sanitiser that
+   examines untrusted text in isolation cannot see this, which is why the
+   colon case now has its own regression test.
+
+2. **A mutation test that could not leak, which turned out to be the point.**
+   The first attempt at proving the key scan works put
+   `process.env.OPENAI_API_KEY` into a CLIENT component. Nothing leaked —
+   because Next replaces non-public env vars with `undefined` in client
+   bundles. That is the protection doing its job, and it is worth recording
+   as a finding rather than as a failed test: the naive developer mistake is
+   already impossible. The leak that DOES work is a server component passing
+   the value down as a prop, which is the realistic vector, and the scan
+   catches it.
+
+### Verified, not changed
+
+Two browser assertions failed and were wrong about the product:
+
+- **Quiz Me is correctly disabled with nothing selected.** Generation is about
+  a structure; an enabled control with no subject would be one that cannot
+  work. The check now asserts disabled-then-enabled across a selection.
+- **A DEFINE prompt correctly describes rather than names its structure.**
+  Naming it would hand over the answer — and VEO's own validator rejects a
+  prompt that does. Correspondence is now asserted on the model's description
+  text and on the real structure appearing among the options.
+
+### A known limit, stated rather than papered over
+
+Duplicate detection catches near-identical text, not paraphrase. "Which
+structure contains X?" and "X is contained by which structure?" score 0.56 on
+token overlap; lowering the threshold to catch them would put it within 0.06
+of merging two genuinely different questions about different structures. Token
+overlap cannot separate those cases. Catching paraphrase properly needs
+embeddings — a different system — and a test documents the limit rather than
+a tuned threshold pretending otherwise.
+
+### Two assertions updated because the product changed
+
+Gate 10 asserted Quiz Me and Flashcard were unavailable. That was true then
+and is false now. Both the unit test and the browser check were updated to the
+current contract — they go to the GENERATOR rather than the tutor — which is a
+stronger assertion than "disabled", not a weaker one.
 
 ---
 

@@ -105,6 +105,12 @@ export class VerificationStubClient implements LLMClient {
   }
 
   async complete(options: LLMCompletionOptions): Promise<Result<LLMCompletion, VeoError>> {
+    // Learning-content generation carries its own context block and its own
+    // output shape, so it is answered by its own builder rather than by
+    // bending the tutor's reply into something a question schema accepts.
+    const learning = extractLearningContext(options.messages.map((m) => m.content));
+    if (learning) return ok(generateLearningReply(learning, options.messages));
+
     const context = extractContext(options.messages.map((m) => m.content));
     const level = extractLine(options.messages, 'Learner level: ') ?? 'intermediate';
     const action = extractLine(options.messages, 'Requested action: ') ?? 'EXPLAIN';
@@ -244,4 +250,130 @@ function extractLine(
     }
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Learning content
+// ---------------------------------------------------------------------------
+
+interface LearningShape {
+  readonly subject?: { readonly semanticId?: string; readonly name?: string };
+  readonly path?: readonly string[];
+  readonly facts?: readonly { readonly from?: string; readonly statement?: string }[];
+  readonly distractorPool?: readonly { readonly semanticId?: string; readonly name?: string }[];
+  readonly idsYouMayReference?: readonly string[];
+}
+
+/** Pull the learning context back out of its fenced block. */
+function extractLearningContext(messages: readonly string[]): LearningShape | null {
+  for (const message of messages) {
+    if (!message.startsWith('VEO CONTEXT — the complete set of facts')) continue;
+    const start = message.indexOf(DATA_FENCE_OPEN);
+    const end = message.indexOf(DATA_FENCE_CLOSE);
+    if (start === -1 || end <= start) continue;
+    try {
+      return JSON.parse(message.slice(start + DATA_FENCE_OPEN.length, end).trim()) as LearningShape;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Compose questions or flashcards out of the supplied facts.
+ *
+ * Every prompt, option and answer is built from values that exist only in
+ * VEO's model, so a browser check asserting the question names the real
+ * structure is asserting that the context reached the generator — not that a
+ * canned string came back.
+ *
+ * It also emits deliberate failures, so the validation paths are exercised by
+ * the browser run rather than only by unit tests:
+ *
+ *   - an option set containing a structure NOT in the model
+ *   - a duplicate of an earlier question
+ *
+ * Both must be rejected before they reach the browser. A stub that only ever
+ * produced valid content would leave every rejection path unproven in a
+ * browser.
+ */
+function generateLearningReply(
+  context: LearningShape,
+  messages: readonly { readonly content: string }[],
+): LLMCompletion {
+  const name = context.subject?.name ?? 'the structure';
+  const parentName = context.path && context.path.length > 1 ? context.path[context.path.length - 2] : null;
+  const facts = (context.facts ?? []).filter((fact) => typeof fact.statement === 'string');
+  const pool = (context.distractorPool ?? []).filter((item) => item.name && item.semanticId);
+
+  const wantsFlashcards = messages.some((m) => m.content.includes('Generate up to') && m.content.includes('flashcards'));
+  const objective = extractLine(messages, 'Objective: ') ?? 'IDENTIFY';
+  const difficulty = extractLine(messages, 'Difficulty: ') ?? 'medium';
+  const level = extractLine(messages, 'Learner level: ') ?? 'intermediate';
+
+  const describing = facts.find((f) => f.from === 'description' || f.from === 'function');
+  const sourceStatus = describing ? 'grounded' : 'partially-grounded';
+
+  if (wantsFlashcards) {
+    const cards: Record<string, unknown>[] = [
+      {
+        front: `${STUB_MARKER} Which structure does this describe: ${describing?.statement ?? `part of ${parentName ?? 'this model'}`}?`,
+        back: `${name}. ${describing?.statement ?? `It sits inside ${parentName ?? 'the model'}.`}`,
+        hint: parentName ? `Look inside ${parentName}.` : undefined,
+        relatedSemanticIds: pool.slice(0, 1).map((item) => item.semanticId),
+      },
+      {
+        front: `${STUB_MARKER} Where does ${name} sit in this model?`,
+        back: parentName ? `Inside ${parentName}.` : 'At the root of the model.',
+      },
+      // Deliberately identical to the first: duplicate detection must drop it.
+      {
+        front: `${STUB_MARKER} Which structure does this describe: ${describing?.statement ?? `part of ${parentName ?? 'this model'}`}?`,
+        back: 'A duplicate that VEO must reject.',
+      },
+    ];
+
+    return completion({ flashcards: cards, sourceStatus });
+  }
+
+  const distractors = pool.slice(0, 3).map((item) => ({ label: String(item.name), correct: false }));
+
+  const questions: Record<string, unknown>[] = [
+    {
+      kind: 'multiple_choice',
+      prompt: `${STUB_MARKER} Which structure ${describing ? 'is described as follows' : 'sits inside ' + (parentName ?? 'this model')}${describing ? `: ${describing.statement}` : ''}?`,
+      options: [{ label: name, correct: true }, ...distractors].slice(0, 4),
+      explanation: `${name} is the structure the model describes this way. ${describing?.statement ?? ''}`.trim(),
+      hint: parentName ? `It is part of ${parentName}.` : undefined,
+      relatedSemanticIds: pool.slice(0, 1).map((item) => item.semanticId),
+    },
+    {
+      kind: 'true_false',
+      prompt: `${STUB_MARKER} ${parentName ? `${name} is part of ${parentName}.` : `${name} is the root of this model.`}`,
+      answer: true,
+      explanation: `The model records this directly. Difficulty ${difficulty}, level ${level}, objective ${objective}.`,
+    },
+    // Deliberately references a structure that is not in this model. Grounding
+    // must drop it before the browser sees it.
+    {
+      kind: 'true_false',
+      prompt: `${STUB_MARKER} A probe question VEO must reject for an unknown reference.`,
+      answer: false,
+      explanation: 'This item cites a structure outside the model and must not survive validation.',
+      relatedSemanticIds: ['veo.anatomy.invented_structure_for_rejection_test'],
+    },
+  ];
+
+  return completion({ questions, sourceStatus });
+}
+
+function completion(payload: unknown): LLMCompletion {
+  return {
+    text: JSON.stringify(payload),
+    model: 'veo-verification-stub',
+    inputTokens: null,
+    outputTokens: null,
+    finishReason: 'stop',
+  };
 }

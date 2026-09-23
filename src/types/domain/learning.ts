@@ -1,5 +1,6 @@
 import type { SemanticId } from '@/lib/semantic-id';
 import type { ISODateString, Metadata, Timestamped, UUID } from './primitives';
+import type { LearningLevel } from './user';
 
 /**
  * The RECALL half of the learning loop: questions, flashcards, attempts, and
@@ -18,6 +19,68 @@ export type QuestionKind = (typeof QUESTION_KINDS)[number];
 
 export const DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
+
+/**
+ * What a piece of learning content is FOR.
+ *
+ * A closed set, not free text. "Objective" as an arbitrary string would make
+ * every generated item's purpose unqueryable and every prompt slightly
+ * different — and the whole value of naming the objective is that a learner's
+ * weak area can later be described as "struggles to RELATE, fine at IDENTIFY"
+ * rather than as a bag of question ids.
+ *
+ * Each maps to a question a learner would actually ask of a spatial model:
+ *
+ *   IDENTIFY    which structure is this?
+ *   DEFINE      what is it?
+ *   FUNCTION    what does it do?
+ *   RELATE      how does it connect to what is around it?
+ *   DISTINGUISH how is it different from that one?
+ *   LOCATE      where does it sit in the whole?
+ */
+export const LEARNING_OBJECTIVES = [
+  'IDENTIFY',
+  'DEFINE',
+  'FUNCTION',
+  'RELATE',
+  'DISTINGUISH',
+  'LOCATE',
+] as const;
+export type LearningObjectiveType = (typeof LEARNING_OBJECTIVES)[number];
+
+/**
+ * A stated learning goal for one structure.
+ *
+ * Content is generated FOR an objective rather than about a structure in the
+ * abstract, which is what stops a generator producing six questions that all
+ * ask the same thing in different words.
+ */
+export interface LearningObjective {
+  readonly id: UUID;
+  readonly semanticId: SemanticId;
+  readonly objectiveType: LearningObjectiveType;
+  readonly difficulty: Difficulty;
+  readonly educationLevel: LearningLevel;
+  /** What the learner should be able to do. Rendered, so it is prose. */
+  readonly prompt: string;
+  /** How well VEO's own data supported this objective when it was built. */
+  readonly sourceStatus: ContentSourceStatus;
+  readonly createdAt: ISODateString;
+}
+
+/**
+ * How well a generated item is supported by VEO's own data.
+ *
+ * The same vocabulary the tutor uses, deliberately: two scales for one idea
+ * would eventually disagree, and a learner seeing "grounded" in one panel and
+ * "partial" in another for the same structure would be right to distrust both.
+ */
+export const CONTENT_SOURCE_STATUSES = [
+  'grounded',
+  'partially-grounded',
+  'insufficient-context',
+] as const;
+export type ContentSourceStatus = (typeof CONTENT_SOURCE_STATUSES)[number];
 
 export interface Question extends Timestamped {
   readonly id: UUID;

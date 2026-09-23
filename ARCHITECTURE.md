@@ -1242,6 +1242,110 @@ cost ceiling.
 
 ---
 
+## 21. Learning content
+
+Gate 11 generates questions and flashcards. It sits beside the tutor rather
+than inside it, and the reason is worth stating because it drives everything
+else in this section.
+
+A tutor may say "generally, structures like this do X" — clearly flagged as
+background, and gone the moment the learner moves on. A question cannot. The
+learner sees a prompt and four options, and reads every one as fact. So the
+content engine has its own system prompt, its own stricter grounding, and its
+own refusal behaviour.
+
+```
+semanticId → [server] resolve model → SpatialContext → LearningContext
+           → check the objective is supportable → prompt → provider
+           → schema → content rules → grounding → validated content
+```
+
+### Facts, not prose
+
+`LearningContext` turns the model's fields into a list of labelled statements:
+
+```
+{ from: "description", statement: "…" }
+{ from: "parent",      statement: "It is part of \"Assembly A\"." }
+{ from: "relationship", statement: "\"X\" connects to \"Y\"." }
+```
+
+A generator handed a blob of prose can write a question about anything in it.
+A generator handed labelled facts can be held to them — and the prompt states
+plainly that the list is the complete set of things it may assert, not a
+starting point.
+
+### Objective support is derived before the model is called
+
+Each objective needs particular material:
+
+| Objective | Needs |
+| --- | --- |
+| IDENTIFY | a name |
+| DEFINE | a description |
+| FUNCTION | a stated function |
+| RELATE | hierarchy or relationships |
+| DISTINGUISH | nearby structures AND something to tell them apart by |
+| LOCATE | a parent, system or region |
+
+If the material is absent, VEO refuses with a message naming what is missing,
+and never calls the provider. This is the single most important check in the
+gate. Asking a model for a FUNCTION question about a structure whose function
+VEO does not know would produce one — fluent, plausible, invented — and no
+downstream validation could tell it from a real one, because there is nothing
+to compare it against.
+
+Refusing costs nothing and is honest. Generating costs money and teaches
+something false.
+
+### Distractors must be real
+
+A wrong option is drawn from the distractor pool: siblings and relationship
+targets, which are real structures in the same model. An invented distractor
+is not a wrong answer — it is a second thing the learner has to unlearn.
+
+### Validation is rejection, never repair
+
+Schema first, then deterministic content rules:
+
+- exactly one correct multiple-choice option, present among the choices
+- no duplicate or empty options
+- an identification target that resolves, with a name matching the model's
+- a prompt that does not contain its own answer
+- a flashcard whose front and back differ
+- every referenced id present in the context
+
+A failing item is dropped with a reason. It is never patched, because patching
+means VEO writing part of a question about a subject it does not understand —
+and a multiple-choice question silently given a second correct answer by its
+own validator is worse than no question, since it looks authored.
+
+What was rejected is reported rather than discarded: a batch where eight of
+ten items were dropped is a signal about the model or the context, and quietly
+returning two would hide it.
+
+### Grounding is capped, not trusted
+
+The model reports its own `sourceStatus`, and VEO caps that claim at what it
+measured when building the context. A claim may be worse than VEO measured,
+never better — the same rule the tutor uses, deliberately sharing one
+vocabulary so a learner never sees "grounded" in one panel and "partial" in
+another for the same structure.
+
+`insufficient-context` is a REFUSAL here rather than a caveat. A tutor saying
+"I don't have much on this" is being helpful; a flashcard that says so is a
+card the learner will see again in three days.
+
+### What Gate 11 does not build
+
+No scheduling, no scoring, no streaks, no retention, no persistence. Generated
+content lives for the session. A score kept in the content panel would be a
+learner's performance record in component state — vanishing on navigation and
+disagreeing with whatever the real memory model later stores. The recall
+experience and the memory model arrive together, in their own gates.
+
+---
+
 ## Appendix: version pinning rationale
 
 Two pins are not "latest", for concrete compatibility reasons found by checking

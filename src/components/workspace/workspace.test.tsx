@@ -247,22 +247,58 @@ describe('AIStudyPanel', () => {
     }
   });
 
-  it('shows the later-gate modes, disabled, rather than hiding or faking them', () => {
-    // A hidden control makes the product look smaller than it is; an enabled
-    // one that does nothing is worse. Present and disabled, with a reason, is
-    // the only honest option while question generation is unbuilt.
+  it('generates study material when a content mode is chosen', () => {
+    const generated: string[] = [];
+    render(
+      <AIStudyPanel
+        selectedId={lv}
+        modelName="Heart"
+        aiConfigured
+        hasModel
+        onAsk={() => {}}
+        onGenerate={(contentType) => generated.push(contentType)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Quiz me' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Flashcard' }));
+
+    expect(generated).toEqual(['question', 'flashcard']);
+  });
+
+  it('routes content modes to the generator and tutor modes to the tutor', () => {
+    // Two engines behind one bar. A content mode reaching the tutor would
+    // produce an explanation where a question was asked for, with none of the
+    // stricter grounding that generated material requires.
+    const asked: string[] = [];
+    const generated: string[] = [];
+    render(
+      <AIStudyPanel
+        selectedId={lv}
+        modelName="Heart"
+        aiConfigured
+        hasModel
+        onAsk={(action) => asked.push(action)}
+        onGenerate={(contentType) => generated.push(contentType)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Explain' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Quiz me' }));
+
+    expect(asked).toEqual(['EXPLAIN']);
+    expect(generated).toEqual(['question']);
+  });
+
+  it('disables a content mode when no generator is wired', () => {
+    // The bar is rendered in places that have no generation handler. It must
+    // stay honestly disabled there rather than throwing on click.
     render(
       <AIStudyPanel selectedId={lv} modelName="Heart" aiConfigured hasModel onAsk={() => {}} />,
     );
 
-    for (const label of ['Quiz me', 'Flashcard']) {
-      const control = screen.getByRole('radio', { name: new RegExp(label) });
-      expect(control).toBeInTheDocument();
-      expect(control).toBeDisabled();
-      expect(control).toHaveAttribute('data-veo-study-available', 'false');
-      // The reason is announced with the control, not left to a tooltip.
-      expect(control.getAttribute('aria-label')).toMatch(/later VEO gate/);
-    }
+    expect(screen.getByRole('radio', { name: 'Quiz me' })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: 'Explain' })).toBeEnabled();
   });
 
   it('asks the tutor when a Gate 10 mode is chosen', () => {

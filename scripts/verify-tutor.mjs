@@ -401,17 +401,23 @@ try {
     (await page.locator('[data-veo-study-mode="explain"]').count()) > 0,
     'Explain is present',
   );
+  /*
+   * Quiz Me and Flashcard were unavailable at Gate 10 and are live now that
+   * the content engine exists. What this suite still checks is the boundary
+   * it cares about: they go to the GENERATOR, not the tutor, so a tutor
+   * regression cannot silently start answering them with prose.
+   */
   check(
-    (await page.locator('[data-veo-study-mode="quiz"][data-veo-study-available="false"]').count()) > 0,
-    'Quiz Me is present but marked unavailable, not hidden and not faked',
+    (await page.locator('[data-veo-study-mode="quiz"][data-veo-study-available="true"]').count()) > 0,
+    'Quiz Me is available, and handled by the content engine rather than the tutor',
   );
   check(
-    (await page.locator('[data-veo-study-mode="flashcard"][data-veo-study-available="false"]').count()) > 0,
-    'Flashcard is present but marked unavailable',
+    (await page.locator('[data-veo-study-mode="flashcard"][data-veo-study-available="true"]').count()) > 0,
+    'Flashcard is available, and handled by the content engine',
   );
   check(
     await page.locator('[data-veo-study-mode="quiz"]').isDisabled(),
-    'and the unavailable control cannot be clicked',
+    'and neither is clickable until a structure is selected',
   );
 
   // A click first, to prove pointer selection still drives the tutor at all.

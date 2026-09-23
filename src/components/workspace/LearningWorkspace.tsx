@@ -20,6 +20,10 @@ import { useReducedMotion } from '@/store/ui-store';
 import { useViewerStore } from '@/store/viewer-store';
 import { AIStudyPanel } from './AIStudyPanel';
 import { TutorPanel } from './TutorPanel';
+import { LearningContentPanel } from './LearningContentPanel';
+import { useLearningContent } from '@/hooks/useLearningContent';
+import type { ContentType } from '@/ai/learning/learning-types';
+import type { Difficulty, LearningObjectiveType } from '@/types/domain/learning';
 import { useTutor } from '@/hooks/useTutor';
 import { canDispatch, dispatchSpatialAction } from '@/ai/actions/dispatcher';
 import { TUTOR_FIXTURE_MODEL_REF } from '@/ai/fixtures/tutor-fixture-ref';
@@ -377,6 +381,41 @@ export function LearningWorkspace({
   );
 
   /*
+   * ---- generated study material -------------------------------------------
+   *
+   * A separate engine from the tutor, deliberately. An explanation can carry a
+   * caveat; a question cannot — the learner sees a prompt and four options and
+   * reads every one as fact — so content generation has its own grounding
+   * rules and its own refusal behaviour.
+   */
+  const {
+    state: learningState,
+    generate: generateContent,
+    retry: retryContent,
+    reset: resetContent,
+  } = useLearningContent();
+  const [objective, setObjective] = useState<LearningObjectiveType>('DEFINE');
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const lastContentType = useRef<ContentType>('question');
+
+  const generate = useCallback(
+    (contentType: ContentType) => {
+      if (!selectedId) return;
+      lastContentType.current = contentType;
+      void generateContent({
+        semanticId: selectedId,
+        modelRef: tutorModelRef,
+        contentType,
+        objective,
+        difficulty,
+        educationLevel,
+        count: contentType === 'flashcard' ? 4 : 3,
+      });
+    },
+    [generateContent, selectedId, tutorModelRef, objective, difficulty, educationLevel],
+  );
+
+  /*
    * A new subject clears the old answer.
    *
    * Without this the panel would show an explanation of the previous structure
@@ -386,7 +425,9 @@ export function LearningWorkspace({
   useEffect(() => {
     if (!selectedId) return;
     if (tutorState.subjectId && tutorState.subjectId !== selectedId) resetTutor();
-  }, [selectedId, tutorState.subjectId, resetTutor]);
+    // Generated material is about a structure, so it goes with the structure.
+    if (learningState.subjectId && learningState.subjectId !== selectedId) resetContent();
+  }, [selectedId, tutorState.subjectId, resetTutor, learningState.subjectId, resetContent]);
 
   /** Explore a related structure through the existing selection pipeline. */
   const exploreStructure = useCallback(
@@ -510,6 +551,24 @@ export function LearningWorkspace({
           onSpatialAction={performSpatialAction}
           canPerform={canPerformSpatialAction}
           onRetry={retryTutor}
+          className="border-t border-hairline pt-3"
+        />
+      ) : null}
+
+      {/*
+        Study material sits below the explanation, because that is the order a
+        learner works in: understand it, then test yourself on it.
+      */}
+      {selectedId && learningState.status !== 'idle' ? (
+        <LearningContentPanel
+          state={learningState}
+          objective={objective}
+          difficulty={difficulty}
+          onObjectiveChange={setObjective}
+          onDifficultyChange={setDifficulty}
+          onGenerate={() => generate(lastContentType.current)}
+          onRetry={retryContent}
+          onExploreStructure={exploreStructure}
           className="border-t border-hairline pt-3"
         />
       ) : null}
@@ -755,7 +814,8 @@ export function LearningWorkspace({
             */
             hasModel={sceneReady}
             onAsk={ask}
-            busy={tutorState.status === 'loading'}
+            onGenerate={generate}
+            busy={tutorState.status === 'loading' || learningState.status === 'loading'}
             className="shrink-0"
           />
         </div>

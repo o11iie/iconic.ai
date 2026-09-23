@@ -78,7 +78,8 @@ npm run test:semantics # live browser checks of semantic object interaction
 npm run test:spatial   # live browser checks of spatial manipulation
 npm run test:anatomy   # live browser checks of the anatomy provider boundary
 npm run test:tutor     # live browser checks of the contextual AI tutor
-npm run test:browser   # all six, in order
+npm run test:learning  # live browser checks of question and flashcard generation
+npm run test:browser   # all seven, in order
 
 npm run validate:anatomy                      # validate the contract fixture
 npm run validate:anatomy -- <manifest.json>    # validate a real manifest
@@ -138,6 +139,19 @@ out of the context it was handed, which is what makes the correspondence
 assertable. It refuses to run when `OPENAI_API_KEY` is set, and every answer
 it gives is marked in the response, in the message, and by a banner in the
 workspace.
+
+`test:learning` proves generated study material is built from the model rather
+than from the generator's general knowledge. It asserts the questions name the
+real structure and its real parent, that every distractor is a REAL structure
+from the same model, that exactly one multiple-choice option is correct, and —
+the checks that matter most — that an item citing a structure outside the
+model and a duplicated flashcard are both rejected before reaching the browser.
+The verification stub emits both deliberately, because a stub that only
+produced valid content would leave every rejection path unproven.
+
+It also asserts VEO refuses what it cannot support: a FUNCTION question about a
+structure whose function the model does not state returns a refusal naming what
+is missing, not an invented answer.
 
 `validate:anatomy` checks a manifest before it is ever served, and with
 `--asset` cross-checks mesh names and the version stamp against the geometry
@@ -221,6 +235,7 @@ src/
   ai/                   the contextual tutor
     context/            SpatialContext builder, server-side model resolution
     tutor/              request/response contracts, prompt, service, conversation
+    learning/           objectives, generation contracts, content validation, service
     safety/             prompt-injection defence, grounding validation
     actions/            spatial action dispatch into SceneController
     providers/          LLMClient abstraction, OpenAI adapter, verification stub
@@ -245,6 +260,7 @@ supabase/migrations/    schema + Row Level Security
 **Gate 8 — Anatomy Provider Integration: pipeline complete and verified.**
 **Gate 9 — Real Anatomy Rendering: RED, blocked by an external dependency.**
 **Gate 10 — Contextual AI Tutor: complete and verified.**
+**Gate 11 — AI Questions, Flashcards & Learning Content: complete and verified.**
 
 > **No anatomical geometry has been rendered by this build.** No licensed
 > anatomy source exists in this environment. Everything upstream of the content
