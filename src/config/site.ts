@@ -59,6 +59,13 @@ export const APP_NAV: readonly NavItem[] = [
     loopStages: ['recall', 'apply', 'remember'],
   },
   {
+    href: '/analytics',
+    label: 'Analytics',
+    description: 'What your reviews show.',
+    icon: 'insights',
+    loopStages: ['review', 'remember'],
+  },
+  {
     href: '/library',
     label: 'Library',
     description: 'Your saved work.',

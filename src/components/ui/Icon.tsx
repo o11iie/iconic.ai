@@ -56,7 +56,8 @@ export type IconName =
   | 'eyeOff'
   | 'undo'
   | 'redo'
-  | 'rebuild';
+  | 'rebuild'
+  | 'insights';
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <path d="M3.5 10.5 12 3.75l8.5 6.75V20a.75.75 0 0 1-.75.75h-4.5v-6h-6.5v6h-4.5A.75.75 0 0 1 3.5 20v-9.5Z" />,
@@ -178,7 +179,15 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M16.5 6.5 20 10l-3.5 3.5" />
     </>
   ),
-  rebuild: (
+insights: (
+    <>
+      <path d="M4 20V10" />
+      <path d="M10 20V4" />
+      <path d="M16 20v-7" />
+      <path d="M22 20H2" />
+    </>
+  ),
+    rebuild: (
     <>
       <path d="M12 3.5 19 7.5v9L12 20.5 5 16.5v-9L12 3.5Z" />
       <path d="M12 12v8.5M12 12 5 7.5M12 12l7-4.5" />

@@ -3,12 +3,15 @@ import { APP_NAV, SECONDARY_NAV, LEGAL_LINKS, LEARNING_LOOP } from './site';
 import { PROTECTED_PREFIXES, isProtectedPath, isAuthOnlyPath } from '@/lib/supabase/middleware';
 
 describe('navigation', () => {
-  it('exposes exactly the five primary learning surfaces', () => {
+  it('exposes exactly the six primary learning surfaces, in loop order', () => {
+    // Analytics sits after Recall: you review, then you see what the reviews
+    // showed. The order is the learning loop, not an alphabet.
     expect(APP_NAV.map((item) => item.label)).toEqual([
       'Home',
       'Learn',
       'Explore',
       'Recall',
+      'Analytics',
       'Library',
     ]);
   });

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AppShell } from '@/components/layout/AppShell';
+import { DashboardIntelligence } from '@/components/analytics/DashboardIntelligence';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { ButtonLink } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -17,10 +18,11 @@ export const metadata: Metadata = { title: 'Home' };
  *
  * Answers one question: what should I do next?
  *
- * It shows NO statistics. Every number would have to be invented until real
- * sessions and recall attempts exist, and a dashboard of fabricated progress is
- * exactly the thing that looks finished while teaching nothing. Where data does
- * not exist yet, the empty state says so and offers the real next action.
+ * Every number on it is now real — derived on the server from reviews the
+ * learner actually completed. That was not true before Gate 13, and the rule
+ * that made it safe has not changed: where there is no data there is no
+ * figure, only the next action. A learner with no history sees calls to
+ * action, never "0% retention", which is a measurement and a false one.
  */
 export default async function HomePage() {
   const user = capabilities.supabase ? await getServerUser() : null;
@@ -41,6 +43,13 @@ export default async function HomePage() {
             requirement="NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY"
           />
         )}
+
+        {/*
+          Real learning intelligence, when there is a database to read it from.
+          The same panels the analytics page uses, so Home and /analytics
+          cannot describe the same learner differently.
+        */}
+        {capabilities.supabase ? <DashboardIntelligence /> : null}
 
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="lg:col-span-2">
@@ -68,13 +77,18 @@ export default async function HomePage() {
           </Card>
 
           <Card>
-            <CardHeader title="Recall due" description="Scheduled retrieval practice." />
+            <CardHeader title="Recall" description="Scheduled retrieval practice." />
             <CardBody>
               <EmptyState
-                title="Nothing is due for recall yet"
-                description="Once you study something, VEO schedules it to come back just before you would forget it."
+                title="Review what is due"
+                description="VEO schedules each thing to come back just before you would forget it. What is due appears on the Recall screen."
                 icon={<Icon name="recall" size={22} />}
                 className="p-6"
+                action={
+                  <ButtonLink href="/recall" variant="secondary" size="sm">
+                    Go to Recall
+                  </ButtonLink>
+                }
               />
             </CardBody>
           </Card>
