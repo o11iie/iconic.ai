@@ -3,6 +3,7 @@ import type { ISODateString, UUID } from '@/types/domain/primitives';
 import type { ReviewRating, ReviewState } from './scheduler';
 import type { LearningItem } from './queue';
 import type { StudyDay } from './streaks';
+import type { AnalyticsSnapshot } from '@/analytics/contract';
 
 /**
  * The persistence seam.
@@ -96,9 +97,44 @@ export interface EnrolInput {
   readonly now: Date;
 }
 
+/**
+ * How much history an analytics read may pull.
+ *
+ * Analytics is the one caller that wants a learner's whole past, and a
+ * lifetime scan is a query that gets slower every day VEO is used. So the
+ * window is always bounded — by date, by row count, or both — and the result
+ * states whether it truncated rather than presenting a partial history as a
+ * complete one.
+ */
+export interface AnalyticsQuery {
+  /** Inclusive lower bound on event and session timestamps. Null = all time. */
+  readonly from: Date | null;
+  /** Hard ceiling on events returned, newest first. */
+  readonly maxEvents: number;
+  readonly maxSessions: number;
+}
+
+export const DEFAULT_ANALYTICS_QUERY: AnalyticsQuery = {
+  from: null,
+  maxEvents: 5000,
+  maxSessions: 500,
+};
+
 export interface LearningStore {
   /** Everything the dashboard needs, in one round trip. */
   snapshot(userId: UUID): Promise<LearningSnapshot>;
+
+  /**
+   * The raw material analytics is computed from.
+   *
+   * Deliberately raw: events, sessions, items and activity rows, with no
+   * aggregation. Every figure Gate 13 reports is derived in pure, testable
+   * code from exactly this, so a metric can always be traced back to the
+   * events that produced it. A store that returned pre-aggregated numbers
+   * would put arithmetic in the one layer that cannot be unit-tested without
+   * a database.
+   */
+  analyticsSnapshot(userId: UUID, query: AnalyticsQuery): Promise<AnalyticsSnapshot>;
 
   /** Add generated content to the learner's schedule. Idempotent per ref. */
   enrol(input: EnrolInput): Promise<LearningItem>;

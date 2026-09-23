@@ -12,8 +12,10 @@ import {
 } from './scheduler';
 import type { LearningItem } from './queue';
 import { clampGoal, DEFAULT_DAILY_GOAL, localDate, type StudyDay } from './streaks';
+import type { AnalyticsItemRecord, AnalyticsSnapshot } from '@/analytics/contract';
 import {
   StoreError,
+  type AnalyticsQuery,
   type EnrolInput,
   type LearningSnapshot,
   type LearningStore,
@@ -60,6 +62,15 @@ interface ItemRow {
   semantic_id: string | null;
   model_ref: string | null;
   payload: Record<string, unknown> | null;
+  review_states: StateRow | StateRow[] | null;
+}
+
+interface AnalyticsItemRow {
+  id: string;
+  content_type: string;
+  semantic_id: string | null;
+  model_ref: string | null;
+  created_at: string | null;
   review_states: StateRow | StateRow[] | null;
 }
 
@@ -123,6 +134,93 @@ export class SupabaseLearningStore implements LearningStore {
           reviewedAt: String(row.reviewed_at) as ISODateString,
         }))
         .reverse(),
+    };
+  }
+
+  /**
+   * The raw material analytics is computed from.
+   *
+   * Four bounded queries in parallel. Every one is scoped by RLS rather than
+   * by a `user_id` filter this class supplies — the policies are the boundary,
+   * and a filter here would merely be a second opinion about a question the
+   * database has already answered.
+   *
+   * Events come back NEWEST first and are capped. Ordering that way matters:
+   * when a learner's history exceeds the cap, the rows kept are the recent
+   * ones every trend, decay signal and "recent retention" figure depends on.
+   * Keeping the oldest instead would quietly produce a dashboard describing a
+   * learner's distant past.
+   */
+  async analyticsSnapshot(userId: UUID, query: AnalyticsQuery): Promise<AnalyticsSnapshot> {
+    const fromIso = query.from ? query.from.toISOString() : null;
+
+    let eventQuery = this.client
+      .from('review_events')
+      .select('id, item_id, rating, correct, response_ms, reviewed_at, session_id')
+      .order('reviewed_at', { ascending: false })
+      // One row over the cap, so truncation is detected rather than guessed.
+      .limit(query.maxEvents + 1);
+    if (fromIso) eventQuery = eventQuery.gte('reviewed_at', fromIso);
+
+    let sessionQuery = this.client
+      .from('review_sessions')
+      .select('id, status, started_at, ended_at, planned_count, completed_count')
+      .order('started_at', { ascending: false })
+      .limit(query.maxSessions);
+    if (fromIso) sessionQuery = sessionQuery.gte('started_at', fromIso);
+
+    const [items, events, sessions, days, goal] = await Promise.all([
+      this.client
+        .from('learning_items')
+        .select('id, content_type, semantic_id, model_ref, created_at, review_states(*)')
+        .is('archived_at', null),
+      eventQuery,
+      sessionQuery,
+      this.client
+        .from('learning_daily_activity')
+        .select('activity_date, reviews_completed, seconds_studied')
+        .order('activity_date', { ascending: true }),
+      this.client
+        .from('learning_goals')
+        .select('daily_review_target, time_zone')
+        .maybeSingle(),
+    ]);
+
+    if (items.error) throw unavailable(items.error.message);
+    if (events.error) throw unavailable(events.error.message);
+
+    void userId; // RLS scopes every query; the id is not a filter.
+
+    const eventRows = events.data ?? [];
+    const truncated = eventRows.length > query.maxEvents;
+
+    return {
+      items: (items.data ?? []).map(toAnalyticsItem),
+      events: eventRows.slice(0, query.maxEvents).map((row) => ({
+        id: String(row.id) as UUID,
+        itemId: String(row.item_id) as UUID,
+        rating: row.rating as ReviewRating,
+        correct: row.correct === null ? null : Boolean(row.correct),
+        responseMs: Number(row.response_ms) || 0,
+        reviewedAt: String(row.reviewed_at) as ISODateString,
+        sessionId: row.session_id === null ? null : (String(row.session_id) as UUID),
+      })),
+      sessions: (sessions.data ?? []).map((row) => ({
+        id: String(row.id) as UUID,
+        status: row.status as 'active' | 'completed' | 'abandoned',
+        startedAt: String(row.started_at) as ISODateString,
+        endedAt: row.ended_at === null ? null : (String(row.ended_at) as ISODateString),
+        itemsPlanned: Number(row.planned_count) || 0,
+        itemsCompleted: Number(row.completed_count) || 0,
+      })),
+      days: (days.data ?? []).map((row) => ({
+        date: String(row.activity_date),
+        reviewsCompleted: Number(row.reviews_completed) || 0,
+        secondsStudied: Number(row.seconds_studied) || 0,
+      })),
+      dailyTarget: goal.data?.daily_review_target ?? DEFAULT_DAILY_GOAL,
+      timeZone: goal.data?.time_zone ?? 'UTC',
+      eventsTruncated: truncated,
     };
   }
 
@@ -387,6 +485,35 @@ function toLearningItem(row: ItemRow): LearningItem {
     semanticId: (row.semantic_id as SemanticId | null) ?? null,
     modelRef: row.model_ref,
     state: stateRow ? rowToState(stateRow) : newReviewState(new Date(0)),
+  };
+}
+
+/**
+ * An item plus its current scheduling state, flattened for analytics.
+ *
+ * An item with no state row is still returned rather than dropped: it is a
+ * real enrolment the learner made, and it belongs in the knowledge map and the
+ * "not yet studied" counts. A default state would claim it had been reviewed,
+ * so the phase stays `new` and every counter stays zero.
+ */
+function toAnalyticsItem(row: AnalyticsItemRow): AnalyticsItemRecord {
+  const stateRow = Array.isArray(row.review_states) ? row.review_states[0] : row.review_states;
+  const state = stateRow ? rowToState(stateRow) : newReviewState(new Date(0));
+
+  return {
+    id: row.id as UUID,
+    contentType: row.content_type === 'flashcard' ? 'flashcard' : 'question',
+    semanticId: (row.semantic_id as SemanticId | null) ?? null,
+    modelRef: row.model_ref,
+    createdAt: row.created_at === null ? null : (String(row.created_at) as ISODateString),
+    phase: state.phase,
+    stability: state.stability,
+    difficulty: state.difficulty,
+    repetitions: state.repetitions,
+    lapses: state.lapses,
+    intervalDays: state.intervalDays,
+    dueAt: state.dueAt,
+    lastReviewedAt: state.lastReviewedAt,
   };
 }
 

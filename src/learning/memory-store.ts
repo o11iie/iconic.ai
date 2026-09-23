@@ -3,8 +3,10 @@ import type { ISODateString, UUID } from '@/types/domain/primitives';
 import { newReviewState, schedule, type ReviewRating, type ReviewState } from './scheduler';
 import type { LearningItem } from './queue';
 import { DEFAULT_DAILY_GOAL, clampGoal, localDate, type StudyDay } from './streaks';
+import type { AnalyticsItemRecord, AnalyticsSnapshot } from '@/analytics/contract';
 import {
   StoreError,
+  type AnalyticsQuery,
   type EnrolInput,
   type LearningSnapshot,
   type LearningStore,
@@ -47,6 +49,7 @@ import {
 
 interface StoredItem {
   readonly id: UUID;
+  readonly createdAt: ISODateString;
   readonly userId: UUID;
   readonly contentRef: string;
   readonly contentType: 'question' | 'flashcard';
@@ -63,6 +66,10 @@ interface StoredEvent {
   readonly userId: UUID;
   readonly itemId: UUID;
   readonly rating: ReviewRating;
+  /** Whether the answer matched, where that was knowable. */
+  readonly correct: boolean | null;
+  readonly responseMs: number;
+  readonly sessionId: UUID | null;
   readonly reviewedAt: ISODateString;
   readonly idempotencyKey: string;
   readonly resultingState: ReviewState;
@@ -151,6 +158,56 @@ export class InMemoryLearningStore implements LearningStore {
     };
   }
 
+  async analyticsSnapshot(userId: UUID, query: AnalyticsQuery): Promise<AnalyticsSnapshot> {
+    const user = this.user(userId);
+    const from = query.from ? query.from.getTime() : null;
+
+    const inWindow = (iso: string) => {
+      if (from === null) return true;
+      const at = Date.parse(iso);
+      // An unparseable timestamp is NOT filtered out here. Integrity is the
+      // engine's job, and silently dropping a broken row at the storage layer
+      // would hide a real data problem behind a smaller number.
+      return !Number.isFinite(at) || at >= from;
+    };
+
+    // Newest first, then capped, so a truncated history keeps the RECENT
+    // events — which is what every trend and decay signal depends on.
+    const events = [...user.events]
+      .filter((event) => inWindow(event.reviewedAt))
+      .sort((a, b) => Date.parse(b.reviewedAt) - Date.parse(a.reviewedAt));
+
+    const sessions = [...user.sessions.values()]
+      .filter((session) => inWindow(session.startedAt))
+      .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
+      .slice(0, query.maxSessions);
+
+    return {
+      items: [...user.items.values()].map(toAnalyticsItem),
+      events: events.slice(0, query.maxEvents).map((event) => ({
+        id: event.id,
+        itemId: event.itemId,
+        rating: event.rating,
+        correct: event.correct,
+        responseMs: event.responseMs,
+        reviewedAt: event.reviewedAt,
+        sessionId: event.sessionId,
+      })),
+      sessions: sessions.map((session) => ({
+        id: session.id,
+        status: session.status,
+        startedAt: session.startedAt,
+        endedAt: session.endedAt,
+        itemsPlanned: session.plannedItemIds.length,
+        itemsCompleted: session.answeredItemIds.length,
+      })),
+      days: [...user.days.values()].sort((a, b) => a.date.localeCompare(b.date)),
+      dailyTarget: user.dailyTarget,
+      timeZone: user.timeZone,
+      eventsTruncated: events.length > query.maxEvents,
+    };
+  }
+
   async enrol(input: EnrolInput): Promise<LearningItem> {
     const user = this.user(input.userId);
 
@@ -165,6 +222,7 @@ export class InMemoryLearningStore implements LearningStore {
     const id = this.nextId('item');
     const stored: StoredItem = {
       id,
+      createdAt: input.now.toISOString(),
       userId: input.userId,
       contentRef: input.contentRef,
       contentType: input.contentType,
@@ -228,6 +286,9 @@ export class InMemoryLearningStore implements LearningStore {
       userId: input.userId,
       itemId: input.itemId,
       rating: input.rating,
+      correct: input.correct,
+      responseMs: Math.max(0, Math.round(input.responseMs)),
+      sessionId: input.sessionId,
       reviewedAt: input.now.toISOString(),
       idempotencyKey: input.idempotencyKey,
       resultingState: next,
@@ -322,6 +383,24 @@ export class InMemoryLearningStore implements LearningStore {
     if (timeZone) user.timeZone = timeZone;
     return user.dailyTarget;
   }
+}
+
+function toAnalyticsItem(stored: StoredItem): AnalyticsItemRecord {
+  return {
+    id: stored.id,
+    contentType: stored.contentType,
+    semanticId: stored.semanticId,
+    modelRef: stored.modelRef,
+    createdAt: stored.createdAt,
+    phase: stored.state.phase,
+    stability: stored.state.stability,
+    difficulty: stored.state.difficulty,
+    repetitions: stored.state.repetitions,
+    lapses: stored.state.lapses,
+    intervalDays: stored.state.intervalDays,
+    dueAt: stored.state.dueAt,
+    lastReviewedAt: stored.state.lastReviewedAt,
+  };
 }
 
 function toLearningItem(stored: StoredItem): LearningItem {
