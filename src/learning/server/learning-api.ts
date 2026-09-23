@@ -65,11 +65,7 @@ export async function withLearner<T>(
   try {
     // SERVER time. The single source of "when", for every route.
     const payload = await handler(resolved, new Date());
-    return NextResponse.json({
-      ok: true,
-      ...(resolved.ephemeral ? { ephemeral: true } : {}),
-      ...(payload as object),
-    });
+    return NextResponse.json({ ok: true, ...(payload as object) });
   } catch (error) {
     if (error instanceof StoreError) {
       return fail(ERROR_STATUS[error.code], error.code, error.message);

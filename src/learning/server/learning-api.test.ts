@@ -16,11 +16,7 @@ import { join } from 'node:path';
 
 const mockResolve = vi.fn();
 
-vi.mock('./resolve-store', () => ({
-  resolveLearning: () => mockResolve(),
-  memoryStoreEnabled: () => false,
-  MEMORY_STORE_ENV_VAR: 'VEO_LEARNING_MEMORY_STORE',
-}));
+vi.mock('./resolve-store', () => ({ resolveLearning: () => mockResolve() }));
 
 const {
   enrolSchema, endSessionSchema, goalSchema, startSessionSchema,
@@ -218,19 +214,6 @@ describe('refusals', () => {
     spy.mockRestore();
   });
 
-  it('tells the client when its data is ephemeral rather than pretending', async () => {
-    // A learner must never be shown a streak that a restart will erase
-    // without knowing.
-    mockResolve.mockResolvedValue({ ok: true, userId: 'u', store: {}, ephemeral: true });
-    const body = await (await withLearner(async () => ({ value: 1 }))).json();
-    expect(body.ephemeral).toBe(true);
-
-    mockResolve.mockResolvedValue({ ok: true, userId: 'u', store: {}, ephemeral: false });
-    expect(await (await withLearner(async () => ({ value: 1 }))).json()).not.toHaveProperty(
-      'ephemeral',
-    );
-  });
-
   it('rejects a malformed body before resolving anything', async () => {
     const request = new Request('https://veo.test/api/learning/review', {
       method: 'POST',
@@ -244,31 +227,45 @@ describe('refusals', () => {
   });
 });
 
-describe('the in-memory store cannot shadow a real database', () => {
-  it('reads its flag as a literal, because Next inlines these at build time', () => {
-    // A computed lookup (process.env[VAR]) reads a build-time snapshot and
-    // silently never activates — the flag looks wired and does nothing.
+describe('there is no runtime way to swap the store', () => {
+  it('resolves identity and persistence from Supabase alone', () => {
+    // An earlier revision had an env-flagged in-memory mode. It could never
+    // serve a request — it required Supabase to be ABSENT, and without
+    // Supabase there is nothing to authenticate against — and its obvious
+    // "fix" was to skip the identity check. It was removed rather than
+    // repaired.
     const source = readFileSync(join(SERVER_DIR, 'resolve-store.ts'), 'utf8');
-    expect(source).toContain('process.env.VEO_LEARNING_MEMORY_STORE');
-    expect(source).not.toMatch(/process\.env\[/);
+
+    expect(source).toContain('auth.getUser()'); // positive control
+    expect(source).not.toMatch(/process\.env/);
+    expect(source).not.toMatch(/InMemoryLearningStore/);
   });
 
-  it('refuses to engage when Supabase is configured', () => {
-    const source = readFileSync(join(SERVER_DIR, 'resolve-store.ts'), 'utf8');
-    expect(source).toContain('NEXT_PUBLIC_SUPABASE_URL');
-    // The guard must come before the flag is honoured.
-    const flagAt = source.indexOf('VEO_LEARNING_MEMORY_STORE !== ');
-    const guardAt = source.indexOf('NEXT_PUBLIC_SUPABASE_URL &&');
-    expect(flagAt).toBeGreaterThan(-1);
-    expect(guardAt).toBeGreaterThan(flagAt);
+  it('refuses rather than inventing an identity when Supabase is absent', async () => {
+    mockResolve.mockResolvedValue({ ok: false, reason: 'not_configured' });
+
+    const response = await withLearner(async () => ({ never: true }));
+    expect(response.status).toBe(503);
+    expect((await response.json()).error.code).toBe('not_configured');
   });
 
-  it('still requires a real authenticated user', () => {
-    // The flag swaps persistence, never authentication — otherwise the
-    // verification build would be a way to review as anybody.
-    const source = readFileSync(join(SERVER_DIR, 'resolve-store.ts'), 'utf8');
-    const block = source.slice(source.indexOf('if (memoryStoreEnabled())'));
-    expect(block.slice(0, 600)).toContain('getServerUser()');
+  it('keeps the in-memory store out of the shipped app entirely', () => {
+    // It is a test double. Anything under src/app importing it would put an
+    // unauthenticated, process-local store into a real deployment.
+    const appFiles: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) appFiles.push(full);
+      }
+    };
+    walk(join(process.cwd(), 'src/app'));
+
+    expect(appFiles.length).toBeGreaterThan(10); // positive control
+    for (const file of appFiles) {
+      expect(readFileSync(file, 'utf8'), file).not.toContain('memory-store');
+    }
   });
 });
 

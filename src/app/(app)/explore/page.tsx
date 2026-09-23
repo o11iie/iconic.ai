@@ -49,6 +49,7 @@ export default async function ExplorePage({
           diagnostic={diagnostic}
           aiConfigured={aiConfigured}
           tutorStub={usingStub}
+          recallConfigured={capabilities.supabase}
         />
       </Suspense>
     </WorkspaceShell>

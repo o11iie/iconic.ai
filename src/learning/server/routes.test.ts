@@ -16,11 +16,7 @@ const MALLORY = 'mallory-uuid' as UUID;
 
 const mockResolve = vi.fn();
 
-vi.mock('./resolve-store', () => ({
-  resolveLearning: () => mockResolve(),
-  memoryStoreEnabled: () => false,
-  MEMORY_STORE_ENV_VAR: 'VEO_LEARNING_MEMORY_STORE',
-}));
+vi.mock('./resolve-store', () => ({ resolveLearning: () => mockResolve() }));
 
 const review = await import('@/app/api/learning/review/route');
 const session = await import('@/app/api/learning/session/route');
@@ -36,7 +32,7 @@ beforeEach(() => {
   submitSpy = vi.spyOn(store, 'submitReview');
   mockResolve.mockReset();
   mockResolve.mockImplementation(async () => ({
-    ok: true, userId: ALICE, store, ephemeral: false,
+    ok: true, userId: ALICE, store,
   }));
 });
 
@@ -233,7 +229,7 @@ describe('POST /api/learning/session', () => {
     const mine = await (await session.POST(post('/api/learning/session', {}))).json();
 
     mockResolve.mockImplementation(async () => ({
-      ok: true, userId: MALLORY, store, ephemeral: false,
+      ok: true, userId: MALLORY, store,
     }));
 
     const request = new Request('https://veo.test/api/learning/session', {
@@ -243,7 +239,7 @@ describe('POST /api/learning/session', () => {
     expect((await (await session.PATCH(request)).json()).session).toBeNull();
 
     mockResolve.mockImplementation(async () => ({
-      ok: true, userId: ALICE, store, ephemeral: false,
+      ok: true, userId: ALICE, store,
     }));
     expect((await (await session.GET()).json()).session.status).toBe('active');
   });

@@ -20,7 +20,8 @@ import { useReducedMotion } from '@/store/ui-store';
 import { useViewerStore } from '@/store/viewer-store';
 import { AIStudyPanel } from './AIStudyPanel';
 import { TutorPanel } from './TutorPanel';
-import { LearningContentPanel } from './LearningContentPanel';
+import { LearningContentPanel, type ScheduleState } from './LearningContentPanel';
+import { enrolGenerated } from '@/components/recall/enrol';
 import { useLearningContent } from '@/hooks/useLearningContent';
 import type { ContentType } from '@/ai/learning/learning-types';
 import type { Difficulty, LearningObjectiveType } from '@/types/domain/learning';
@@ -60,8 +61,17 @@ export function LearningWorkspace({
   diagnostic = false,
   aiConfigured,
   tutorStub = false,
+  recallConfigured = false,
 }: {
   readonly diagnostic?: boolean;
+  /**
+   * True when a review schedule exists to add content to.
+   *
+   * Passed down rather than guessed: without it the "Add to schedule" control
+   * would be offered and then fail when tapped, which is worse than not
+   * offering it.
+   */
+  readonly recallConfigured?: boolean;
   /**
    * Resolved on the server: OPENAI_API_KEY is server-only and must never be
    * readable from the browser, so the page passes the boolean down.
@@ -398,6 +408,65 @@ export function LearningWorkspace({
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const lastContentType = useRef<ContentType>('question');
 
+  /**
+   * Adding generated content to the review schedule.
+   *
+   * Enrolling is NOT studying: this creates items in the `new` phase and no
+   * activity of any kind, so a learner who generates fifty flashcards and
+   * closes the tab has still studied on zero days.
+   */
+  /**
+   * Which generation the schedule result belongs to.
+   *
+   * Derived rather than reset in an effect. A fresh generation is fresh
+   * content, and "In your schedule" must not linger over cards that have
+   * never been added — but syncing that with an effect renders the stale
+   * state once before correcting it, which is a visible flash of a claim
+   * that is not true.
+   */
+  const generationId = useMemo(() => {
+    if (learningState.status !== 'ready') return '';
+    return [
+      ...learningState.questions.map((question) => question.id),
+      ...learningState.flashcards.map((card) => card.id),
+    ].join('|');
+  }, [learningState]);
+
+  const [schedule, setSchedule] = useState<{
+    readonly forGeneration: string;
+    readonly state: ScheduleState;
+  }>({ forGeneration: '', state: { kind: 'idle' } });
+
+  const scheduleState: ScheduleState =
+    schedule.forGeneration === generationId ? schedule.state : { kind: 'idle' };
+
+  const addToSchedule = useCallback(async () => {
+    if (learningState.status !== 'ready') return;
+
+    const forGeneration = generationId;
+    setSchedule({ forGeneration, state: { kind: 'adding' } });
+
+    const result = await enrolGenerated(
+      learningState.questions,
+      learningState.flashcards,
+      // The model the CONTENT was generated against, which is not always the
+      // one in the URL: in diagnostic mode `activeModel` is null, and with no
+      // model loaded the generator falls back to the fixture. Recording
+      // `activeModel` therefore attached items to a model they did not come
+      // from, or to nothing — and an item with no model can never offer
+      // "View in 3D", so the structure it is about becomes unreachable.
+      tutorModelRef,
+    );
+
+    setSchedule({
+      forGeneration,
+      state:
+        result.added === 0 && result.failed > 0
+          ? { kind: 'failed', message: 'VEO could not add these to your schedule.' }
+          : { kind: 'added', added: result.added, failed: result.failed },
+    });
+  }, [learningState, tutorModelRef, generationId]);
+
   const generate = useCallback(
     (contentType: ContentType) => {
       if (!selectedId) return;
@@ -569,6 +638,8 @@ export function LearningWorkspace({
           onGenerate={() => generate(lastContentType.current)}
           onRetry={retryContent}
           onExploreStructure={exploreStructure}
+          onAddToSchedule={recallConfigured ? () => void addToSchedule() : undefined}
+          scheduleState={scheduleState}
           className="border-t border-hairline pt-3"
         />
       ) : null}

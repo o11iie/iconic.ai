@@ -76,8 +76,24 @@ export interface LearningContentPanelProps {
   readonly onGenerate: () => void;
   readonly onRetry: () => void;
   readonly onExploreStructure: (semanticId: SemanticId) => void;
+  /**
+   * Put what was generated into the review schedule.
+   *
+   * Optional: where recall is not configured the affordance is simply absent,
+   * rather than present and failing when tapped.
+   */
+  readonly onAddToSchedule?: () => void;
+  /** What the schedule reported back. Null until an attempt has been made. */
+  readonly scheduleState?: ScheduleState;
   readonly className?: string;
 }
+
+/** The state of adding generated content to the schedule. */
+export type ScheduleState =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'adding' }
+  | { readonly kind: 'added'; readonly added: number; readonly failed: number }
+  | { readonly kind: 'failed'; readonly message: string };
 
 export function LearningContentPanel({
   state,
@@ -88,6 +104,8 @@ export function LearningContentPanel({
   onGenerate,
   onRetry,
   onExploreStructure,
+  onAddToSchedule,
+  scheduleState = { kind: 'idle' },
   className,
 }: LearningContentPanelProps) {
   const objectiveId = useId();
@@ -217,6 +235,39 @@ export function LearningContentPanel({
               <span className="text-[11px] text-ink-faint">
                 {state.questions.length + state.flashcards.length} {kind}
               </span>
+            </div>
+          ) : null}
+
+          {onAddToSchedule && state.questions.length + state.flashcards.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2" data-veo-schedule>
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={scheduleState.kind === 'adding'}
+                disabled={scheduleState.kind === 'adding' || scheduleState.kind === 'added'}
+                onClick={onAddToSchedule}
+                data-veo-schedule-add
+              >
+                <Icon name="clock" size={14} />
+                {scheduleState.kind === 'added' ? 'In your schedule' : 'Add to schedule'}
+              </Button>
+
+              {/*
+                Partial success is reported as partial success. Adding nine of
+                ten is not "added", and the nine are not discarded.
+              */}
+              {scheduleState.kind === 'added' ? (
+                <span className="text-[11px] text-ink-muted" data-veo-schedule-result>
+                  {scheduleState.added} added
+                  {scheduleState.failed > 0 ? ` · ${scheduleState.failed} could not be added` : ''}
+                </span>
+              ) : null}
+
+              {scheduleState.kind === 'failed' ? (
+                <span className="text-[11px] text-warn" role="alert" data-veo-schedule-result>
+                  {scheduleState.message}
+                </span>
+              ) : null}
             </div>
           ) : null}
 
