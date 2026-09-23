@@ -1,6 +1,6 @@
 # VEO — Build Status
 
-_Last updated: 2026-09-22_
+_Last updated: 2026-09-23_
 
 ---
 
@@ -10,7 +10,9 @@ _Last updated: 2026-09-22_
 
 ## Current gate
 
-**Gate 11 — AI Questions, Flashcards & Learning Content → GREEN**
+**Gate 12 — Spaced Repetition, Recall Engine & Learning Memory → GREEN**
+
+**Gate 11 — AI Questions, Flashcards & Learning Content → GREEN (no regression)**
 
 **Gate 10 — Contextual AI Tutor → GREEN (no regression)**
 
@@ -33,6 +35,55 @@ _Last updated: 2026-09-22_
 > This is not an engineering blocker. Everything upstream of the content is
 > built and verified. What is missing is anatomy, and it cannot be written.
 
+### Gate 12 in one line
+
+VEO decides when each thing comes back, from what the learner actually did —
+and where they have done nothing, it says so instead of showing a zero.
+
+**Gate 12 did not change Gate 9.** No anatomy was written, no fixture was
+promoted to a catalogue, and `/api/anatomy` still reports
+`configured: false, delivery: "none"` — checked by request, not by assumption.
+No geometry of any kind was introduced; a test fails if anything under
+`src/learning` or `src/components/recall` imports Three.js or names a
+primitive. The recall surface labels structures by their semantic ids and
+never invents a display name, because the name belongs to the loaded model.
+
+**Gate 13 was not started.** No billing, no plans, no entitlement gating, no
+collaboration, no import pipeline.
+
+#### What Gate 12 is
+
+A scheduler, a queue, a memory, and the surface that shows them.
+
+- **Pure core.** `scheduler.ts`, `queue.ts`, `mastery.ts`, `streaks.ts` and
+  `session.ts` have no I/O, no clock, no environment and no AI. A test fails if
+  any of them reads `Date.now()`, `process.env` or `fetch`. That is what makes
+  a learner's schedule reproducible: the same history and instant always give
+  the same answer.
+- **Server-authoritative.** `now` is minted once per request on the server.
+  Every route schema is strict, so `userId`, `reviewedAt`, `dueAt`,
+  `intervalDays` and the rest are fields a client *cannot express* rather than
+  fields the server must remember to ignore.
+- **Atomic.** One answer advances an item exactly once. Idempotency is a unique
+  index; the read-advance-append-count sequence runs inside one PostgreSQL
+  function under a row lock.
+- **Honest.** Retention is `null`, not 0, until something has been measured.
+  A streak requires a completed review — opening the app, viewing the
+  dashboard and generating a flashcard are not studying.
+
+#### What Gate 12 deliberately does NOT do
+
+- It does not let the AI touch learning state. No module under `src/ai`
+  imports the learning engine, can call `submitReview`, or names
+  `LearningStore` — asserted, and the assertion is mutation-tested.
+- It does not let the scheduler consult a model. A scheduler that did would
+  give different answers for the same history on different days, which is
+  indistinguishable from a bug.
+- It does not let a client compute a schedule. Components may `import type`
+  from the scheduler — erased at build, granting nothing — but a value import
+  of the scheduler or a store fails a test.
+- It does not offer an offline mode. See "Removed rather than repaired" below.
+
 ### Gate 11 in one line
 
 VEO builds questions and flashcards about a selected structure from facts the
@@ -42,8 +93,10 @@ model actually supplies — and refuses, with a reason, when it cannot.
 promoted to a catalogue, and `/api/anatomy` still reports
 `configured: false, delivery: "none"`.
 
-**Gate 12 was not started.** No scheduling, no scoring, no streaks, no memory
-state. A test asserts the generated payload contains none of those fields.
+**Gate 12 is now built on top of Gate 11 without altering it.** The generated
+payload still carries no scheduling fields — the same test asserts it — because
+scheduling belongs to the item VEO creates when content is *enrolled*, not to
+the content itself.
 
 ### Gate 10 in one line
 
@@ -534,8 +587,8 @@ OpenAI, Stripe, OAuth providers.
 | --- | --- |
 | `npm run typecheck` | **PASS** — 0 errors |
 | `npm run lint` | **PASS** — 0 errors, 0 warnings |
-| `npm run test` | **PASS** — 683 passed / 683 total, 32 files |
-| `npm run build` | **PASS** — 23 routes |
+| `npm run test` | **PASS** — 942 passed / 942 total, 41 files |
+| `npm run build` | **PASS** — 28 routes |
 | `npm run validate:anatomy` | **PASS** — contract fixture valid |
 | `npm run test:anatomy` | **PASS** — 32 live provider checks |
 | `npm run test:spatial` | **PASS** — 164 live manipulation checks |
@@ -545,8 +598,47 @@ OpenAI, Stripe, OAuth providers.
 | `npm run test:tutor` | **PASS** — 89 live tutor checks |
 | `npm run test:learning` | **PASS** — 94 live content checks |
 | `npm run test:browser` | **PASS** — all seven, 629 checks, 0 failures |
+| `npm run verify:rls` | **PASS** — 37 checks on real PostgreSQL 16 |
+| `npm run test:recall` | **PASS** — 118 live recall checks, 6 viewports |
 
-Gate 9 added 32 unit tests and 12 live checks.
+Gate 12 added 259 unit tests, 37 database checks and 118 live browser checks.
+
+### Gate 12 ran against a real database, not a mock
+
+PostgreSQL 16 is installed in this environment, so `scripts/verify-rls.sh`
+applies the **real** migrations to a throwaway cluster and drives them as two
+real users through a Supabase-compatible shim. It proves, by execution:
+
+- an owner can read their own rows, and another user cannot read, forge,
+  update or delete them;
+- `review_events` resists even its owner — it has SELECT and INSERT policies
+  and no others, so history is append-only;
+- a duplicate idempotency key is refused by a unique index, and the same key
+  is still free under a different learner;
+- `submit_review` returns the first submission's result rather than erroring,
+  advances the item exactly once, and counts the day once;
+- a second active session per learner is impossible;
+- RLS is enabled on all seven tables.
+
+It carries a **negative control**: a deliberately unprotected table that the
+harness must detect as exposed. Without it, a harness that had stopped working
+would pass silently, which is the failure mode that matters.
+
+### The recall surface was verified signed in, in a real browser
+
+`/recall` sits behind authentication, and authentication is Supabase. Rather
+than add an environment flag to VEO that fabricates a learner — an auth bypass
+living in production code, which is the shape of mistake that ships — the
+substitute lives in the harness: `scripts/fixture-auth-server.mjs` stands in
+for Supabase Auth exactly as the anatomy fixture and tutor stub stand in for
+their services. The browser carries the cookie `@supabase/ssr` writes, and
+VEO's middleware and routes validate it through their normal path. No VEO
+source is changed to make the tests pass.
+
+The fixture implements **auth only** and answers 501 to data queries, so a UI
+check cannot quietly pass against invented rows. What it does not cover is
+covered by execution elsewhere: the API routes by 22 behavioural tests driving
+the real exported handlers, the database by the 37 RLS checks above.
 
 **Running the secret scan so that it means something.** In a bare environment
 no `ANATOMY_*` variable is set, so the scan has no real value to hunt for and
@@ -602,6 +694,106 @@ Honesty about coverage matters more here than anywhere else in this file.
   does not notify — otherwise every no-op selection would cost a render.
 
 ---
+
+## Issues found and fixed during Gate 12
+
+### 1. Structure banding compared a per-item threshold to a summed count
+
+`MASTERY.difficultLapses` is documented as a **per-item** threshold: three
+lapses on one item marks it difficult. But a structure's lapse count is the
+**sum** across its items, and `band()` compared the two directly. The band
+therefore scaled with how much content existed about a structure rather than
+with how well it was known.
+
+Concretely: twenty well-known items about one structure, each lapsed once
+years ago and fully relearned, score 0.85 — and were branded "struggling",
+permanently, for the offence of being well covered.
+
+Found by a unit test whose *setup* would not produce the band I expected;
+probing why showed the rule, not the test, was wrong. Now judged per item,
+with regression tests in both directions — the well-covered structure reads
+"strong", and one whose items each lapse three times still reads "struggling".
+
+### 2. The session summary existed and was unreachable
+
+Rating the last item in a session called `onFinished`, which refreshed the
+dashboard, which replaced the review screen — unmounting the "Session
+complete" summary the instant it rendered. A learner who finished a session
+was thrown straight back to where they started with no acknowledgement that
+they had done anything.
+
+Both components were behaving exactly as written, so no unit test could have
+seen it. The browser harness caught it on the first end-to-end run. Finishing
+now prefetches the fresh dashboard quietly and the learner leaves when they
+choose.
+
+### 3. Enrolment filed items under a model they did not come from
+
+`addToSchedule` recorded `activeModel`, but content is generated against
+`tutorModelRef`. Those differ in diagnostic mode and whenever no model is
+loaded — so items were filed under the wrong model, or under `null`. An item
+with no model can never offer "View in 3D", which quietly severs a question
+from the structure it is about.
+
+Caught by a browser check asserting the enrolled item records *which* model it
+came from, rather than merely that enrolment succeeded.
+
+### 4. The first RLS test was vacuous
+
+The minimal `auth.users` shim lacked `raw_user_meta_data`, so Gate 1's
+`handle_new_user()` trigger failed, **no users were created**, and checks 2–13
+passed only because there was no data to read. A green result meaning nothing.
+
+Rebuilt the shim, added positive controls asserting two real users exist
+before any isolation claim is made, and added a negative control: an
+unprotected table the harness must detect as exposed.
+
+### 5. An offline mode that could never work
+
+`resolve-store.ts` had an env-flagged in-memory branch. A probe showed it could
+never serve a request: the flag required Supabase to be **absent**, and without
+Supabase `getServerUser()` has nothing to validate against, so every request
+resolved to `unauthenticated`.
+
+It was removed rather than repaired. Dead code shaped like a working offline
+mode is worse than none, because the obvious way to "fix" it is to skip the
+identity check — an auth bypass behind an environment variable. The in-memory
+store remains as the test double it genuinely is, and a test now fails if
+anything under `src/app` imports it.
+
+### 6. A React effect used to reset derived state
+
+Two components synced state in an effect, which renders the stale value once
+before correcting it — in one case showing "In your schedule" over cards that
+had never been added. Both now derive the value instead. A third had no
+staleness guard on overlapping loads, so finishing a session while an earlier
+refresh was in flight could let the older response land last and show a
+dashboard from *before* the reviews.
+
+### Verified, not changed
+
+- **A yield inside the store's critical section** was caught by the
+  concurrency test — but only once the mutation was placed correctly. Placed
+  *before* the read it is harmless, which is not a gap.
+- **A route reading `body.data.userId`** is inert while the schema is strict,
+  so the single-layer mutation escaped. Re-run with **both** layers broken, it
+  was caught by four tests. Defence in depth working, not a hole; the weak text
+  scan it escaped was replaced with behavioural route tests.
+- **`ReviewSession` imports the scheduler** — but `import type` only, which is
+  erased at build and grants no capability. The boundary test now permits type
+  imports and fails on value imports, which is the rule that matters.
+
+### Mutation testing
+
+Every claim below was verified by deliberately breaking the code and
+confirming the suite fails.
+
+| Target | Mutants | Caught |
+| --- | --- | --- |
+| Scheduler | 9 | 9 (one after strengthening a weak purity test) |
+| Learning store | 9 | 9 (two mutants were mis-placed; re-run correctly, both caught) |
+| Security boundary | 10 | 9 outright; the 10th proved defence in depth and was caught with both layers broken |
+| Module boundaries | 4 | 4 |
 
 ## Issues found and fixed during Gate 11
 
@@ -982,11 +1174,26 @@ engine rather than finding a defect:
 **Supply a licensed anatomy source.** It remains the one outstanding external
 dependency, and Gate 9 stays RED until it arrives.
 
-Gate 10 proceeded because the tutor architecture does not depend on it: the
-tutor consumes VEO's normalised semantic model, so the same code paths will
-serve licensed anatomy the day a manifest exists, without modification. What
-Gate 10 cannot claim — and does not — is that the tutor has ever explained a
-real anatomical structure.
+Gates 10, 11 and 12 proceeded because none of them depends on it: the tutor,
+the content generator and the recall engine all consume VEO's normalised
+semantic model, so the same code paths will serve licensed anatomy the day a
+manifest exists, without modification. What they cannot claim — and do not —
+is that any of them has ever handled a real anatomical structure.
+
+Gate 12 is the least affected of the three. A scheduler does not care what an
+item is about: the same engine that would schedule a question about the left
+ventricle schedules one about benzene, a crankshaft or a main-sequence star,
+and the aggregation rolls mastery up through semantic-id ancestry with nothing
+anatomical hard-coded. Unit tests exercise it across anatomy, chemistry,
+physics, engineering and astrophysics ids for exactly that reason.
+
+**A second, smaller external dependency now exists: a Supabase project.**
+Gate 12's data lives in PostgreSQL behind Supabase Auth. In a bare environment
+`/recall` says the learning schedule is not configured — the same thing every
+other persisted feature says, and the truth. This is not a blocker in the way
+anatomy is: the schema, its policies and the atomic scheduling function are all
+verified by execution against real PostgreSQL 16, so what is missing is a
+hosted instance, not code, and nothing needs to be written when one arrives.
 
 See **Blocked** above for the three routes, what each requires, and the
 bring-up procedure. Two of the three need no code at all.
