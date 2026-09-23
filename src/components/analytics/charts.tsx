@@ -123,6 +123,7 @@ export function TrendLine({ points, label, format, max, className }: TrendProps)
           className="h-32 w-full"
           role="img"
           aria-labelledby={titleId}
+          data-veo-chart="trend-line"
           onMouseLeave={() => setHover(null)}
         >
           <title id={titleId}>{label}</title>
@@ -245,6 +246,7 @@ export function TrendColumns({
           className="flex h-32 items-end gap-[2px]"
           role="img"
           aria-labelledby={titleId}
+          data-veo-chart="trend-columns"
           onMouseLeave={() => setHover(null)}
         >
           <span id={titleId} className="sr-only">{label}</span>

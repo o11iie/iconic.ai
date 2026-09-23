@@ -1,6 +1,6 @@
 # VEO — Build Status
 
-_Last updated: 2026-09-23_
+_Last updated: 2026-09-24_
 
 ---
 
@@ -10,7 +10,9 @@ _Last updated: 2026-09-23_
 
 ## Current gate
 
-**Gate 12 — Spaced Repetition, Recall Engine & Learning Memory → GREEN**
+**Gate 13 — Learning Intelligence, Analytics & Adaptive Study Insights → GREEN**
+
+**Gate 12 — Spaced Repetition, Recall Engine & Learning Memory → GREEN (no regression)**
 
 **Gate 11 — AI Questions, Flashcards & Learning Content → GREEN (no regression)**
 
@@ -35,6 +37,51 @@ _Last updated: 2026-09-23_
 > This is not an engineering blocker. Everything upstream of the content is
 > built and verified. What is missing is anatomy, and it cannot be written.
 
+### Gate 13 in one line
+
+VEO reports what a learner's own reviews show — and where they show nothing,
+it says so rather than filling the gap with a plausible number.
+
+**Gate 13 did not change Gate 9.** No anatomy was written, no fixture was
+promoted to a catalogue, and `/api/anatomy` still reports
+`configured: false, delivery: "none"` — checked by request during the browser
+run, not assumed. The knowledge map and every recommendation report
+`canViewInModel: false` because no model can be opened, and the 3D action is
+omitted rather than offered and broken.
+
+**Gate 14 was not started.** No billing, no plans, no entitlement gating, no
+collaboration, no import pipeline.
+
+#### What Gate 13 is
+
+An analytical layer over Gate 12's data. It adds no second learning database,
+no second scheduler and no second mastery formula: `itemMastery` and
+`structureMastery` remain Gate 12's, and Gate 13 contributes only banding,
+counting, period attribution and hierarchy rollup on top of what they return.
+
+- **Deterministic.** The engine is pure — no clock, no environment, no network,
+  no AI. The same snapshot and instant always produce the same figures, which
+  is what makes a learner's dashboard checkable and what lets the browser
+  assert values worked out by hand.
+- **Traceable.** Every number descends from persisted review events. An
+  impossible record is excluded *and counted*, so a real data problem stays
+  visible rather than being absorbed into a slightly smaller denominator.
+- **Explainable.** Every weak-area finding carries the evidence that produced
+  it — reviews, lapses, recall, mastery, days overdue. "VEO thinks you're weak
+  here" is not a finding.
+- **Honest about absence.** Where nothing has been measured the value is
+  `null`, never 0. A new account sees calls to action; it never sees "0%
+  retention", which is a measurement and a false one.
+
+#### What Gate 13 deliberately does NOT do
+
+- The AI does not produce, alter or influence any metric. No module under
+  `src/analytics` imports an AI provider, and nothing here calls a model.
+- A client cannot name the learner, the time, a date range, a row limit or an
+  ordering. It may name one thing: a period, from a closed set of four.
+- No recommendation offers an action VEO cannot perform, and none names
+  content the learner does not have.
+
 ### Gate 12 in one line
 
 VEO decides when each thing comes back, from what the learner actually did —
@@ -48,8 +95,11 @@ No geometry of any kind was introduced; a test fails if anything under
 primitive. The recall surface labels structures by their semantic ids and
 never invents a display name, because the name belongs to the loaded model.
 
-**Gate 13 was not started.** No billing, no plans, no entitlement gating, no
-collaboration, no import pipeline.
+**Gate 13 is now built on top of Gate 12 without altering its behaviour.** The
+scheduler, queue, mastery formula and streak rules are untouched; analytics
+reads them and adds nothing to them. One Gate 12 function was made faster —
+see the performance note below — with its behaviour unchanged and its full
+test suite still passing.
 
 #### What Gate 12 is
 
@@ -587,8 +637,8 @@ OpenAI, Stripe, OAuth providers.
 | --- | --- |
 | `npm run typecheck` | **PASS** — 0 errors |
 | `npm run lint` | **PASS** — 0 errors, 0 warnings |
-| `npm run test` | **PASS** — 942 passed / 942 total, 41 files |
-| `npm run build` | **PASS** — 28 routes |
+| `npm run test` | **PASS** — 1,077 passed / 1,077 total, 46 files |
+| `npm run build` | **PASS** — 37 routes |
 | `npm run validate:anatomy` | **PASS** — contract fixture valid |
 | `npm run test:anatomy` | **PASS** — 32 live provider checks |
 | `npm run test:spatial` | **PASS** — 164 live manipulation checks |
@@ -598,10 +648,45 @@ OpenAI, Stripe, OAuth providers.
 | `npm run test:tutor` | **PASS** — 89 live tutor checks |
 | `npm run test:learning` | **PASS** — 94 live content checks |
 | `npm run test:browser` | **PASS** — all seven, 629 checks, 0 failures |
-| `npm run verify:rls` | **PASS** — 37 checks on real PostgreSQL 16 |
+| `npm run verify:rls` | **PASS** — 46 checks on real PostgreSQL 16 |
 | `npm run test:recall` | **PASS** — 118 live recall checks, 6 viewports |
+| `npm run test:analytics` | **PASS** — 87 live analytics checks, 6 viewports |
+| `npm run measure:analytics` | **PASS** — 213ms worst case against a 250ms budget |
 
-Gate 12 added 259 unit tests, 37 database checks and 118 live browser checks.
+Gate 13 added 135 unit tests, 9 database checks and 87 live browser checks.
+
+### Gate 13's browser run asserts hand-computed values
+
+The reference learner is deterministic and shared between the unit tests and
+the browser harness, so both assert the same data:
+
+| Structure | Reviews | Recalled | Retention |
+| --- | --- | --- | --- |
+| A (a question) | 10 | 8 | 80% |
+| B (a flashcard) | 5 | 1 | 20% |
+| C | 0 | — | untouched |
+| **Total** | **15** | **9** | **60%** |
+
+`scripts/analytics-fixture.mjs` generates the harness's fixture by running the
+REAL engine over that learner, then checks its output against those constants
+before writing anything. If the engine stops producing 60% from 9 of 15, it
+refuses to emit a fixture rather than quietly moving the goalposts — a harness
+that reimplemented the calculation could be wrong in the same way as the code
+it tests, and both would agree.
+
+The browser then asserts the figures ON SCREEN equal those values: 60%
+retention, 15 reviews, a 10/5 question-flashcard split, 10 active days, 3
+structures tracked. Switching to the 7-day window must show its own 11 reviews
+and 55% — and a positive control asserts the two windows genuinely differ, so
+the check can fail.
+
+### Performance was measured, not asserted
+
+`npm run measure:analytics` runs the engine at 100, 1,000 and 10,000 events
+across three periods and exits non-zero above a 250ms budget. The first run
+was **10,253ms** at the largest scale. See "Issues found" below — the cause was
+`Intl.DateTimeFormat` construction, not a missing index, and no index was
+added.
 
 ### Gate 12 ran against a real database, not a mock
 
@@ -694,6 +779,105 @@ Honesty about coverage matters more here than anywhere else in this file.
   does not notify — otherwise every no-op selection would cost a render.
 
 ---
+
+## Issues found and fixed during Gate 13
+
+### 1. Analytics was 40x over its performance budget
+
+The first measured run took **10,253ms** at 10,000 events, and scaled
+superlinearly — 42ms at 100 events, 572ms at 1,000. Nothing about reading the
+code suggested it; the spec's instruction not to claim scalability without
+measuring it is the only reason it was found.
+
+Profiling rather than guessing located it: `localDate` constructed a fresh
+`Intl.DateTimeFormat` on every call, which measured **60x slower** than reusing
+one — 2,009ms against 33ms over 20,000 calls, with 98% of the cost in
+construction alone.
+
+It was invisible for the whole of Gate 12, because a learner has one streak and
+the function was called a few dozen times. It became dominant the moment
+analytics derived a local date for every review event across several passes.
+
+Memoised per timezone, bounded at 200 entries, with the invalid-zone fallback
+intact. Worst case is now **199ms**, a 51x improvement. All 38 Gate 12 streak
+tests still pass, DST cases included, and two regression tests cover the risks
+memoisation introduces: a cached formatter answering for the wrong timezone, or
+freezing the offset in force when it was built. Removing the cache puts the
+budget check back over at 10,898ms.
+
+**No index was added.** The bottleneck was arithmetic in the application, not
+the database, and an index would have been a fix aimed at the wrong layer.
+
+### 2. /analytics was briefly reachable signed out
+
+Adding Analytics to the primary navigation without adding it to
+`PROTECTED_PREFIXES`. Learning analytics are private data — mastery, review
+history, study time, streak — and the route had no auth gate for the length of
+one commit.
+
+Gate 2's navigation test caught it: it asserts that every personal surface is
+protected, and it failed the moment the nav item existed. Fixed by protecting
+the route, not by adjusting the test.
+
+### 3. Retention's `change` could never be reported
+
+`change` compared the last 20 reviews against everything earlier, which left
+the earlier half **empty below 21 reviews**. No ordinary learner ever received a
+comparison, and the minimum-sample guard beneath it was unreachable code.
+
+Found by mutation testing: weakening the guard changed nothing, because nothing
+reached it. Now split into halves by count, so both sides are equal by
+construction and the guard's only job is to require that they are big enough.
+
+### 4. Two strength tests passed for reasons unrelated to their names
+
+Both derived their inputs from the very constants they were testing —
+`ok(DETECTION.minReviewsForStrength - 1)` — so mutating a constant moved the
+test with it. And in both cases mastery, not the rule under test, was doing the
+rejecting: the assertions would have held with the rule deleted.
+
+Rewritten with literal counts and a state that clears every other bar, so each
+exercises exactly one rule. Both mutants are now caught.
+
+### 5. The viewport check measured a navigation icon
+
+The chart-height check selected `svg` by DOM order and measured the first one
+on the page — a 19px nav icon — reporting a collapsed chart at every width. The
+charts were fine; the harness was looking at the wrong element.
+
+Fixed with an explicit `data-veo-chart` hook rather than DOM position, and
+widened to assert every chart rather than one.
+
+### 6. An RLS check ran against an insert that had failed
+
+The analytics event insert omitted four NOT NULL columns and its error was
+swallowed by a redirect, so the check ran against an empty table. The positive
+control caught it — which is exactly what a positive control is for, and the
+second time in two gates it has earned its place.
+
+### Verified, not changed
+
+- **A raw store error escaping to the client** looked like an uncovered
+  mutation in the analytics boundary. It is inert: sanitisation lives one layer
+  up in Gate 12's `withLearner`. Breaking that layer directly was confirmed to
+  fail both suites.
+- **The mastery band FAIL from the colour validator** is the categorical-palette
+  check applied to a status palette. Status colours are reserved and are meant
+  to differ in lightness; the validator's own scope note says so. The three real
+  hues pass CVD separation, chroma and contrast, and every band ships with its
+  name in text so nothing is encoded by colour alone.
+- **Cyan and the strong-green sit at ΔE 12.1**, below the normal-vision floor.
+  Rather than re-step VEO's brand hue, they are never used as distinct series in
+  one chart: cyan is for single-series trends, green only for band indicators.
+
+### Mutation testing
+
+| Target | Mutants | Caught |
+| --- | --- | --- |
+| Metrics and periods | 10 | 10 (one after fixing a real design defect) |
+| Detection and recommendations | 10 | 10 (two after fixing self-defeating tests) |
+| Analytics security boundary | 6 | 5 outright; the 6th inert, with the real layer broken to confirm |
+| Performance guard | 1 | 1 |
 
 ## Issues found and fixed during Gate 12
 
@@ -1186,6 +1370,14 @@ ventricle schedules one about benzene, a crankshaft or a main-sequence star,
 and the aggregation rolls mastery up through semantic-id ancestry with nothing
 anatomical hard-coded. Unit tests exercise it across anatomy, chemistry,
 physics, engineering and astrophysics ids for exactly that reason.
+
+Gate 13 is unaffected by it entirely. Analytics describes a learner's review
+history, and a review is a review whether its subject is the left ventricle or
+a benzene ring. The knowledge map builds from semantic ids with nothing
+anatomical hard-coded, and unit tests exercise it across anatomy, chemistry,
+physics, engineering and astrophysics ids for exactly that reason. What Gate 13
+cannot do while Gate 9 is RED is open a structure in 3D — and it reports that
+honestly per node rather than offering an action that would fail.
 
 **A second, smaller external dependency now exists: a Supabase project.**
 Gate 12's data lives in PostgreSQL behind Supabase Auth. In a bare environment

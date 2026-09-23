@@ -29,8 +29,9 @@
     "test:learning": "node scripts/verify-learning.mjs",
     "test:recall": "node scripts/verify-recall.mjs",
     "verify:rls": "./scripts/verify-rls.sh",
-    "start:recall": "NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54330 NEXT_PUBLIC_SUPABASE_ANON_KEY=fixture-anon-key-not-a-real-credential node scripts/fixture-auth-server.mjs & NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54330 NEXT_PUBLIC_SUPABASE_ANON_KEY=fixture-anon-key-not-a-real-credential next start -p 3411 & sleep 8 && npm run test:recall; kill %1 %2",
-    "measure:analytics": "tsx scripts/measure-analytics.mjs"
+    "start:recall": "NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54330 NEXT_PUBLIC_SUPABASE_ANON_KEY=fixture-anon-key-not-a-real-credential node scripts/fixture-auth-server.mjs & NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54330 NEXT_PUBLIC_SUPABASE_ANON_KEY=fixture-anon-key-not-a-real-credential next start -p 3411 & sleep 8 && npm run test:recall && npm run test:analytics; kill %1 %2",
+    "measure:analytics": "tsx scripts/measure-analytics.mjs",
+    "test:analytics": "tsx scripts/analytics-fixture.mjs && node scripts/verify-analytics.mjs"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",

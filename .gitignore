@@ -52,3 +52,4 @@ yarn-error.log*
 
 # vercel
 .vercel
+.veo-analytics-fixture.json
