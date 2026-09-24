@@ -8,6 +8,7 @@ import {
   LearningPreferences,
   NotificationPreferences,
 } from '@/components/learning/SettingsSections';
+import { PlanSettings } from '@/components/billing/PlanSettings';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { ButtonLink } from '@/components/ui/Button';
@@ -109,6 +110,9 @@ export default async function SettingsPage() {
             </div>
           )}
         </Panel>
+
+        {/* What this account can do, before how it behaves. */}
+        <PlanSettings signedIn={Boolean(user)} />
 
         <LearningPreferences canPersist={capabilities.supabase} />
 

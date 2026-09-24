@@ -2,6 +2,7 @@ import 'server-only';
 
 import { NextResponse } from 'next/server';
 import { requireEntitlement } from '@/billing/server/gate';
+import { DENIAL_STATUS } from '@/billing/access';
 import { resolveModelGraph } from '../context/model-resolver';
 import { OpenAIClient } from '../providers/openai';
 import { stubEnabled, VerificationStubClient } from '../providers/verification-stub';
@@ -38,6 +39,12 @@ const STATUS_BY_CODE: Record<GenerationErrorCode, number> = {
   malformed_output: 502,
   no_usable_content: 422,
   rate_limited: 429,
+
+  // Taken from the billing module rather than repeated, so a status cannot
+  // mean one thing at the gate and another here.
+  unauthenticated: DENIAL_STATUS.unauthenticated,
+  plan_required: DENIAL_STATUS.plan_required,
+  quota_exhausted: DENIAL_STATUS.quota_exhausted,
 };
 
 function failure(code: GenerationErrorCode, message?: string) {

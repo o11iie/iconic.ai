@@ -4,7 +4,7 @@ import { useId, useState } from 'react';
 import type { ValidatedFlashcard, ValidatedQuestion } from '@/ai/learning/learning-types';
 import type { LearningContentState } from '@/hooks/useLearningContent';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { Button, ButtonLink } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { cn } from '@/lib/cn';
 import type { SemanticId } from '@/lib/semantic-id';
@@ -66,6 +66,17 @@ const SOURCE_BADGE: Record<
     title: 'The model does not carry enough to build reliable study material.',
   },
 };
+
+/**
+ * Whether a failure is the learner's plan rather than a fault.
+ *
+ * The codes come from `@/billing/access`; listed rather than imported because
+ * this is a client component and the billing server module is not reachable
+ * from one. A code that is not one of these is a genuine error.
+ */
+function isPlanRefusal(code: string | undefined): boolean {
+  return code === 'plan_required' || code === 'quota_exhausted' || code === 'unauthenticated';
+}
 
 export interface LearningContentPanelProps {
   readonly state: LearningContentState;
@@ -195,7 +206,41 @@ export function LearningContentPanel({
         />
       ) : null}
 
-      {state.status === 'error' ? (
+      {/*
+        A refusal by the learner's PLAN is not a failure, and must not be
+        dressed as one. "VEO couldn't generate that — try again" against a
+        spent allowance invites somebody to keep pressing a button that
+        cannot work, and reads as a fault in the product rather than a
+        boundary of their account.
+
+        So the two cases are separated, and each offers the remedy that
+        actually applies: wait, upgrade, or sign in.
+      */}
+      {state.status === 'error' && isPlanRefusal(state.error?.code) ? (
+        <LearningNotice
+          tone="warning"
+          title={
+            state.error?.code === 'quota_exhausted'
+              ? "That is today's free allowance"
+              : state.error?.code === 'unauthenticated'
+                ? 'Sign in to generate study material'
+                : 'Included on a paid plan'
+          }
+          body={state.error?.message ?? ''}
+          action={
+            <ButtonLink
+              href={state.error?.code === 'unauthenticated' ? '/login?next=/explore' : '/plans'}
+              size="sm"
+              variant="secondary"
+              data-veo-plan-refusal={state.error?.code}
+            >
+              {state.error?.code === 'unauthenticated' ? 'Sign in' : 'See plans'}
+            </ButtonLink>
+          }
+        />
+      ) : null}
+
+      {state.status === 'error' && !isPlanRefusal(state.error?.code) ? (
         <LearningNotice
           tone="danger"
           title="VEO couldn't generate that"

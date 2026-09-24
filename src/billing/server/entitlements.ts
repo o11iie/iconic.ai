@@ -286,3 +286,44 @@ export async function capabilityViews(
     };
   });
 }
+
+/**
+ * What every tier grants, from the one resolver that decides it.
+ *
+ * Built here so the plans page can show an accurate comparison without a
+ * second, hand-maintained list of features — and without importing the
+ * resolver into the browser, which the import rules forbid because everything
+ * under `lib/stripe` is treated as server-only.
+ */
+export function tierMatrix(): Record<PlanTier, EntitlementKey[]> {
+  const forTier = (tier: PlanTier): EntitlementKey[] => {
+    const subscription: Subscription | null =
+      tier === 'free'
+        ? null
+        : {
+            id: 'matrix' as UUID,
+            userId: 'matrix' as UUID,
+            tier,
+            status: 'active',
+            stripeCustomerId: null,
+            stripeSubscriptionId: null,
+            stripePriceId: null,
+            currentPeriodEnd: null,
+            cancelAtPeriodEnd: false,
+            metadata: {},
+            createdAt: '' as Subscription['createdAt'],
+            updatedAt: '' as Subscription['updatedAt'],
+          };
+
+    return resolveEntitlements(subscription)
+      .filter((entitlement) => entitlement.granted)
+      .map((entitlement) => entitlement.key);
+  };
+
+  return {
+    free: forTier('free'),
+    plus: forTier('plus'),
+    pro: forTier('pro'),
+    institution: forTier('institution'),
+  };
+}

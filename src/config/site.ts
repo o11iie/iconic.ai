@@ -77,6 +77,13 @@ export const APP_NAV: readonly NavItem[] = [
 /** Reachable from the account menu, not the primary rail. */
 export const SECONDARY_NAV: readonly NavItem[] = [
   {
+    href: '/plans',
+    label: 'Plans',
+    description: 'What your account includes.',
+    icon: 'card',
+    loopStages: [],
+  },
+  {
     href: '/settings',
     label: 'Settings',
     description: 'Account and preferences.',

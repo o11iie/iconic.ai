@@ -34,6 +34,8 @@ export const PROTECTED_PREFIXES = [
   // Learning analytics are private user data: mastery, review history, study
   // time, streak, recommendations. Nothing here is viewable signed out.
   '/analytics',
+  // A learner's plan and remaining allowances are equally private.
+  '/plans',
   '/library',
   '/settings',
   '/onboarding',

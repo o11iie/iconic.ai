@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { capabilityViews, resolveAccess } from '@/billing/server/entitlements';
+import { capabilityViews, resolveAccess, tierMatrix } from '@/billing/server/entitlements';
 import { DENIAL_STATUS } from '@/billing/access';
 import { serverCapabilities } from '@/config/env.server';
 
@@ -40,6 +40,15 @@ export async function GET() {
      * the same discipline Gate 9 applies to unavailable anatomy.
      */
     checkoutAvailable: serverCapabilities().stripe,
+    /*
+     * What each tier grants, computed by the SAME resolver that decides
+     * access. Sent rather than duplicated in the browser: a hand-written
+     * feature matrix is a second source of truth about the thing that gates
+     * the product, and it would be wrong within a release. The client also
+     * cannot import the resolver — it lives under `lib/stripe`, which the
+     * import rules treat as server-only.
+     */
+    tiers: tierMatrix(),
     // The learner's own timezone, so the UI can say when the allowance resets
     // in their day rather than the server's.
     timeZone: resolution.access.timeZone,

@@ -270,6 +270,18 @@ export const GENERATION_ERROR_CODES = [
   'malformed_output',
   'no_usable_content',
   'rate_limited',
+
+  /*
+   * Plan boundaries, from Gate 14's billing gate.
+   *
+   * These are NOT failures — the request was well formed and VEO understood
+   * it perfectly. They are the shape of the learner's account, and the UI has
+   * to tell them apart from a fault: "try again" against a spent allowance
+   * invites somebody to keep pressing a button that cannot work.
+   */
+  'unauthenticated',
+  'plan_required',
+  'quota_exhausted',
 ] as const;
 export type GenerationErrorCode = (typeof GENERATION_ERROR_CODES)[number];
 
@@ -297,6 +309,13 @@ export const GENERATION_ERROR_MESSAGES: Record<GenerationErrorCode, string> = {
   no_usable_content:
     'Nothing came back that VEO could stand behind, so it produced nothing rather than something unreliable.',
   rate_limited: 'Too many requests at once. Wait a moment and try again.',
+
+  // Mirrors `DENIAL_MESSAGES` in `@/billing/access`, which is the server's
+  // wording. Repeated rather than imported because that module is reachable
+  // from a client component and this one is the client-facing contract.
+  unauthenticated: 'Sign in to generate study material.',
+  plan_required: 'Generating this is part of a paid plan.',
+  quota_exhausted: "You have used today's free allowance. It resets tomorrow.",
 };
 
 export function generationFailure(
