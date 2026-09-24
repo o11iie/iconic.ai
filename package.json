@@ -24,17 +24,19 @@
     "test:anatomy": "node scripts/verify-anatomy.mjs",
     "test:browser": "npm run test:ui && npm run test:engine && npm run test:semantics && npm run test:spatial && npm run test:anatomy && npm run test:tutor && npm run test:learning",
     "verify:full": "VEO_TUTOR_STUB=1 npm run verify && npm run start:verify",
-    "start:verify": "VEO_TUTOR_STUB=1 next start -p 3410 & sleep 5 && npm run test:browser; kill %1",
+    "start:verify": "VEO_TUTOR_STUB=1 ./scripts/serve-verify.sh 3410 npm run test:browser",
     "test:tutor": "node scripts/verify-tutor.mjs",
     "test:learning": "node scripts/verify-learning.mjs",
     "test:recall": "node scripts/verify-recall.mjs",
     "verify:rls": "./scripts/verify-rls.sh",
-    "start:recall": "NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54330 NEXT_PUBLIC_SUPABASE_ANON_KEY=fixture-anon-key-not-a-real-credential node scripts/fixture-auth-server.mjs & NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54330 NEXT_PUBLIC_SUPABASE_ANON_KEY=fixture-anon-key-not-a-real-credential next start -p 3411 & sleep 8 && npm run test:recall && npm run test:analytics; kill %1 %2",
+    "start:recall": "VEO_TUTOR_STUB=1 VEO_FIXTURE_AUTH=1 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54330 NEXT_PUBLIC_SUPABASE_ANON_KEY=fixture-anon-key-not-a-real-credential ./scripts/serve-verify.sh 3411 npm run test:recall-and-analytics",
     "measure:analytics": "tsx scripts/measure-analytics.mjs",
     "test:analytics": "tsx scripts/analytics-fixture.mjs && node scripts/verify-analytics.mjs",
     "measure:entitlements": "tsx scripts/measure-entitlements.mjs",
     "test:billing": "node scripts/verify-billing.mjs",
-    "start:billing": "OPENAI_API_KEY=sk-placeholder-never-reaches-a-provider ./scripts/serve-verify.sh 3411 node scripts/verify-billing.mjs"
+    "start:billing": "VEO_FIXTURE_AUTH=1 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54330 NEXT_PUBLIC_SUPABASE_ANON_KEY=fixture-anon-key-not-a-real-credential OPENAI_API_KEY=sk-placeholder-never-reaches-a-provider ./scripts/serve-verify.sh 3411 node scripts/verify-billing.mjs",
+    "test:recall-and-analytics": "npm run test:recall && npm run test:analytics",
+    "mutate:billing": "node scripts/mutate-billing.mjs"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",

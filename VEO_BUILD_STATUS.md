@@ -10,7 +10,9 @@ _Last updated: 2026-09-24_
 
 ## Current gate
 
-**Gate 13 — Learning Intelligence, Analytics & Adaptive Study Insights → GREEN**
+**Gate 14 — Plans, Entitlements & Metered Access → GREEN**
+
+**Gate 13 — Learning Intelligence, Analytics & Adaptive Study Insights → GREEN (no regression)**
 
 **Gate 12 — Spaced Repetition, Recall Engine & Learning Memory → GREEN (no regression)**
 
@@ -49,8 +51,14 @@ run, not assumed. The knowledge map and every recommendation report
 `canViewInModel: false` because no model can be opened, and the 3D action is
 omitted rather than offered and broken.
 
-**Gate 14 was not started.** No billing, no plans, no entitlement gating, no
-collaboration, no import pipeline.
+**Gate 14 did not change Gate 9 either.** No anatomy was written, no fixture
+was promoted to a catalogue, and `/api/anatomy` still reports
+`configured: false, delivery: "none"` — checked by request after Gate 14's
+work landed, not assumed. Entitlements gate *access to capabilities*; they do
+not create content, and no amount of paying unlocks anatomy that does not
+exist.
+
+**Gate 15 was not started.** No collaboration, no import pipeline.
 
 #### What Gate 13 is
 
@@ -220,6 +228,49 @@ numbers wait for the model.
 ---
 
 ## Completed
+
+### Gate 14 — plans, entitlements and metered access
+
+| # | Requirement | Status | Evidence |
+| --- | --- | --- | --- |
+| 1 | Entitlements resolved server-side | GREEN | `resolveAccess` reads the subscription from the session; no client input |
+| 2 | One resolver, not a second | GREEN | Gate 1's `resolveEntitlements` is still the only tier→capability map |
+| 3 | Metered allowances | GREEN | `FREE_DAILY_LIMITS`; 10 flashcards, 5 uploads per day |
+| 4 | Usage counted atomically | GREEN | `consume_entitlement` in SQL; 4 of 10 concurrent callers permitted, counter exact |
+| 5 | Every gated action enforced | GREEN | 5 real routes refuse anonymously with 401, no interception |
+| 6 | Gate runs before work | GREEN | a malformed body still gets 401, not 400 |
+| 7 | Refusal explains itself | GREEN | browser: reason, remedy, and following it arrives |
+| 8 | Plans surface shows REAL state | GREEN | tier and remaining allowance from the server, not illustrative |
+| 9 | Settings agrees with plans | GREEN | same endpoint; browser asserts identical numbers |
+| 10 | Honest when unconfigured | GREEN | upgrade controls disabled, and the page says why |
+| 11 | Checkout signature-verified | GREEN | raw body, signature first, `veo_tier` from metadata |
+| 12 | No secret in the browser | GREEN | shipped bundles scanned; no Stripe or service-role key |
+| 13 | RLS on the usage table | GREEN | select-only policy; 10 database checks |
+| 14 | Client cannot grant itself a plan | GREEN | 4 database checks; the row stays free when read as owner |
+| 15 | Six viewports | GREEN | 360/390/430/768/1024/1440, no overflow, nothing clipped |
+| 16 | Gate 9 unchanged | GREEN | `/api/anatomy` still reports no licensed source |
+
+**The defect Gate 14 closed.** Before it, `/api/ai/tutor`, `/api/ai/questions`
+and `/api/ai/flashcards` had **no authentication of any kind**. Anyone who
+could reach the deployment could spend its OpenAI budget — without an account,
+without a limit, and without leaving a record of who did it. Gate 1's
+entitlement resolver was written to prevent exactly that and had never been
+called by a single line of production code. Section 11 of the browser run is
+the check that proves it now is, because it uses no interception at all.
+
+**Why the verification stub is exempt, and why that is not a bypass.**
+`stubEnabled()` is a literal `process.env.VEO_TUTOR_STUB` read, which Next
+inlines at BUILD time, so a production bundle built without it cannot be talked
+into stub mode by any later environment change — the branch is not in the
+bundle. It also refuses to activate whenever `OPENAI_API_KEY` is set. The
+exemption therefore grants access to canned strings, never to a paid provider
+or to anybody's data, and it is what keeps Gate 2's deliberately public
+`/explore` demonstration working. Confirmed by execution: with a provider key
+present, an anonymous POST to `/api/ai/tutor` is still 401.
+
+**The allowance is spent before the work runs.** A provider call that fails
+still cost money and still occupied the slot. Refunding on failure would hand
+anybody an unlimited allowance by way of a malformed request.
 
 ### Gate 11 — learning content
 
@@ -637,8 +688,8 @@ OpenAI, Stripe, OAuth providers.
 | --- | --- |
 | `npm run typecheck` | **PASS** — 0 errors |
 | `npm run lint` | **PASS** — 0 errors, 0 warnings |
-| `npm run test` | **PASS** — 1,077 passed / 1,077 total, 46 files |
-| `npm run build` | **PASS** — 37 routes |
+| `npm run test` | **PASS** — 1,130 passed / 1,130 total, 49 files |
+| `npm run build` | **PASS** — 41 routes |
 | `npm run validate:anatomy` | **PASS** — contract fixture valid |
 | `npm run test:anatomy` | **PASS** — 32 live provider checks |
 | `npm run test:spatial` | **PASS** — 164 live manipulation checks |
@@ -648,12 +699,43 @@ OpenAI, Stripe, OAuth providers.
 | `npm run test:tutor` | **PASS** — 89 live tutor checks |
 | `npm run test:learning` | **PASS** — 94 live content checks |
 | `npm run test:browser` | **PASS** — all seven, 629 checks, 0 failures |
-| `npm run verify:rls` | **PASS** — 46 checks on real PostgreSQL 16 |
+| `npm run verify:rls` | **PASS** — 67 checks on real PostgreSQL 16 |
 | `npm run test:recall` | **PASS** — 118 live recall checks, 6 viewports |
 | `npm run test:analytics` | **PASS** — 87 live analytics checks, 6 viewports |
+| `npm run test:billing` | **PASS** — 111 live entitlement checks, 6 viewports |
+| `npm run mutate:billing` | **PASS** — 12 of 12 mutants caught |
 | `npm run measure:analytics` | **PASS** — 213ms worst case against a 250ms budget |
+| `npm run measure:entitlements` | **PASS** — 0.0033ms worst case against a 1ms budget |
 
-Gate 13 added 135 unit tests, 9 database checks and 87 live browser checks.
+Gate 14 added 53 unit tests, 21 database checks, 12 mutants and 111 live
+browser checks. Total live browser coverage is now **945 checks** across
+Gates 2, 5, 6, 7, 8, 10, 11, 12, 13 and 14, all re-run green after Gate 14.
+
+### Gate 14's browser run proves enforcement, not decoration
+
+The harness is split deliberately. Sections 1–10 substitute `/api/billing/*`
+so a known account state can be asserted exactly — tier, remaining allowance,
+the exhausted case, the paid case. **Section 11 substitutes nothing.** Five
+real routes, through the real middleware, on a build where the stub is not
+exempt because a provider key is present:
+
+| Route | Anonymous |
+| --- | --- |
+| `GET /api/billing/status` | 401 `unauthenticated` |
+| `POST /api/billing/checkout` | 401 `unauthenticated` |
+| `POST /api/ai/tutor` | 401 `unauthenticated` |
+| `POST /api/ai/questions` | 401 `unauthenticated` |
+| `POST /api/ai/flashcards` | 401 `unauthenticated` |
+
+A malformed body is still 401 rather than 400, because the gate runs before
+parsing. The positive control confirms the same route signed in is **not**
+refused, so those 401s are a decision and not a constant.
+
+Section 12 then drives the workspace to a real refusal and follows the remedy
+to where it leads. The control is what makes it mean anything: a
+`provider_failed` response must offer a retry and **no** upgrade link, because
+upgrading would not fix it. Without that control, a panel that always said
+"See plans" would pass every other check.
 
 ### Gate 13's browser run asserts hand-computed values
 
@@ -760,6 +842,11 @@ Honesty about coverage matters more here than anywhere else in this file.
 
 ## Performance findings
 
+- **Entitlement decisions cost nothing worth optimising.** Measured at
+  **0.0033ms** worst case against a 1ms budget, over 2,000 iterations per case
+  including the full capability view the status route builds. The cost that
+  matters is the database round trip, not the decision — which is the right
+  shape: the decision is pure and the authority is in PostgreSQL.
 - **Device pixel ratio is the dominant cost.** A 3x display renders nine times
   the fragments of a 1x one. Capping at 2 (1.5 on devices reporting four or
   fewer cores) is the single highest-value renderer decision, and on low-memory
@@ -777,6 +864,111 @@ Honesty about coverage matters more here than anywhere else in this file.
 - **Snapshot stability matters.** `SceneController.getSnapshot` returns the
   same object until something changes, and re-selecting the current selection
   does not notify — otherwise every no-op selection would cost a render.
+
+---
+
+## Issues found and fixed during Gate 14
+
+### 1. The AI endpoints had no authentication at all
+
+Not a weak check — none. `/api/ai/tutor`, `/api/ai/questions` and
+`/api/ai/flashcards` accepted any request that reached the deployment and
+called a paid provider on its behalf. Unmetered, unattributable spend, open to
+the internet.
+
+It was found by asking what `resolveEntitlements` was for. Gate 1 had written
+a complete tier→capability resolver, with tests, and nothing had ever called
+it. A resolver nobody calls is a comment.
+
+### 2. The free tier silently meant "unlimited"
+
+`Entitlement.limit` had existed since Gate 1 and had always been `null`. The
+key names said what they were for — `material.upload` is free,
+`material.unlimited_uploads` is paid — so "unlimited" was the thing being
+sold, and it was already what everyone had. The paid tiers granted, in
+practice, nothing a free account did not already have.
+
+### 3. Counting in the application would have been wrong under concurrency
+
+The obvious implementation — read the counter, compare, write it back — loses
+races, and the loss is in the customer's favour in the worst way: ten
+simultaneous requests all read 9, all decide 9 < 10, and all proceed. The
+count moved into SQL as a single statement:
+
+```sql
+insert into public.entitlement_usage (...) values (..., 1)
+on conflict (user_id, entitlement_key, usage_date)
+  do update set used = public.entitlement_usage.used + 1
+  where public.entitlement_usage.used < p_limit
+returning used
+```
+
+The `where` on the `do update` is the whole mechanism: PostgreSQL evaluates it
+under the row lock it already holds, so the check and the increment cannot be
+separated. Proved by execution rather than argument — `verify-rls.sh` fires 10
+simultaneous callers at an allowance of 4 and asserts that **exactly** 4 are
+permitted and the counter reads 4, so nothing was lost and nothing was
+double-counted.
+
+### 4. A mutant escaped because the security tests mocked the thing under test
+
+`security.test.ts` mocked `consume`, so a mutation that broke the counter
+entirely — granting free usage forever — did not fail a single test. The tests
+were verifying the gate's plumbing while assuming away its decision.
+
+Fixed by writing `consume.test.ts` against the real function with only the
+database call substituted. The mutation harness is now
+`npm run mutate:billing`, 12 mutations covering the plan check, the quota
+check, the refusal status, the meter, an off-by-one on the last unit of an
+allowance, a negative usage count, failing open on a counter error, discarding
+the database's decision, and three ways of disabling the gate. All 12 are
+caught, and a mutation whose target text no longer exists is reported as a
+failure rather than skipped — a mutation that no longer applies is a mutation
+that is no longer testing anything.
+
+### 5. Two source scans tripped over the file's own prose
+
+Both scans searched for a dangerous pattern and found it — in the comment
+explaining why the code deliberately does **not** do that. A `codeOf()` helper
+now strips comments before scanning. Worth recording because the failure mode
+is silent in the other direction: a scan that reads comments can equally be
+satisfied by a comment.
+
+### 6. Fixed sleeps in the new harness, replaced with waits on conditions
+
+The first version of the billing harness waited 1500ms for the 3D workspace to
+mount. That passes on a fast run and fails on a slow one, and nobody can tell
+which they are looking at. It now waits on the conditions themselves — the
+engine handle existing, the selection landing, the control becoming enabled —
+and reports which step did not happen.
+
+### 7. `next start &` followed by `kill %1` does not stop the server
+
+This one made a verification lie. Next runs the server in a child process; the
+job-control kill reaps the parent and leaves the child holding the port. The
+next run then fails to bind, logs `EADDRINUSE` into a file nobody reads, and
+the health check succeeds — against the **stale** server. Two orphaned
+`next-server` processes were found still running.
+
+`scripts/serve-verify.sh` now refuses to start on an occupied port, kills by
+process group, and waits for the port to actually free. Every serve-and-verify
+script routes through it, so the flaw is fixed for all gates rather than only
+the new one.
+
+### 8. A harness depended on ambient environment it never declared
+
+`start:recall` needs `VEO_TUTOR_STUB=1` — Gate 12's flow drives generated
+content into the schedule, which needs the AI controls live. The script never
+set it, so it worked only in a shell that happened to have it exported. The
+regression run is what exposed it. It is now set in the script.
+
+### 9. The guard that stopped a weaker check passing quietly
+
+Section 11 asserts the server reports `configured: true` before testing that
+anonymous callers get 401. Without it, a server with no provider key would
+return 401 for a different reason, section 12's workflow would be unreachable,
+and the run would pass while proving something much weaker. It fired twice
+during development and was right both times.
 
 ---
 
@@ -1355,10 +1547,10 @@ engine rather than finding a defect:
 
 ## Next action
 
-**Supply a licensed anatomy source.** It remains the one outstanding external
-dependency, and Gate 9 stays RED until it arrives.
+**Supply a licensed anatomy source.** It remains the one outstanding *blocking*
+external dependency, and Gate 9 stays RED until it arrives.
 
-Gates 10, 11 and 12 proceeded because none of them depends on it: the tutor,
+Gates 10 through 14 proceeded because none of them depends on it: the tutor,
 the content generator and the recall engine all consume VEO's normalised
 semantic model, so the same code paths will serve licensed anatomy the day a
 manifest exists, without modification. What they cannot claim — and do not —
@@ -1371,9 +1563,23 @@ and the aggregation rolls mastery up through semantic-id ancestry with nothing
 anatomical hard-coded. Unit tests exercise it across anatomy, chemistry,
 physics, engineering and astrophysics ids for exactly that reason.
 
-Gate 13 is unaffected by it entirely. Analytics describes a learner's review
-history, and a review is a review whether its subject is the left ventricle or
-a benzene ring. The knowledge map builds from semantic ids with nothing
+Gate 14 is unaffected by it entirely, and is the most domain-agnostic layer
+yet: an entitlement is a commercial fact about an account, and it does not know
+or care what the account studies. The same gate that meters flashcards about
+the left ventricle meters flashcards about a benzene ring, a crankshaft or a
+main-sequence star. Nothing anatomical appears anywhere in `src/billing`.
+
+What Gate 14 adds to the external-dependency picture is a **third, optional**
+one: Stripe. It is not a blocker. Without `STRIPE_SECRET_KEY` the product
+resolves tiers, meters allowances and enforces them exactly as it does with it
+— the only thing that becomes unavailable is starting a checkout, and the plans
+page says so and disables the controls rather than offering a button that
+fails. Every free-tier learner gets the complete, correct experience with
+Stripe entirely absent.
+
+Gate 13 is unaffected by anatomy entirely. Analytics describes a learner's
+review history, and a review is a review whether its subject is the left
+ventricle or a benzene ring. The knowledge map builds from semantic ids with nothing
 anatomical hard-coded, and unit tests exercise it across anatomy, chemistry,
 physics, engineering and astrophysics ids for exactly that reason. What Gate 13
 cannot do while Gate 9 is RED is open a structure in 3D — and it reports that

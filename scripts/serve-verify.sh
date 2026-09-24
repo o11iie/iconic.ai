@@ -15,8 +15,17 @@ PORT="${1:?port required}"
 shift
 [ "$#" -gt 0 ] || { echo "a verify command is required" >&2; exit 2; }
 
-export NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL:-http://127.0.0.1:54330}"
-export NEXT_PUBLIC_SUPABASE_ANON_KEY="${NEXT_PUBLIC_SUPABASE_ANON_KEY:-fixture-anon-key-not-a-real-credential}"
+# Fixture auth is OPT-IN. Gates that were verified against the real Supabase
+# configuration must keep being verified against it, so this script never
+# quietly substitutes one environment for another.
+#
+# NOTE: NEXT_PUBLIC_* are inlined at BUILD time, so a run using fixture auth
+# needs a build made with these same values. Setting them here only covers the
+# server half.
+if [ "${VEO_FIXTURE_AUTH:-0}" = "1" ]; then
+  export NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL:-http://127.0.0.1:54330}"
+  export NEXT_PUBLIC_SUPABASE_ANON_KEY="${NEXT_PUBLIC_SUPABASE_ANON_KEY:-fixture-anon-key-not-a-real-credential}"
+fi
 
 PIDS=()
 
@@ -50,8 +59,10 @@ if port_busy; then
 fi
 
 # --- start ------------------------------------------------------------------
-setsid node scripts/fixture-auth-server.mjs > /dev/null 2>&1 &
-PIDS+=("$!")
+if [ "${VEO_FIXTURE_AUTH:-0}" = "1" ]; then
+  setsid node scripts/fixture-auth-server.mjs > /dev/null 2>&1 &
+  PIDS+=("$!")
+fi
 
 setsid npx next start -p "$PORT" > /tmp/veo-verify-$PORT.log 2>&1 &
 SERVER_PID=$!
