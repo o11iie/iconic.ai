@@ -27,6 +27,7 @@ const SUITE = [
   'src/billing/access.test.ts',
   'src/billing/server/consume.test.ts',
   'src/billing/server/security.test.ts',
+  'src/app/api/billing/webhook/route.test.ts',
 ];
 
 /**
@@ -105,6 +106,44 @@ const MUTANTS = [
     file: 'src/billing/server/gate.ts',
     from: '  if (stubEnabled()) return { ok: true, access: null };',
     to: '  if (true) return { ok: true, access: null };',
+  },
+
+  // --- the webhook: the one endpoint that can grant a paid plan ------------
+  {
+    name: 'the webhook trusts the body instead of verifying the signature',
+    file: 'src/app/api/billing/webhook/route.ts',
+    from: '    event = constructWebhookEvent(raw, signature);',
+    to: '    event = JSON.parse(raw) as Stripe.Event; // mutant: unverified',
+  },
+  {
+    name: 'the webhook proceeds without a signature header',
+    file: 'src/app/api/billing/webhook/route.ts',
+    from: "  if (!signature) {\n    return refuse(400, 'unsigned', 'Missing signature.');\n  }",
+    to: "  const _unused = signature; // mutant: no header required",
+  },
+  {
+    name: 'an unrecognised tier is granted rather than refused',
+    file: 'src/app/api/billing/webhook/route.ts',
+    from: "  return typeof raw === 'string' && (PLAN_TIERS as readonly string[]).includes(raw)\n    ? (raw as PlanTier)\n    : null;",
+    to: "  return (raw as PlanTier) ?? null; // mutant: any string is a tier",
+  },
+  {
+    name: 'an event with no VEO account attached still writes a row',
+    file: 'src/app/api/billing/webhook/route.ts',
+    from: "  if (!userId) {\n    return refuse(400, 'unattributable', 'No VEO account is attached to this event.');\n  }",
+    to: "  // mutant: anybody's event grants somebody a plan",
+  },
+  {
+    name: "the payload's own metadata is copied into VEO's row",
+    file: 'src/app/api/billing/webhook/route.ts',
+    from: '        metadata: {},',
+    to: '        metadata: metadata as Record<string, never>, // mutant: smuggling allowed',
+  },
+  {
+    name: 'an unhandled event type is processed as if it granted a plan',
+    file: 'src/app/api/billing/webhook/route.ts',
+    from: '  if (!HANDLED_EVENTS.has(event.type)) {',
+    to: '  if (false) {',
   },
 ];
 

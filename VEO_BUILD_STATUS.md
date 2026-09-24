@@ -688,7 +688,7 @@ OpenAI, Stripe, OAuth providers.
 | --- | --- |
 | `npm run typecheck` | **PASS** — 0 errors |
 | `npm run lint` | **PASS** — 0 errors, 0 warnings |
-| `npm run test` | **PASS** — 1,130 passed / 1,130 total, 49 files |
+| `npm run test` | **PASS** — 1,143 passed / 1,143 total, 50 files |
 | `npm run build` | **PASS** — 41 routes |
 | `npm run validate:anatomy` | **PASS** — contract fixture valid |
 | `npm run test:anatomy` | **PASS** — 32 live provider checks |
@@ -703,11 +703,11 @@ OpenAI, Stripe, OAuth providers.
 | `npm run test:recall` | **PASS** — 118 live recall checks, 6 viewports |
 | `npm run test:analytics` | **PASS** — 87 live analytics checks, 6 viewports |
 | `npm run test:billing` | **PASS** — 111 live entitlement checks, 6 viewports |
-| `npm run mutate:billing` | **PASS** — 12 of 12 mutants caught |
+| `npm run mutate:billing` | **PASS** — 18 of 18 mutants caught |
 | `npm run measure:analytics` | **PASS** — 213ms worst case against a 250ms budget |
 | `npm run measure:entitlements` | **PASS** — 0.0033ms worst case against a 1ms budget |
 
-Gate 14 added 53 unit tests, 21 database checks, 12 mutants and 111 live
+Gate 14 added 66 unit tests, 21 database checks, 18 mutants and 111 live
 browser checks. Total live browser coverage is now **945 checks** across
 Gates 2, 5, 6, 7, 8, 10, 11, 12, 13 and 14, all re-run green after Gate 14.
 
@@ -918,15 +918,49 @@ were verifying the gate's plumbing while assuming away its decision.
 
 Fixed by writing `consume.test.ts` against the real function with only the
 database call substituted. The mutation harness is now
-`npm run mutate:billing`, 12 mutations covering the plan check, the quota
+`npm run mutate:billing`, 18 mutations covering the plan check, the quota
 check, the refusal status, the meter, an off-by-one on the last unit of an
 allowance, a negative usage count, failing open on a counter error, discarding
-the database's decision, and three ways of disabling the gate. All 12 are
-caught, and a mutation whose target text no longer exists is reported as a
+the database's decision, and three ways of disabling the gate. All 18 are
+caught — including six against the webhook, among them replacing the
+signature check with a bare `JSON.parse` of the body. A mutation whose target
+text no longer exists is reported as a
 failure rather than skipped — a mutation that no longer applies is a mutation
 that is no longer testing anything.
 
-### 5. Two source scans tripped over the file's own prose
+### 5. The webhook was covered only by reading its source
+
+`security.test.ts` asserted the ORDER of operations by scanning
+`webhook/route.ts` — that `constructWebhookEvent` appears before
+`event.data.object`, that the route calls `request.text()` and not
+`request.json()`. That catches a reordering and nothing else. A source scan
+cannot distinguish a signature check that works from one that throws its result
+away, and this is the single endpoint in VEO that can grant a paid plan.
+
+`webhook/route.test.ts` now executes it, with real HMAC-SHA256 signatures
+computed the way Stripe computes them and verified by Stripe's own SDK. Only
+Supabase is substituted, so every refusal asserts that **nothing** reached the
+database:
+
+| Case | Result |
+| --- | --- |
+| Genuine signature | row upserted, `onConflict: user_id` |
+| Body tampered with after signing (free → institution) | 400, no write |
+| Signed with an attacker's own secret | 400, no write |
+| No signature header | 400, no write |
+| Replayed outside Stripe's tolerance window | 400, no write |
+| A tier VEO does not issue | 400, no write |
+| No VEO account attached | 400, no write |
+| Payload metadata trying to smuggle fields | written row's metadata is `{}` |
+| `customer.subscription.deleted` claiming `institution` | revoked to free |
+| Unhandled event type | 200, no write, so Stripe stops retrying |
+| Redelivery | same row, twice |
+
+The mutation harness then confirms those tests would notice: replacing
+`constructWebhookEvent(raw, signature)` with `JSON.parse(raw)` — trusting the
+body outright — is caught, as are five other ways of weakening the endpoint.
+
+### 6. Two source scans tripped over the file's own prose
 
 Both scans searched for a dangerous pattern and found it — in the comment
 explaining why the code deliberately does **not** do that. A `codeOf()` helper
@@ -934,7 +968,7 @@ now strips comments before scanning. Worth recording because the failure mode
 is silent in the other direction: a scan that reads comments can equally be
 satisfied by a comment.
 
-### 6. Fixed sleeps in the new harness, replaced with waits on conditions
+### 7. Fixed sleeps in the new harness, replaced with waits on conditions
 
 The first version of the billing harness waited 1500ms for the 3D workspace to
 mount. That passes on a fast run and fails on a slow one, and nobody can tell
@@ -942,7 +976,7 @@ which they are looking at. It now waits on the conditions themselves — the
 engine handle existing, the selection landing, the control becoming enabled —
 and reports which step did not happen.
 
-### 7. `next start &` followed by `kill %1` does not stop the server
+### 8. `next start &` followed by `kill %1` does not stop the server
 
 This one made a verification lie. Next runs the server in a child process; the
 job-control kill reaps the parent and leaves the child holding the port. The
@@ -955,14 +989,14 @@ process group, and waits for the port to actually free. Every serve-and-verify
 script routes through it, so the flaw is fixed for all gates rather than only
 the new one.
 
-### 8. A harness depended on ambient environment it never declared
+### 9. A harness depended on ambient environment it never declared
 
 `start:recall` needs `VEO_TUTOR_STUB=1` — Gate 12's flow drives generated
 content into the schedule, which needs the AI controls live. The script never
 set it, so it worked only in a shell that happened to have it exported. The
 regression run is what exposed it. It is now set in the script.
 
-### 9. The guard that stopped a weaker check passing quietly
+### 10. The guard that stopped a weaker check passing quietly
 
 Section 11 asserts the server reports `configured: true` before testing that
 anonymous callers get 401. Without it, a server with no provider key would
