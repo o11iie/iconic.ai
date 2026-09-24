@@ -134,6 +134,16 @@ SQL
 
 lastline() { tail -n 1; }
 
+# As the table owner, for seeding rows the client is deliberately unable to
+# write — exactly the path the Stripe webhook takes with the service role.
+sudo_sql() { psql -h "$HOST" -p "$PORT" -U postgres -d "$DB" -q -t -A 2>&1 <<SQL
+$1
+SQL
+}
+
+SCRATCH="$(mktemp -d)"
+trap 'rm -rf "$SCRATCH"' EXIT
+
 echo
 echo "=== 1. A LEARNER CAN SEE THEIR OWN DATA (positive control) ==="
 as "$ALICE" "
@@ -341,7 +351,130 @@ check "0" "$(as "$BOB" "select count(*) from public.review_states
   "guessing an item id does not expose its scheduling state"
 
 echo
-echo "=== 12. NEGATIVE CONTROL: THE CHECK CAN FAIL ==="
+echo "=== 12. A CLIENT CANNOT GRANT ITSELF A PLAN ==="
+# The single most valuable property of Gate 14. `subscriptions` has a select
+# policy and no write policy, so every one of these must fail.
+
+forged=$(as "$ALICE" "insert into public.subscriptions (user_id, tier, status)
+          values ('$ALICE','pro','active');" 2>&1 | grep -ci "row-level security\|denied\|violates")
+check "1" "$forged" "a learner cannot insert themselves a paid subscription"
+
+as "$ALICE" "insert into public.subscriptions (user_id, tier, status)
+  values ('$ALICE','free','active');" >/dev/null 2>&1
+# Seeded through the owner of the table instead, as the webhook would.
+sudo_sql "insert into public.subscriptions (user_id, tier, status)
+  values ('$ALICE','free','active') on conflict (user_id) do nothing;" >/dev/null
+
+# With no update policy, PostgreSQL does not raise — it filters the row out of
+# the statement, so the UPDATE succeeds against nothing. That is the correct
+# behaviour and it means the only sound assertion is on the DATA afterwards,
+# not on anything psql prints.
+as "$ALICE" "update public.subscriptions set tier = 'institution'
+  where user_id = '$ALICE';" >/dev/null 2>&1
+
+check "free" "$(as "$ALICE" "select tier from public.subscriptions
+                 where user_id='$ALICE';" | lastline)" \
+  "an attempt to upgrade their own row changes nothing"
+
+check "1" "$(sudo_sql "select count(*) from public.subscriptions
+              where user_id='$ALICE' and tier='free';" | lastline)" \
+  "and the row is still free when read as the table owner, not just to them"
+
+check "0" "$(as "$BOB" "select count(*) from public.subscriptions;" | lastline)" \
+  "another learner cannot read her subscription at all"
+
+echo
+echo "=== 13. METERED USAGE IS SERVER-OWNED ==="
+
+# A learner may READ their own usage, so the UI can show a real balance.
+sudo_sql "insert into public.entitlement_usage (user_id, entitlement_key, usage_date, used)
+  values ('$ALICE','ai.generate_flashcards', current_date, 3);" >/dev/null
+
+check "3" "$(as "$ALICE" "select used from public.entitlement_usage
+             where entitlement_key='ai.generate_flashcards';" | lastline)" \
+  "a learner can read their own usage"
+
+check "0" "$(as "$BOB" "select count(*) from public.entitlement_usage;" | lastline)" \
+  "but not anybody else's"
+
+# They may not write it. A browser that could zero this has an unlimited plan.
+as "$ALICE" "update public.entitlement_usage set used = 0
+  where user_id='$ALICE';" >/dev/null 2>&1
+check "3" "$(sudo_sql "select used from public.entitlement_usage
+              where user_id='$ALICE'
+                and entitlement_key='ai.generate_flashcards';" | lastline)" \
+  "an attempt to zero their own usage changes nothing"
+
+as "$ALICE" "delete from public.entitlement_usage where user_id='$ALICE';" >/dev/null 2>&1
+check "1" "$(sudo_sql "select count(*) from public.entitlement_usage
+              where user_id='$ALICE';" | lastline)" \
+  "nor does deleting the row, which would have the same effect"
+
+forged_usage=$(as "$ALICE" "insert into public.entitlement_usage
+                (user_id, entitlement_key, usage_date, used)
+                values ('$BOB','ai.generate_flashcards', current_date, 999);" 2>&1 \
+               | grep -ci "row-level security\|denied")
+check "1" "$forged_usage" "nor lock another learner out by filling their quota"
+
+check "3" "$(as "$ALICE" "select used from public.entitlement_usage
+             where entitlement_key='ai.generate_flashcards';" | lastline)" \
+  "usage is unchanged after every attempt"
+
+echo
+echo "=== 14. THE ALLOWANCE CANNOT BE OVERSPENT ==="
+# Read-then-write in the application cannot enforce a limit: two requests that
+# both read used=9 against a limit of 10 both proceed. These prove the database
+# refuses the eleventh caller itself.
+
+sudo_sql "delete from public.entitlement_usage where user_id='$ALICE';" >/dev/null
+
+spend() {
+  as "$ALICE" "select allowed from public.consume_entitlement('ai.generate_flashcards', current_date, 3);" | lastline
+}
+
+check "t" "$(spend)" "the first call within the allowance is permitted"
+check "t" "$(spend)" "and the second"
+check "t" "$(spend)" "and the third, which exhausts it"
+check "f" "$(spend)" "the fourth is refused"
+check "f" "$(spend)" "and stays refused"
+
+check "3" "$(as "$ALICE" "select used from public.entitlement_usage
+             where entitlement_key='ai.generate_flashcards'
+               and usage_date = current_date;" | lastline)" \
+  "a refused call did NOT increment the counter"
+
+# Concurrency: ten simultaneous callers against an allowance of four.
+sudo_sql "delete from public.entitlement_usage where user_id='$ALICE';" >/dev/null
+
+for i in $(seq 1 10); do
+  as "$ALICE" "select allowed from public.consume_entitlement('ai.tutor', current_date, 4);" \
+    > "$SCRATCH/spend-$i.out" 2>&1 &
+done
+wait
+
+granted=$(cat "$SCRATCH"/spend-*.out | grep -c '^ *t *$')
+check "4" "$granted" "exactly 4 of 10 simultaneous callers were permitted"
+check "4" "$(as "$ALICE" "select used from public.entitlement_usage
+             where entitlement_key='ai.tutor' and usage_date = current_date;" | lastline)" \
+  "and the counter matches, so nothing was lost or double-counted"
+
+# An unmetered capability is recorded but never refused.
+sudo_sql "delete from public.entitlement_usage where user_id='$ALICE';" >/dev/null
+for i in 1 2 3 4 5; do
+  as "$ALICE" "select allowed from public.consume_entitlement('ai.tutor', current_date, null);" >/dev/null
+done
+check "5" "$(as "$ALICE" "select used from public.entitlement_usage
+             where entitlement_key='ai.tutor';" | lastline)" \
+  "an unmetered capability still records usage"
+
+# The function establishes identity itself; it takes no user id to forge.
+args=$(sudo_sql "select count(*) from information_schema.parameters
+        where specific_name like 'consume_entitlement%'
+          and parameter_name ilike '%user%';" | lastline)
+check "0" "$args" "consume_entitlement takes no user id argument to forge"
+
+echo
+echo "=== 15. NEGATIVE CONTROL: THE CHECK CAN FAIL ==="
 # Without this, every assertion above could be passing because the harness is
 # broken rather than because the policies work.
 $PSQL -d "$DB" -c "create table if not exists public.rls_control (user_id uuid, note text);

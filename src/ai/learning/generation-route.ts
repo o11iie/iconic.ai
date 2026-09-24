@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { NextResponse } from 'next/server';
+import { requireEntitlement } from '@/billing/server/gate';
 import { resolveModelGraph } from '../context/model-resolver';
 import { OpenAIClient } from '../providers/openai';
 import { stubEnabled, VerificationStubClient } from '../providers/verification-stub';
@@ -52,6 +53,17 @@ function contentClient() {
 }
 
 export async function handleGeneration(request: Request, contentType: ContentType) {
+  /*
+   * The route decides which entitlement applies, from the content type it was
+   * constructed with — never from the body. A request to the questions
+   * endpoint cannot spend a flashcard allowance by claiming to be a flashcard,
+   * for the same reason it cannot return flashcards.
+   */
+  const gate = await requireEntitlement(
+    contentType === 'flashcard' ? 'ai.generate_flashcards' : 'ai.generate_questions',
+  );
+  if (!gate.ok) return gate.failure.response;
+
   let payload: unknown;
   try {
     payload = await request.json();

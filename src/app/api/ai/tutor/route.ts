@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireEntitlement } from '@/billing/server/gate';
 import { z } from 'zod';
 import { resolveModelGraph } from '@/ai/context/model-resolver';
 import type { SceneStateView } from '@/ai/context/spatial-context';
@@ -76,6 +77,17 @@ function failure(code: TutorErrorCode, message?: string) {
 }
 
 export async function POST(request: Request) {
+  /*
+   * Entitlement first, before the body is even parsed.
+   *
+   * Two reasons for the ordering. A learner who cannot use the tutor should be
+   * told that rather than told their request was malformed, and refusing
+   * before any work happens means a flood of requests from an unentitled
+   * caller costs a subscription lookup rather than a provider call.
+   */
+  const gate = await requireEntitlement('ai.tutor');
+  if (!gate.ok) return gate.failure.response;
+
   let payload: unknown;
   try {
     payload = await request.json();
