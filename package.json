@@ -37,7 +37,12 @@
     "start:billing": "VEO_FIXTURE_AUTH=1 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54330 NEXT_PUBLIC_SUPABASE_ANON_KEY=fixture-anon-key-not-a-real-credential OPENAI_API_KEY=sk-placeholder-never-reaches-a-provider ./scripts/serve-verify.sh 3411 node scripts/verify-billing.mjs",
     "test:recall-and-analytics": "npm run test:recall && npm run test:analytics",
     "mutate:billing": "node scripts/mutate-billing.mjs",
-    "test:gates": "VEO_BASE_URL=http://127.0.0.1:3410 npm run test:browser && VEO_BASE_URL=http://127.0.0.1:3410 npm run test:recall-and-analytics"
+    "test:gates": "VEO_BASE_URL=http://127.0.0.1:3410 npm run test:browser && VEO_BASE_URL=http://127.0.0.1:3410 npm run test:recall-and-analytics",
+    "audit:config": "tsx scripts/audit-config.mjs",
+    "test:account": "node scripts/verify-account.mjs",
+    "start:account": "VEO_FIXTURE_AUTH=1 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54330 NEXT_PUBLIC_SUPABASE_ANON_KEY=fixture-anon-key-not-a-real-credential ./scripts/serve-verify.sh 3411 node scripts/verify-account.mjs",
+    "mutate:account": "node scripts/mutate-account.mjs",
+    "mutate:rls": "node scripts/mutate-rls.mjs"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",
