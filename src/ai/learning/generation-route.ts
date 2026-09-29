@@ -3,6 +3,8 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { requireEntitlement } from '@/billing/server/gate';
 import { DENIAL_STATUS } from '@/billing/access';
+import { rateLimit } from '@/security/rate-limit';
+import { correlationId, withRequestId } from '@/observability/log';
 import { resolveModelGraph } from '../context/model-resolver';
 import { OpenAIClient } from '../providers/openai';
 import { stubEnabled, VerificationStubClient } from '../providers/verification-stub';
@@ -60,6 +62,18 @@ function contentClient() {
 }
 
 export async function handleGeneration(request: Request, contentType: ContentType) {
+  return withRequestId(correlationId(request), () => generate(request, contentType));
+}
+
+async function generate(request: Request, contentType: ContentType) {
+  /*
+   * Abuse control before the allowance lookup: the limit bounds how often
+   * that lookup runs. A learner who clicks twice is rate limited, never told
+   * they are out of allowance — see `src/security/rate-limit.ts`.
+   */
+  const limited = await rateLimit(request, 'ai.generate');
+  if (limited) return limited;
+
   /*
    * The route decides which entitlement applies, from the content type it was
    * constructed with — never from the body. A request to the questions

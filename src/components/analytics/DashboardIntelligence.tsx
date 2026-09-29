@@ -28,6 +28,39 @@ type Phase =
   | { readonly kind: 'unavailable' }
   | { readonly kind: 'ready'; readonly overview: AnalyticsOverview };
 
+/**
+ * What a learner is told when their progress cannot be read.
+ *
+ * Deliberately one quiet line rather than an error panel. Home exists to get
+ * somebody reviewing, and an outage banner across the top of it would be both
+ * alarming and useless — the rest of the page still works.
+ *
+ * But it is not nothing, which is what this used to render. A section that
+ * silently disappears leaves the learner unable to tell a VEO outage from
+ * having studied nothing, and it makes the page LOOK complete while a part of
+ * it failed. That is the same fabrication as showing a zero: the honest
+ * version says which it is, and offers the one action that can help.
+ */
+function ProgressUnavailable() {
+  return (
+    <p
+      className="flex items-center gap-2 rounded-lg border border-hairline bg-surface-raised px-3 py-2.5 text-xs text-ink-muted"
+      role="status"
+      data-veo-progress-unavailable
+    >
+      <Icon name="alert" size={14} className="shrink-0 text-ink-faint" />
+      <span>
+        VEO could not reach your learning record, so your progress is not shown here.
+        Nothing has been lost —{' '}
+        <Link href="/recall" className="text-cyan underline-offset-2 hover:underline">
+          try again from Recall
+        </Link>
+        .
+      </span>
+    </p>
+  );
+}
+
 export function DashboardIntelligence() {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
 
@@ -44,9 +77,8 @@ export function DashboardIntelligence() {
 
         if (!current) return;
 
-        // Home is not the place to explain an outage. If analytics cannot be
-        // read, the rest of the dashboard still works and this section simply
-        // does not claim anything.
+        // Read but not claimed: an unreadable record produces the quiet
+        // notice above, never an empty space that reads as "no progress yet".
         if (!response.ok || !body.ok) {
           setPhase({ kind: 'unavailable' });
           return;
@@ -67,7 +99,7 @@ export function DashboardIntelligence() {
     return <LoadingState label="Loading your progress" />;
   }
 
-  if (phase.kind === 'unavailable') return null;
+  if (phase.kind === 'unavailable') return <ProgressUnavailable />;
 
   const { overview } = phase;
 

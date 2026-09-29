@@ -1,4 +1,6 @@
 import 'server-only';
+import { rateLimit } from '@/security/rate-limit';
+import { correlationId, withRequestId } from '@/observability/log';
 
 import type { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -76,6 +78,24 @@ export function queryFor(period: AnalyticsPeriod, now: Date) {
  * two chances for the same learner to be described differently on two screens.
  */
 export async function withAnalytics<T>(
+  request: Request,
+  project: (result: AnalyticsResult, period: AnalyticsPeriod) => T,
+): Promise<NextResponse> {
+  return withRequestId(correlationId(request), async () => {
+    /*
+     * One limit for the whole analytics surface, applied here rather than in
+     * each of the eight routes: a per-route limit would let a caller take
+     * eight times the budget by rotating endpoints, since every one of them
+     * runs the same aggregations over the same history.
+     */
+    const limited = await rateLimit(request, 'analytics.read');
+    if (limited) return limited;
+
+    return analytics(request, project);
+  });
+}
+
+async function analytics<T>(
   request: Request,
   project: (result: AnalyticsResult, period: AnalyticsPeriod) => T,
 ): Promise<NextResponse> {

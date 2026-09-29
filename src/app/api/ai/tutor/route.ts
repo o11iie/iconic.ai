@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireEntitlement } from '@/billing/server/gate';
+import { rateLimit } from '@/security/rate-limit';
+import { correlationId, withRequestId } from '@/observability/log';
 import { z } from 'zod';
 import { resolveModelGraph } from '@/ai/context/model-resolver';
 import type { SceneStateView } from '@/ai/context/spatial-context';
@@ -77,8 +79,20 @@ function failure(code: TutorErrorCode, message?: string) {
 }
 
 export async function POST(request: Request) {
+  return withRequestId(correlationId(request), () => tutorTurn(request));
+}
+
+async function tutorTurn(request: Request) {
   /*
-   * Entitlement first, before the body is even parsed.
+   * Rate limit before the entitlement lookup, because the limit is what
+   * bounds how often that lookup runs. Abuse control, not an allowance: see
+   * `src/security/rate-limit.ts` for why the two stay separate.
+   */
+  const limited = await rateLimit(request, 'ai.tutor');
+  if (limited) return limited;
+
+  /*
+   * Entitlement next, before the body is even parsed.
    *
    * Two reasons for the ordering. A learner who cannot use the tutor should be
    * told that rather than told their request was malformed, and refusing

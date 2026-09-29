@@ -12,13 +12,19 @@
  * Usage: node scripts/verify-ui.mjs [baseUrl]
  */
 import { chromium } from 'playwright';
+import { authCookie } from './fixture-auth-server.mjs';
 
 const BASE = process.argv[2] ?? process.env.VEO_BASE_URL ?? 'http://127.0.0.1:3410';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54330';
 
 const ROUTES = [
-  { path: '/', name: 'Landing', heading: /Learning you can see/i },
-  { path: '/login', name: 'Login', heading: /Sign in to VEO/i },
-  { path: '/signup', name: 'Signup', heading: /Create your VEO account/i },
+  // `anon` marks a route that must be visited SIGNED OUT. /login and /signup
+  // redirect an authenticated visitor to the dashboard — correct product
+  // behaviour, asserted in section 7 — so visiting them signed in would test
+  // the redirect rather than the page.
+  { path: '/', name: 'Landing', heading: /Learning you can see/i, anon: true },
+  { path: '/login', name: 'Login', heading: /Sign in to VEO/i, anon: true },
+  { path: '/signup', name: 'Signup', heading: /Create your VEO account/i, anon: true },
   { path: '/forgot-password', name: 'Forgot password', heading: /Reset your password/i },
   { path: '/reset-password', name: 'Reset password', heading: /Set a new password/i },
   { path: '/onboarding', name: 'Onboarding', heading: /What should we call you/i },
@@ -46,7 +52,26 @@ const IGNORED = [
   /Download the React DevTools/i,
   /\[Fast Refresh\]/i,
   /favicon\.ico/i,
+  /fixture-auth-server implements auth only/i,
+  /*
+   * The fixture provides AUTHENTICATION and deliberately no database, so the
+   * learning and analytics routes correctly answer 503 "could not reach your
+   * learning record". The browser logs a generic line for any failed fetch,
+   * which is not an application error.
+   *
+   * This ignore is not a blanket one: `EXPECTED_UNAVAILABLE` below lists the
+   * only endpoints allowed to 503, every failed response is checked against
+   * it, and section 8 asserts the pages SAY so rather than showing zeros. A
+   * 503 from anywhere else still fails the run.
+   */
+  /Failed to load resource: the server responded with a status of 503/i,
 ];
+
+/**
+ * The endpoints that may answer 503 in this environment, because they need the
+ * database the fixture does not provide.
+ */
+const EXPECTED_UNAVAILABLE = [/\/api\/learning\//, /\/api\/analytics\//];
 
 const results = { pass: 0, fail: 0, problems: [] };
 
@@ -70,7 +95,38 @@ function attachConsoleCapture(page) {
     errors.push(text);
   });
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
+
+  // Any failing response from an endpoint NOT on the expected list is a real
+  // error, and is recorded here rather than being swallowed by the ignore
+  // above.
+  page.on('response', (response) => {
+    if (response.status() < 400) return;
+    const url = response.url();
+    if (EXPECTED_UNAVAILABLE.some((pattern) => pattern.test(url))) return;
+    errors.push(`unexpected ${response.status()} from ${url}`);
+  });
+
   return errors;
+}
+
+/**
+ * A browser context, optionally carrying a session.
+ *
+ * Gate 2's shell used to be verified signed OUT, which worked only because a
+ * deployment with no Supabase left protected routes reachable. Gate 15 closed
+ * that, and the shell is now verified as an authenticated learner — which is
+ * the path a real user takes, so this is a stronger check than the one it
+ * replaces, not a workaround for it.
+ */
+async function contextFor(browser, viewport, { signedIn = true } = {}) {
+  const context = await browser.newContext({ viewport });
+  if (signedIn) {
+    const cookie = authCookie(SUPABASE_URL);
+    await context.addCookies([
+      { name: cookie.name, value: cookie.value, url: BASE, httpOnly: false, sameSite: 'Lax' },
+    ]);
+  }
+  return context;
 }
 
 const browser = await chromium.launch({
@@ -81,8 +137,12 @@ try {
   // ---------------------------------------------------------------- routes --
   console.log('\n=== 1. ROUTES RENDER, NO CONSOLE ERRORS ===');
   {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     for (const route of ROUTES) {
+      const context = await contextFor(
+        browser,
+        { width: 1440, height: 900 },
+        { signedIn: !route.anon },
+      );
       const page = await context.newPage();
       const errors = attachConsoleCapture(page);
 
@@ -103,8 +163,8 @@ try {
       check(errors.length === 0, `${route.name} logs no console errors`, errors.join(' | '));
 
       await page.close();
+      await context.close();
     }
-    await context.close();
   }
 
   // ------------------------------------------------------------ breakpoints --
@@ -112,8 +172,9 @@ try {
   {
     const responsiveRoutes = ['/', '/dashboard', '/explore', '/learn', '/settings'];
     for (const breakpoint of BREAKPOINTS) {
-      const context = await browser.newContext({
-        viewport: { width: breakpoint.width, height: breakpoint.height },
+      const context = await contextFor(browser, {
+        width: breakpoint.width,
+        height: breakpoint.height,
       });
       const page = await context.newPage();
 
@@ -148,8 +209,9 @@ try {
   console.log('\n=== 3. 3D VIEWPORT IS VISUALLY DOMINANT ===');
   {
     for (const breakpoint of [BREAKPOINTS[0], BREAKPOINTS[3], BREAKPOINTS[5]]) {
-      const context = await browser.newContext({
-        viewport: { width: breakpoint.width, height: breakpoint.height },
+      const context = await contextFor(browser, {
+        width: breakpoint.width,
+        height: breakpoint.height,
       });
       const page = await context.newPage();
       await page.goto(`${BASE}/explore`, { waitUntil: 'networkidle' });
@@ -196,7 +258,7 @@ try {
   // ------------------------------------------------------------ navigation --
   console.log('\n=== 4. NAVIGATION ===');
   {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const context = await contextFor(browser, { width: 1440, height: 900 });
     const page = await context.newPage();
     const errors = attachConsoleCapture(page);
 
@@ -228,7 +290,7 @@ try {
   // --------------------------------------------------------- accessibility --
   console.log('\n=== 5. ACCESSIBILITY BASELINE ===');
   {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const context = await contextFor(browser, { width: 1440, height: 900 });
     const page = await context.newPage();
 
     for (const path of ['/dashboard', '/explore']) {
@@ -286,7 +348,7 @@ try {
   // ------------------------------------------------------ honest 3D state ---
   console.log('\n=== 6. NO FABRICATED CONTENT ===');
   {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const context = await contextFor(browser, { width: 1440, height: 900 });
     const page = await context.newPage();
 
     await page.goto(`${BASE}/explore`, { waitUntil: 'networkidle' });
@@ -310,6 +372,84 @@ try {
       /Awaiting licensed assets/i.test(learnText),
       'Learn marks anatomy categories as awaiting licensed assets',
     );
+
+    await page.close();
+    await context.close();
+  }
+
+  // ------------------------------------------------------ session routing ---
+  console.log('\n=== 7. ROUTING FOLLOWS THE SESSION ===');
+  {
+    // Signed in, the sign-in screens are not somewhere to be.
+    const signedIn = await contextFor(browser, { width: 1440, height: 900 });
+    const page = await signedIn.newPage();
+
+    for (const path of ['/login', '/signup']) {
+      await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
+      check(
+        new URL(page.url()).pathname === '/dashboard',
+        `signed in, ${path} redirects to the dashboard`,
+        page.url(),
+      );
+    }
+    await page.close();
+    await signedIn.close();
+
+    // Signed out, every protected route sends them to sign in and remembers
+    // where they were going.
+    const anon = await contextFor(browser, { width: 1440, height: 900 }, { signedIn: false });
+    const anonPage = await anon.newPage();
+
+    for (const path of ['/dashboard', '/learn', '/recall', '/library', '/settings', '/analytics', '/plans', '/onboarding']) {
+      await anonPage.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
+      const url = new URL(anonPage.url());
+      check(url.pathname === '/login', `signed out, ${path} redirects to sign in`, anonPage.url());
+      check(
+        url.searchParams.get('next') === path,
+        `signed out, ${path} is remembered for after sign-in`,
+        url.search,
+      );
+    }
+
+    // And /explore stays open: Gate 2's deliberate product demonstration.
+    const explore = await anonPage.goto(`${BASE}/explore`, { waitUntil: 'networkidle' });
+    check(
+      new URL(anonPage.url()).pathname === '/explore' && (explore?.status() ?? 0) === 200,
+      'signed out, /explore remains reachable',
+      anonPage.url(),
+    );
+
+    await anonPage.close();
+    await anon.close();
+  }
+
+  // ------------------------------------------- honest about missing data ---
+  console.log('\n=== 8. AN UNREACHABLE RECORD IS SAID, NOT INVENTED ===');
+  {
+    /*
+     * This environment has authentication and no database on purpose. A
+     * learner in that situation must be TOLD their record is unreachable.
+     * Showing a zero would be indistinguishable, to them, from having studied
+     * nothing — which is the fabrication Gate 2 exists to forbid.
+     */
+    const context = await contextFor(browser, { width: 1440, height: 900 });
+    const page = await context.newPage();
+
+    for (const [path, label] of [['/dashboard', 'Home'], ['/recall', 'Recall']]) {
+      await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(800);
+      const body = await page.locator('body').innerText();
+
+      check(
+        /could not reach|not configured|unavailable|couldn't reach/i.test(body),
+        `${label} says the learning record is unreachable`,
+        body.slice(0, 160).replace(/\n/g, ' '),
+      );
+      check(
+        !/\b\d+\s*day streak\b|\b\d+%\s*(retention|mastered|accuracy)/i.test(body),
+        `${label} invents no statistics while the record is unreachable`,
+      );
+    }
 
     await page.close();
     await context.close();

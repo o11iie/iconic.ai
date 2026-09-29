@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { rateLimit } from '@/security/rate-limit';
+import { correlationId, withRequestId } from '@/observability/log';
 import { z } from 'zod';
 import { PLAN_TIERS } from '@/types/domain/billing';
 import { resolveAccess } from '@/billing/server/entitlements';
@@ -30,6 +32,13 @@ const bodySchema = z
   .strict();
 
 export async function POST(request: Request) {
+  return withRequestId(correlationId(request), () => startCheckout(request));
+}
+
+async function startCheckout(request: Request) {
+  const limited = await rateLimit(request, 'billing.checkout');
+  if (limited) return limited;
+
   // Identity first: an unauthenticated caller has no account to attach a
   // subscription to, and should be told to sign in rather than shown a
   // payment form.

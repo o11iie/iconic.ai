@@ -51,3 +51,34 @@ export function constructWebhookEvent(payload: string, signature: string): Strip
 
   return getStripeClient().webhooks.constructEvent(payload, signature, secret);
 }
+
+/**
+ * Cancel a subscription at Stripe, immediately.
+ *
+ * Returns whether it is now cancelled. Used by account deletion, where the
+ * answer decides whether the deletion may proceed at all — so a failure is
+ * reported rather than thrown: the caller must be able to refuse cleanly
+ * instead of leaving a half-deleted account behind.
+ *
+ * A subscription Stripe says is already cancelled counts as success, because
+ * the postcondition the caller needs — "nobody is being billed for this" —
+ * holds either way. Retrying a cancel is a normal thing to happen.
+ */
+export async function cancelSubscriptionAtStripe(subscriptionId: string): Promise<boolean> {
+  if (!isStripeConfigured()) return false;
+
+  try {
+    const subscription = await getStripeClient().subscriptions.cancel(subscriptionId);
+    return subscription.status === 'canceled';
+  } catch (error) {
+    // The message is not returned to the caller: a Stripe error can name the
+    // account, the key prefix, or the reason a key was rejected.
+    const code = error instanceof Error ? error.name : 'unknown';
+    if (code === 'StripeInvalidRequestError') {
+      // Most commonly "no such subscription" — already gone, so the
+      // postcondition holds.
+      return true;
+    }
+    return false;
+  }
+}

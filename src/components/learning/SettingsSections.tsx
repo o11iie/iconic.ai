@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Icon, type IconName } from '@/components/ui/Icon';
-import { Modal } from '@/components/ui/Overlay';
 import { Panel } from '@/components/ui/Panel';
 import { Segmented } from '@/components/ui/Tabs';
 import { NotConfiguredState } from '@/components/ui/states';
@@ -68,60 +67,34 @@ export function LearningPreferences({ canPersist }: { readonly canPersist: boole
 }
 
 export function DataAndPrivacy({ signedIn }: { readonly signedIn: boolean }) {
-  const [confirmOpen, setConfirmOpen] = useState(false);
-
   return (
-    <>
-      <Panel title="Data and privacy" description="What VEO stores, and how to remove it.">
-        <div className="flex flex-col gap-4">
-          <p className="text-sm leading-relaxed text-ink-muted">
-            Row Level Security policies restrict every row to the account that owns it, and storage
-            policies restrict uploaded files to your own folder. These are enforced by the database
-            rather than the interface.
-          </p>
+    <Panel title="Data and privacy" description="What VEO stores, and how to remove it.">
+      <div className="flex flex-col gap-4">
+        <p className="text-sm leading-relaxed text-ink-muted">
+          Row Level Security policies restrict every row to the account that owns it, and storage
+          policies restrict uploaded files to your own folder. These are enforced by the database
+          rather than the interface.
+        </p>
 
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" disabled={!signedIn}>
-              Export my data
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              disabled={!signedIn}
-              onClick={() => setConfirmOpen(true)}
-            >
-              Delete account
-            </Button>
-          </div>
-
-          {signedIn ? null : (
-            <p className="text-xs text-ink-faint">
-              Sign in to export or delete your data.
-            </p>
-          )}
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" disabled={!signedIn}>
+            Export my data
+          </Button>
         </div>
-      </Panel>
 
-      <Modal
-        open={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
-        title="Delete your account?"
-        description="This removes your profile, uploaded material, notes and learning history. It cannot be undone."
-      >
-        <div className="flex flex-col gap-4">
-          <NotConfiguredState
-            title="Account deletion is not enabled in this environment"
-            description="Deletion runs as a privileged server operation and requires the Supabase service role key. It is deliberately not wired to a client-side call."
-            requirement="SUPABASE_SERVICE_ROLE_KEY"
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setConfirmOpen(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </Modal>
-    </>
+        {/*
+          Deleting an account lives in "Delete your account" above, next to the
+          profile it destroys, rather than being a second entry point here.
+          Two buttons for one irreversible action is two places for the
+          confirmation to drift apart.
+        */}
+        <p className="text-xs text-ink-faint">
+          {signedIn
+            ? 'To remove your account entirely, use "Delete your account" above.'
+            : 'Sign in to export or delete your data.'}
+        </p>
+      </div>
+    </Panel>
   );
 }
 
