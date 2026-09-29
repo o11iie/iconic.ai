@@ -467,6 +467,38 @@ check "5" "$(as "$ALICE" "select used from public.entitlement_usage
              where entitlement_key='ai.tutor';" | lastline)" \
   "an unmetered capability still records usage"
 
+# A NEW usage period starts fresh, and the spent one is left intact.
+#
+# The allowance is per (user, capability, DAY), so "tomorrow" is a different
+# row rather than a counter somebody has to remember to reset. Verified by
+# spending against a different date rather than by waiting, and by checking
+# that yesterday's spend did not move.
+sudo_sql "delete from public.entitlement_usage where user_id='$ALICE';" >/dev/null
+
+for i in 1 2 3; do
+  as "$ALICE" "select allowed from public.consume_entitlement('ai.generate_flashcards', current_date - 1, 3);" >/dev/null
+done
+check "f" "$(as "$ALICE" "select allowed from public.consume_entitlement('ai.generate_flashcards', current_date - 1, 3);" | lastline)" \
+  "yesterday's allowance is spent"
+
+check "t" "$(as "$ALICE" "select allowed from public.consume_entitlement('ai.generate_flashcards', current_date, 3);" | lastline)" \
+  "today's allowance is untouched by yesterday's, so the period resets"
+
+check "3" "$(as "$ALICE" "select used from public.entitlement_usage
+             where entitlement_key='ai.generate_flashcards' and usage_date = current_date - 1;" | lastline)" \
+  "and yesterday's record is left exactly as it was"
+
+# Two learners spending the same capability on the same day do not share a
+# counter: one exhausting their allowance must not lock the other out.
+sudo_sql "delete from public.entitlement_usage;" >/dev/null
+for i in 1 2 3; do
+  as "$ALICE" "select allowed from public.consume_entitlement('ai.generate_flashcards', current_date, 3);" >/dev/null
+done
+check "f" "$(as "$ALICE" "select allowed from public.consume_entitlement('ai.generate_flashcards', current_date, 3);" | lastline)" \
+  "alice has spent her allowance"
+check "t" "$(as "$BOB" "select allowed from public.consume_entitlement('ai.generate_flashcards', current_date, 3);" | lastline)" \
+  "bob's allowance is his own, so alice cannot exhaust it for him"
+
 # The function establishes identity itself; it takes no user id to forge.
 args=$(sudo_sql "select count(*) from information_schema.parameters
         where specific_name like 'consume_entitlement%'
@@ -474,7 +506,218 @@ args=$(sudo_sql "select count(*) from information_schema.parameters
 check "0" "$args" "consume_entitlement takes no user id argument to forge"
 
 echo
-echo "=== 15. NEGATIVE CONTROL: THE CHECK CAN FAIL ==="
+echo
+echo "=== 15. EVERY TABLE IN public HAS RLS ENABLED ==="
+# Exhaustive by construction. A table added in a later migration and forgotten
+# shows up here as a failure rather than as a quiet hole: the check does not
+# consult a list of tables to examine, it asks the database for all of them.
+unguarded=$(sudo_sql "
+  select coalesce(string_agg(c.relname, ','), '')
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public'
+     and c.relkind = 'r'
+     and not c.relrowsecurity;" | lastline)
+check "" "$unguarded" "no table in public is missing row level security"
+
+# And a table with RLS on but no policy at all denies everything, which is
+# safe but usually a mistake — the feature silently stops working.
+policyless=$(sudo_sql "
+  select coalesce(string_agg(c.relname, ','), '')
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public'
+     and c.relkind = 'r'
+     and c.relrowsecurity
+     and not exists (
+       select 1 from pg_policies p
+        where p.schemaname = 'public' and p.tablename = c.relname);" | lastline)
+check "" "$policyless" "no table has RLS enabled with no policy, which would deny everything"
+
+echo
+echo "=== 16. THE POLICY MATRIX IS WHAT VEO INTENDED ==="
+# Each row: table | expected SELECT | INSERT | UPDATE | DELETE  (1 = a policy
+# exists for authenticated users, 0 = deliberately none).
+#
+# Declared rather than derived, so a policy ADDED by mistake fails too. The
+# zeros are the interesting entries and each is a deliberate decision:
+#
+#   review_events  no UPDATE, no DELETE — review history is append-only, so a
+#                  learner cannot revise what they scored after the fact.
+#   review_states  no DELETE — scheduling state belongs to an item and goes
+#                  when the item goes, by cascade.
+#   subscriptions  nothing but SELECT — a client that could write this could
+#                  grant itself a paid plan. Only the verified webhook writes.
+#   entitlement_usage  nothing but SELECT — a client that could write this
+#                  could zero its own usage and get unlimited free calls.
+#   profiles       no DELETE — an account is removed through the account
+#                  deletion path, which also cancels billing; a lone profile
+#                  delete would orphan an auth user with no profile.
+matrix="
+learning_items|1|1|1|1
+review_states|1|1|1|0
+review_events|1|1|0|0
+review_sessions|1|1|1|0
+review_session_items|1|1|1|0
+learning_daily_activity|1|1|1|0
+learning_goals|1|1|1|0
+entitlement_usage|1|0|0|0
+subscriptions|1|0|0|0
+profiles|1|1|1|0
+notes|1|1|1|1
+flashcards|1|1|1|1
+questions|1|1|1|1
+courses|1|1|1|1
+learning_sessions|1|1|1|1
+recall_attempts|1|1|1|1
+memory_states|1|1|1|1
+"
+
+echo "$matrix" | while IFS='|' read -r table want_select want_insert want_update want_delete; do
+  [ -n "$table" ] || continue
+  for cmd in SELECT INSERT UPDATE DELETE; do
+    case "$cmd" in
+      SELECT) want="$want_select" ;;
+      INSERT) want="$want_insert" ;;
+      UPDATE) want="$want_update" ;;
+      DELETE) want="$want_delete" ;;
+    esac
+
+    got=$(sudo_sql "
+      select case when count(*) > 0 then 1 else 0 end
+        from pg_policies
+       where schemaname = 'public'
+         and tablename = '$table'
+         and cmd = '$cmd';" | lastline)
+
+    if [ "$want" = "$got" ]; then
+      printf '  PASS  %s %s policy: %s\n' "$table" "$cmd" \
+        "$([ "$want" = "1" ] && echo 'present' || echo 'deliberately absent')"
+    else
+      printf '  FAIL  %s %s policy — expected %s, got %s\n' "$table" "$cmd" "$want" "$got"
+      echo "matrix-failure" >> "$SCRATCH/failures"
+    fi
+  done
+done
+
+# The loop runs in a subshell, so its failures are collected through a file.
+matrix_failures=$( [ -f "$SCRATCH/failures" ] && wc -l < "$SCRATCH/failures" || echo 0 )
+check "0" "$(echo "$matrix_failures" | tr -d ' ')" "the policy matrix matches VEO's intent exactly"
+
+echo
+echo "=== 17. EVERY POLICY DERIVES IDENTITY FROM auth.uid() ==="
+# A policy that compared against a column, a setting or a literal instead
+# would be a policy that a client could satisfy.
+# Ordered, so the comparison does not depend on how the planner aggregated.
+non_uid=$(sudo_sql "
+  select coalesce(string_agg(tablename || '.' || policyname, ',' order by tablename), '')
+    from pg_policies
+   where schemaname = 'public'
+     and roles::text like '%authenticated%'
+     and coalesce(qual, '') !~ 'auth\.uid\(\)'
+     and coalesce(with_check, '') !~ 'auth\.uid\(\)';" | lastline)
+# The ONLY policies allowed to omit auth.uid() are reads of published
+# reference content, which belongs to nobody and has no owner column to
+# compare against.
+#
+# `courses` and `questions` are deliberately NOT in this list even though they
+# are partly public: their read policies are `status = 'published' or owner_id
+# = auth.uid()`, so an unpublished row is still reachable only by its owner.
+# A policy that dropped the second half would appear here and fail.
+check "relationships.relationships_select_all,spatial_models.spatial_models_select_all,spatial_objects.spatial_objects_select_all,subjects.subjects_select_published" \
+  "$non_uid" \
+  "only the published-catalogue read policies omit auth.uid()"
+
+echo
+echo "=== 18. CROSS-USER ACCESS IS REFUSED ON EVERY OWNED TABLE ==="
+# Driven, not inspected. Bob attempts each verb against Alice's rows and the
+# assertion is on the DATA afterwards, because RLS filters rows rather than
+# raising: a silently-zero-row UPDATE looks identical to a successful one from
+# the client's side.
+
+# Alice owns exactly one of each by now; confirm before testing against it.
+alice_owned=$(sudo_sql "select count(*) from public.learning_items where user_id='$ALICE';" | lastline)
+check "1" "$([ "$alice_owned" -gt 0 ] && echo 1 || echo 0)" \
+  "positive control: alice has rows to attack ($alice_owned)"
+
+# --- SELECT ---
+for t in learning_items review_states review_events review_sessions learning_daily_activity; do
+  check "0" "$(as "$BOB" "select count(*) from public.$t where user_id='$ALICE';" | lastline)" \
+    "bob reads none of alice's $t"
+done
+
+# --- INSERT attributed to alice ---
+as "$BOB" "insert into public.learning_goals (user_id, daily_review_target)
+           values ('$ALICE', 499);" >/dev/null 2>&1
+check "0" "$(sudo_sql "select count(*) from public.learning_goals
+                        where user_id='$ALICE' and daily_review_target=499;" | lastline)" \
+  "bob cannot create a learning goal attributed to alice"
+
+# --- UPDATE of alice's row ---
+before=$(sudo_sql "select content_ref from public.learning_items
+                    where user_id='$ALICE' and content_ref='alice-item-1';" | lastline)
+as "$BOB" "update public.learning_items set content_ref='taken-by-bob'
+            where user_id='$ALICE';" >/dev/null 2>&1
+check "$before" "$(sudo_sql "select content_ref from public.learning_items
+                              where user_id='$ALICE' and content_ref='alice-item-1';" | lastline)" \
+  "bob's update of alice's learning item changes nothing"
+
+# --- DELETE of alice's row ---
+alice_items=$(sudo_sql "select count(*) from public.learning_items where user_id='$ALICE';" | lastline)
+as "$BOB" "delete from public.learning_items where user_id='$ALICE';" >/dev/null 2>&1
+check "$alice_items" "$(sudo_sql "select count(*) from public.learning_items where user_id='$ALICE';" | lastline)" \
+  "bob's delete of alice's learning items removes nothing"
+
+# --- and the same for the tables that hold money and allowances ---
+as "$BOB" "update public.subscriptions set tier='institution' where user_id='$ALICE';" >/dev/null 2>&1
+check "0" "$(sudo_sql "select count(*) from public.subscriptions
+                        where user_id='$ALICE' and tier='institution';" | lastline)" \
+  "bob cannot upgrade alice's plan"
+
+as "$BOB" "delete from public.entitlement_usage where user_id='$ALICE';" >/dev/null 2>&1
+check "0" "$(as "$BOB" "select count(*) from public.entitlement_usage where user_id='$ALICE';" | lastline)" \
+  "bob cannot see or clear alice's usage"
+
+echo
+echo "=== 19. DELETING AN ACCOUNT REMOVES EVERYTHING IT OWNED ==="
+# The account-deletion path removes the auth.users row and relies on the
+# schema's cascades. Verified by executing it rather than by reading the
+# foreign keys, because a cascade that was dropped in a later migration reads
+# exactly the same as one that was never there.
+owned_before=$(sudo_sql "
+  select (select count(*) from public.learning_items where user_id='$ALICE')
+       + (select count(*) from public.review_states where user_id='$ALICE')
+       + (select count(*) from public.review_events where user_id='$ALICE')
+       + (select count(*) from public.review_sessions where user_id='$ALICE')
+       + (select count(*) from public.learning_daily_activity where user_id='$ALICE')
+       + (select count(*) from public.profiles where user_id='$ALICE');" | lastline)
+check "1" "$([ "$owned_before" -gt 0 ] && echo 1 || echo 0)" \
+  "positive control: alice owns rows across several tables before deletion"
+
+# Seed a row for bob so "the other learner is untouched" is a real assertion
+# rather than a count that happens to be zero on both sides.
+as "$BOB" "insert into public.learning_items (id, user_id, content_ref, content_type, semantic_id)
+           values (gen_random_uuid(), '$BOB', 'bob-survives', 'question', 'veo.diagnostic.test.a');" >/dev/null 2>&1
+bob_rows_before=$(sudo_sql "select count(*) from public.learning_items
+                             where user_id='$BOB' and content_ref='bob-survives';" | lastline)
+
+sudo_sql "delete from auth.users where id='$ALICE';" >/dev/null 2>&1
+
+for t in learning_items review_states review_events review_sessions review_session_items learning_daily_activity learning_goals entitlement_usage subscriptions profiles; do
+  check "0" "$(sudo_sql "select count(*) from public.$t where user_id='$ALICE';" | lastline)" \
+    "deleting the account removed alice's $t"
+done
+
+# Bob is untouched: deletion must not be a way to reach somebody else's data.
+# Asserted against a row seeded for him before the delete, because `>= 0` on a
+# count he might not have is a check that cannot fail.
+check "1" "$bob_rows_before" "positive control: bob owned a row before alice was deleted"
+check "1" "$(sudo_sql "select count(*) from public.learning_items
+                        where user_id='$BOB' and content_ref='bob-survives';" | lastline)" \
+  "bob's own row survives alice's deletion"
+
+echo
+echo "=== 20. NEGATIVE CONTROL: THE CHECK CAN FAIL ==="
 # Without this, every assertion above could be passing because the harness is
 # broken rather than because the policies work.
 $PSQL -d "$DB" -c "create table if not exists public.rls_control (user_id uuid, note text);

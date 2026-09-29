@@ -62,7 +62,7 @@ export type AccessResolution =
   | { readonly ok: true; readonly access: ResolvedAccess }
   | { readonly ok: false; readonly reason: EntitlementFailure };
 
-interface SubscriptionRow {
+export interface SubscriptionRow {
   tier: string;
   status: string;
   stripe_customer_id: string | null;
@@ -72,7 +72,15 @@ interface SubscriptionRow {
   cancel_at_period_end: boolean;
 }
 
-function toSubscription(row: SubscriptionRow | null, userId: UUID): Subscription | null {
+/**
+ * A `subscriptions` row as the domain sees it.
+ *
+ * Exported so the lifecycle tests can turn a row the WEBHOOK wrote into
+ * entitlements through this exact function. A test that reimplemented the
+ * mapping would be asserting against its own copy, and the two would drift
+ * the first time a column changed.
+ */
+export function toSubscription(row: SubscriptionRow | null, userId: UUID): Subscription | null {
   if (!row) return null;
 
   return {
