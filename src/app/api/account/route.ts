@@ -24,16 +24,26 @@ export const dynamic = 'force-dynamic';
  * names, constraint names and occasionally a key prefix.
  */
 
-const PROFILE_STATUS: Record<'unauthenticated' | 'not_configured' | 'failed', number> = {
+type ProfileFailure = 'unauthenticated' | 'not_configured' | 'unavailable';
+
+/*
+ * 503 for `unavailable`, not 500.
+ *
+ * A database VEO cannot reach is a dependency being down, not a defect in
+ * VEO. 500 would tell a learner their account is broken when it is fine, and
+ * send an operator looking in the application instead of at the database. The
+ * learning and analytics routes answer the same way for the same cause.
+ */
+const PROFILE_STATUS: Record<ProfileFailure, number> = {
   unauthenticated: 401,
   not_configured: 503,
-  failed: 500,
+  unavailable: 503,
 };
 
-const PROFILE_MESSAGES: Record<'unauthenticated' | 'not_configured' | 'failed', string> = {
+const PROFILE_MESSAGES: Record<ProfileFailure, string> = {
   unauthenticated: 'Sign in to see your account.',
   not_configured: 'Accounts are not configured in this deployment.',
-  failed: 'VEO could not read your account just now.',
+  unavailable: 'VEO could not reach your account just now. Nothing has been changed.',
 };
 
 function respond(result: ProfileResult): NextResponse {

@@ -71,7 +71,7 @@ const IGNORED = [
  * The endpoints that may answer 503 in this environment, because they need the
  * database the fixture does not provide.
  */
-const EXPECTED_UNAVAILABLE = [/\/api\/learning\//, /\/api\/analytics\//];
+const EXPECTED_UNAVAILABLE = [/\/api\/learning\//, /\/api\/analytics\//, /\/api\/account/];
 
 const results = { pass: 0, fail: 0, problems: [] };
 

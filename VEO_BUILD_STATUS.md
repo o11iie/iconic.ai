@@ -1,6 +1,6 @@
 # VEO — Build Status
 
-_Last updated: 2026-09-24_
+_Last updated: 2026-09-29_
 
 ---
 
@@ -10,7 +10,9 @@ _Last updated: 2026-09-24_
 
 ## Current gate
 
-**Gate 14 — Plans, Entitlements & Metered Access → GREEN**
+**Gate 15 — Production SaaS Infrastructure & Account Lifecycle → GREEN**
+
+**Gate 14 — Plans, Entitlements & Metered Access → GREEN (no regression)**
 
 **Gate 13 — Learning Intelligence, Analytics & Adaptive Study Insights → GREEN (no regression)**
 
@@ -58,7 +60,13 @@ work landed, not assumed. Entitlements gate *access to capabilities*; they do
 not create content, and no amount of paying unlocks anatomy that does not
 exist.
 
-**Gate 15 was not started.** No collaboration, no import pipeline.
+**Gate 15 did not change Gate 9 either.** No anatomy was written, no fixture
+was promoted to a catalogue, and `/api/anatomy` still reports
+`configured: false, delivery: "none"` — checked by request after Gate 15's
+work landed. An account lifecycle creates and destroys accounts; it does not
+create content.
+
+**Gate 16 was not started.** No collaboration, no import pipeline.
 
 #### What Gate 13 is
 
@@ -228,6 +236,48 @@ numbers wait for the model.
 ---
 
 ## Completed
+
+### Gate 15 — production SaaS infrastructure and account lifecycle
+
+| # | Requirement | Status | Evidence |
+| --- | --- | --- | --- |
+| 1 | Authentication is server-authoritative | GREEN | identity from `auth.getUser()` on every path; no route accepts a user id |
+| 2 | Sessions behave correctly | GREEN | 19 browser checks: redirects both ways, `?next=` preserved, /explore stays open |
+| 3 | Protected routes are actually protected | GREEN | 8 routes, signed out, all redirect; production refuses when unconfigured |
+| 4 | Cross-user access is rejected | GREEN | every verb on every owned table, asserted on the DATA afterwards |
+| 5 | RLS is verified | GREEN | 100 checks on real PostgreSQL 16, exhaustive by construction |
+| 6 | Account lifecycle works | GREEN | read, update, delete; cascade proved by execution |
+| 7 | Stripe lifecycle implemented and tested | YELLOW | 16 lifecycle cases through the real route — **no Stripe account configured**, see below |
+| 8 | Webhooks cryptographically verified and idempotent | GREEN | real HMACs through Stripe's SDK; duplicate, replay, tamper all refused |
+| 9 | Entitlements cannot be forged from the client | GREEN | `subscriptions` has SELECT and nothing else; mutation-proved |
+| 10 | Quotas cannot be bypassed by concurrency | GREEN | 10 simultaneous callers, allowance of 4, exactly 4 permitted |
+| 11 | Billing UI reflects server authority | GREEN | Gate 14's 113 checks, re-run |
+| 12 | Secrets cannot reach the client | GREEN | bundle scan with two positive controls |
+| 13 | Errors leak nothing | GREEN | 10 endpoints, hostile input, scanned for keys, traces, paths, SQL |
+| 14 | Account deletion is secure | GREEN | typed phrase, server-checked, billing cancelled first, session invalidated |
+| 15 | Abuse controls exist | GREEN | live and distinct from the product allowance |
+| 16 | Zero regressions | GREEN | 857 browser checks across Gates 2–13 |
+| 17 | Browser tests across all viewports | GREEN | 360/390/430/768/1024/1440 |
+| 18 | Mutation tests catch security defects | GREEN | 48 of 48 |
+| 19 | Build, typecheck, lint clean | GREEN | 42 routes, 0 errors, 0 warnings |
+| 20 | Unexercised dependencies identified | GREEN | stated below and in the report |
+
+**The hole Gate 15 closed.** `updateSession` returned early when Supabase was
+not configured, leaving every protected route reachable. The pages it let
+through leak nothing — with no Supabase there is no session and no data — but
+that is a property of the outage, not of the code. One mistyped environment
+variable turned every protected route into an open one, and the only symptom
+was pages that looked slightly empty. A production build now refuses with 503
+and names the missing variables, never their values. There is no flag that
+reopens it.
+
+**What is NOT verified, and why.** No Stripe account exists in this
+environment, so no checkout session was created and no card was charged. The
+lifecycle is **ENGINEERING VERIFIED**: real signature verification through
+Stripe's own SDK, the real route, real event shapes, the real row, and real
+entitlement resolution. Substituted: Supabase, and the fact that the tests
+rather than Stripe sent the events. Calling that production end-to-end
+verification would be a lie.
 
 ### Gate 14 — plans, entitlements and metered access
 
@@ -688,26 +738,54 @@ OpenAI, Stripe, OAuth providers.
 | --- | --- |
 | `npm run typecheck` | **PASS** — 0 errors |
 | `npm run lint` | **PASS** — 0 errors, 0 warnings |
-| `npm run test` | **PASS** — 1,143 passed / 1,143 total, 50 files |
-| `npm run build` | **PASS** — 41 routes |
+| `npm run test` | **PASS** — 1,249 passed / 1,249 total, 57 files |
+| `npm run build` | **PASS** — 42 routes |
 | `npm run validate:anatomy` | **PASS** — contract fixture valid |
 | `npm run test:anatomy` | **PASS** — 32 live provider checks |
 | `npm run test:spatial` | **PASS** — 164 live manipulation checks |
 | `npm run test:semantics` | **PASS** — 80 live semantic checks |
 | `npm run test:engine` | **PASS** — 54 live engine checks |
-| `npm run test:ui` | **PASS** — 116 live UI checks |
+| `npm run test:ui` | **PASS** — 139 live UI checks, signed in |
 | `npm run test:tutor` | **PASS** — 89 live tutor checks |
 | `npm run test:learning` | **PASS** — 94 live content checks |
 | `npm run test:browser` | **PASS** — all seven, 629 checks, 0 failures |
-| `npm run verify:rls` | **PASS** — 67 checks on real PostgreSQL 16 |
+| `npm run verify:rls` | **PASS** — 100 checks on real PostgreSQL 16 |
 | `npm run test:recall` | **PASS** — 118 live recall checks, 6 viewports |
 | `npm run test:analytics` | **PASS** — 87 live analytics checks, 6 viewports |
-| `npm run test:billing` | **PASS** — 111 live entitlement checks, 6 viewports |
+| `npm run test:billing` | **PASS** — 113 live entitlement checks, 6 viewports |
+| `npm run test:account` | **PASS** — 168 live account checks, 6 viewports |
+| `npm run audit:config` | **PASS** — 30 checks, two positive controls |
 | `npm run mutate:billing` | **PASS** — 18 of 18 mutants caught |
+| `npm run mutate:account` | **PASS** — 22 of 22 mutants caught |
+| `npm run mutate:rls` | **PASS** — 8 of 8 database mutants caught |
 | `npm run measure:analytics` | **PASS** — 213ms worst case against a 250ms budget |
 | `npm run measure:entitlements` | **PASS** — 0.0033ms worst case against a 1ms budget |
 
-Gate 14 added 66 unit tests, 21 database checks, 18 mutants and 111 live
+Gate 15 added 106 unit tests, 33 database checks, 30 mutants and 168 live
+browser checks. Total live browser coverage is now **1,138 checks** across
+Gates 2, 5, 6, 7, 8, 10, 11, 12, 13, 14 and 15, all re-run green.
+
+### Gate 15's mutation testing covers the database, not only the code
+
+48 mutants across three suites:
+
+| Suite | Mutants | Covers |
+| --- | --- | --- |
+| `mutate:account` | 22 | auth bypass, userId trust, deletion authorization, secret exposure, abuse control, configuration |
+| `mutate:rls` | 8 | cross-user access, RLS disabled, tier escalation, entitlement bypass, quota race, identity forgery |
+| `mutate:billing` | 18 | Gate 14's entitlement and webhook boundary |
+
+The database mutants are the ones that could not be faked by a unit test.
+Each weakens a policy in the REAL migration, applies it to REAL PostgreSQL,
+and requires `verify-rls.sh` to fail. Dropping `where used < p_limit` makes
+the allowance advisory; splitting the counter into a read and a write loses
+races. Both are caught by the ten-simultaneous-callers check.
+
+Writing them exposed a gap worth recording: the middleware and the account
+service had no unit tests, so their mutations would have survived silently.
+The 29 tests were written first, then the mutations run against them.
+
+### Gate 14 added 66 unit tests, 21 database checks, 18 mutants and 111 live
 browser checks. Total live browser coverage is now **945 checks** across
 Gates 2, 5, 6, 7, 8, 10, 11, 12, 13 and 14, all re-run green after Gate 14.
 
@@ -864,6 +942,102 @@ Honesty about coverage matters more here than anywhere else in this file.
 - **Snapshot stability matters.** `SceneController.getSnapshot` returns the
   same object until something changes, and re-selecting the current selection
   does not notify — otherwise every no-op selection would cost a render.
+
+---
+
+## Issues found and fixed during Gate 15
+
+### 1. An unconfigured production build served every protected route
+
+`updateSession` returned early when Supabase was absent, so `/dashboard`,
+`/settings`, `/plans` and five others rendered for anybody. Nothing leaked —
+with no Supabase there is no session and no data — but "harmless because the
+database is missing" is a property of the outage, not of the code. A typo in
+one environment variable was enough, and the only symptom was pages that
+looked slightly empty.
+
+Production now refuses with 503 and names the missing variables, never their
+values. Development still renders, so the shell can be built before a database
+exists. There is no escape hatch: an environment variable that reopened
+unauthenticated access would be the bypass this closes.
+
+### 2. The dashboard hid a failure instead of reporting it
+
+Closing (1) meant Gate 2's shell had to be verified SIGNED IN, which is how
+this surfaced. The fixture provides authentication and deliberately no
+database, so `/api/analytics/overview` correctly answers 503 — and
+`DashboardIntelligence` rendered `null`.
+
+The code said so explicitly: "Home is not the place to explain an outage." The
+intent is right, the result is not. A section that disappears leaves a learner
+unable to tell a VEO outage from having studied nothing, and makes the page
+look complete while part of it failed — the same fabrication as showing a
+zero. It now says so in one quiet line with a way forward. Recall already
+handled this correctly, which is how the difference became visible.
+
+### 3. The account API reported a database outage as an internal error
+
+`/api/account` answered 500 when the profile read failed. Every other route in
+VEO answers 503 "could not reach your record" for the same cause. 500 tells a
+learner their account is broken when it is fine, and sends an operator looking
+in the application instead of at the database. One vocabulary now, not two.
+
+### 4. The secret scanner flagged the product working correctly
+
+It found `OPENAI_API_KEY` in a client chunk. That is the sentence "Set
+OPENAI_API_KEY to enable it — the key is server-only and never reaches the
+browser", rendered on purpose so an operator knows what to set.
+
+Worth recording because of what the wrong fix would have been: treating it as
+a failure would have pressured the UI into being vaguer about configuration in
+order to pass a security check — a worse product, no safer. Values are now
+matched by shape, and names only where a value has been ASSIGNED to one.
+
+### 5. Four scan patterns had never matched anything
+
+The assignment patterns from (4) were added and immediately passed, which
+proves nothing: a typo in a regex looks exactly like a clean bundle. Each is
+now run against a string shaped like the leak it exists to catch, and against
+the bare name it must NOT match. The same reasoning added the first positive
+control, which plants a key and requires the scanner to find it.
+
+### 6. The new rate limit broke Gate 11's verification
+
+Gate 11's harness fires dozens of generation requests in seconds to test
+validation and injection resistance. A real learner cannot, so the limit is
+right and the harness is legitimate.
+
+Resolved by exempting the verification stub, on exactly the grounds Gate 14
+exempted it from the entitlement gate: `stubEnabled()` is a build-time literal
+that refuses to activate when `OPENAI_API_KEY` is set, so in stub mode the
+endpoint assembles canned text and cannot reach a paid provider. Limiting that
+protects nothing.
+
+The exemption is only safe if the limit genuinely applies without the stub, so
+Gate 14's harness — which runs with a provider key present — now bursts
+`/api/ai/questions` 25 times and asserts a 429 appears. Without that check the
+exemption could quietly have become a way to disable the limit everywhere.
+
+### 7. Three of my own RLS assertions were wrong
+
+Corrected, not loosened:
+
+- the expected "omits `auth.uid()`" set listed `courses` and `questions`,
+  which already check ownership (`published OR owner_id = auth.uid()`). The
+  real set is four catalogue tables, and the corrected assertion is stronger:
+  a policy that dropped the ownership half would now appear and fail;
+- the column is `daily_review_target`, not `daily_target`;
+- Alice accumulates three learning items by that point, not one.
+
+One check asserted `count >= 0`, which cannot fail. It now asserts against a
+row seeded for the other learner before the delete.
+
+### 8. A test asserted something impossible
+
+The correlation-id guard was tested by putting a newline in a `Headers` object
+— which `Headers` itself rejects, so the test threw rather than testing
+anything. It now drives the guard directly with a stand-in, which is what
+proves the guard holds for a value arriving from anywhere.
 
 ---
 
@@ -1597,8 +1771,20 @@ and the aggregation rolls mastery up through semantic-id ancestry with nothing
 anatomical hard-coded. Unit tests exercise it across anatomy, chemistry,
 physics, engineering and astrophysics ids for exactly that reason.
 
-Gate 14 is unaffected by it entirely, and is the most domain-agnostic layer
-yet: an entitlement is a commercial fact about an account, and it does not know
+Gate 15 is unaffected by anatomy entirely. An account lifecycle, RLS, billing
+and abuse control describe a *person's relationship with the service*, not
+what they study. Nothing anatomical appears anywhere in `src/account`,
+`src/security`, `src/observability` or the RLS policies.
+
+It does add one classification worth stating plainly: **Supabase and its
+service role are now REQUIRED for production**, not optional. A deployment
+without them cannot know who is asking and cannot honour a deletion request,
+so it refuses rather than degrading. Stripe, OpenAI and anatomy remain
+optional and degrade honestly — `npm run audit:config` reports which is which
+for any environment.
+
+Gate 14 is unaffected by anatomy entirely, and is the most domain-agnostic
+layer yet: an entitlement is a commercial fact about an account, and it does not know
 or care what the account studies. The same gate that meters flashcards about
 the left ventricle meters flashcards about a benzene ring, a crankshaft or a
 main-sequence star. Nothing anatomical appears anywhere in `src/billing`.

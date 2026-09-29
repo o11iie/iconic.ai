@@ -98,7 +98,20 @@ type ProfileUpdateRow = Partial<{
 
 export type ProfileResult =
   | { readonly ok: true; readonly profile: ProfileView }
-  | { readonly ok: false; readonly reason: 'unauthenticated' | 'not_configured' | 'failed' };
+  | {
+      readonly ok: false;
+      /**
+       * `unavailable` rather than `failed`, matching the learning and
+       * analytics routes.
+       *
+       * The cause is the same in all three — VEO could not reach the
+       * database — and it is not a defect in VEO. Reporting it as an internal
+       * error would tell a learner their account is broken when their
+       * account is fine and a dependency is down, and would send an operator
+       * looking in the wrong place.
+       */
+      readonly reason: 'unauthenticated' | 'not_configured' | 'unavailable';
+    };
 
 /** The signed-in learner's profile. */
 export async function readProfile(): Promise<ProfileResult> {
@@ -116,7 +129,7 @@ export async function readProfile(): Promise<ProfileResult> {
 
   if (error) {
     serverLog('error', 'account.profile_read_failed', { reason: error.message });
-    return { ok: false, reason: 'failed' };
+    return { ok: false, reason: 'unavailable' };
   }
 
   return {
@@ -169,7 +182,7 @@ export async function updateProfile(update: ProfileUpdate): Promise<ProfileResul
 
   if (error) {
     serverLog('error', 'account.profile_update_failed', { reason: error.message });
-    return { ok: false, reason: 'failed' };
+    return { ok: false, reason: 'unavailable' };
   }
 
   serverLog('info', 'account.profile_updated', { fields: Object.keys(row).join(',') });

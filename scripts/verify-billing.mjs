@@ -35,6 +35,16 @@ const IGNORED = [
   /\[Fast Refresh\]/i,
   /favicon\.ico/i,
   /fixture-auth-server implements auth only/i,
+  /*
+   * The fixture provides AUTHENTICATION and deliberately no database, so
+   * `/api/account` correctly answers 503 "could not reach your account". The
+   * browser logs a generic line for any failed fetch, which is not an
+   * application error.
+   *
+   * Narrow on purpose: the settings page's billing panel is intercepted in
+   * these checks and must not 503, so a failure there still surfaces.
+   */
+  /Failed to load resource: the server responded with a status of 503/i,
 ];
 
 const results = { pass: 0, fail: 0, problems: [] };
@@ -617,6 +627,41 @@ async function main() {
         malformed.status() === 401,
         'an unauthenticated caller sending garbage is refused for the plan, not the syntax',
         `got ${malformed.status()}`,
+      );
+
+      /*
+       * The AI rate limit is LIVE in this build.
+       *
+       * The two AI routes exempt the verification stub from rate limiting so
+       * Gate 11's harness can fire dozens of requests in seconds. That
+       * exemption is only safe if the limit genuinely applies whenever the
+       * stub is off — which is this build, since a provider key is present.
+       * Without this check the exemption could quietly become a way to
+       * disable the limit everywhere.
+       *
+       * The burst is anonymous, so every request is refused at the gate with
+       * 401 until the limiter takes over with 429. Seeing 429 at all proves
+       * the limiter ran BEFORE the entitlement gate, which is the ordering
+       * the routes intend.
+       */
+      const burst = [];
+      for (let i = 0; i < 25; i += 1) {
+        const response = await anon.request.post(`${BASE}/api/ai/questions`, {
+          data: { modelRef: 'x', semanticId: 'veo.a.b.c' },
+          failOnStatusCode: false,
+        });
+        burst.push(response.status());
+      }
+
+      check(
+        burst.includes(429),
+        'the AI rate limit is live in a build without the stub',
+        burst.join(','),
+      );
+      check(
+        burst[0] === 401,
+        'and the first request was refused for the session, not the rate',
+        `${burst[0]}`,
       );
 
       await anon.close();

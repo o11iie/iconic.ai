@@ -88,8 +88,27 @@ async function tutorTurn(request: Request) {
    * bounds how often that lookup runs. Abuse control, not an allowance: see
    * `src/security/rate-limit.ts` for why the two stay separate.
    */
-  const limited = await rateLimit(request, 'ai.tutor');
-  if (limited) return limited;
+  /*
+   * The verification stub is exempt from the rate limit, on exactly the
+   * grounds Gate 14 exempted it from the entitlement gate.
+   *
+   * `stubEnabled()` is a literal `process.env.VEO_TUTOR_STUB` read, which
+   * Next inlines at BUILD time, and it refuses to activate whenever
+   * `OPENAI_API_KEY` is set. So in stub mode this endpoint assembles
+   * deterministic fixture text and cannot reach a paid provider. Limiting
+   * that protects against nothing, while making the Gate 11 verification —
+   * which fires dozens of requests in seconds to test validation and
+   * injection resistance — impossible to run.
+   *
+   * The moment a real key is configured the stub is off and the limit
+   * applies. Gate 14's billing harness runs in exactly that configuration
+   * and asserts the limit is live, so this exemption cannot quietly become a
+   * way to disable it.
+   */
+  if (!stubEnabled()) {
+    const limited = await rateLimit(request, 'ai.tutor');
+    if (limited) return limited;
+  }
 
   /*
    * Entitlement next, before the body is even parsed.
