@@ -42,7 +42,11 @@
     "test:account": "node scripts/verify-account.mjs",
     "start:account": "VEO_FIXTURE_AUTH=1 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54330 NEXT_PUBLIC_SUPABASE_ANON_KEY=fixture-anon-key-not-a-real-credential ./scripts/serve-verify.sh 3411 node scripts/verify-account.mjs",
     "mutate:account": "node scripts/mutate-account.mjs",
-    "mutate:rls": "node scripts/mutate-rls.mjs"
+    "mutate:rls": "node scripts/mutate-rls.mjs",
+    "test:notes": "node scripts/verify-notes.mjs",
+    "start:notes": "VEO_TUTOR_STUB=1 VEO_FIXTURE_AUTH=1 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54330 NEXT_PUBLIC_SUPABASE_ANON_KEY=fixture-anon-key-not-a-real-credential ./scripts/serve-verify.sh 3411 node scripts/verify-notes.mjs",
+    "mutate:notes": "node scripts/mutate-notes.mjs",
+    "measure:notes": "tsx scripts/measure-notes.mjs"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",

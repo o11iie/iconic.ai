@@ -144,7 +144,7 @@ export function NotesPanel({
   }
 
   return (
-    <div className={cn('flex flex-col gap-3', className)} data-veo-notes>
+    <div className={cn('flex min-w-0 flex-col gap-3', className)} data-veo-notes>
       {searchable ? (
         <label className="flex flex-col gap-1.5">
           <span className="veo-sr-only">Search your notes</span>
@@ -216,7 +216,7 @@ export function NotesPanel({
         />
       ) : null}
 
-      <ul className="flex flex-col gap-2">
+      <ul className="flex min-w-0 flex-col gap-2">
         {entries.map((entry) => (
           <NoteCard
             key={entry.note.id}
@@ -262,7 +262,7 @@ function NoteCard({
 
   return (
     <li
-      className="flex flex-col gap-2 rounded-lg border border-hairline bg-surface-raised p-3"
+      className="flex min-w-0 flex-col gap-2 rounded-lg border border-hairline bg-surface-raised p-3"
       data-veo-note={note.id}
       data-veo-note-relation={entry.relation}
     >
@@ -279,22 +279,40 @@ function NoteCard({
         </p>
       ) : null}
 
+      {/*
+        * `overflow-wrap: anywhere` on both, and it is load-bearing.
+        *
+        * A note is arbitrary text a learner pasted. `whitespace-pre-wrap`
+        * keeps their line breaks, but it will not break an unbroken run — and
+        * a pasted URL, a chemical name or a token is exactly that. The first
+        * browser run measured 2,726px of horizontal overflow at 360px wide
+        * from one 400-character word.
+        *
+        * `break-words` is not enough: it breaks BETWEEN words, so a single
+        * long word still overflows. `anywhere` breaks inside one.
+        */}
       {note.title ? (
-        <p className="text-sm font-medium text-ink" data-veo-note-title>
+        <p
+          className="text-sm font-medium text-ink [overflow-wrap:anywhere]"
+          data-veo-note-title
+        >
           {note.title}
         </p>
       ) : null}
 
       {note.body ? (
-        <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-muted" data-veo-note-body>
+        <p
+          className="whitespace-pre-wrap text-sm leading-relaxed text-ink-muted [overflow-wrap:anywhere]"
+          data-veo-note-body
+        >
           {note.body}
         </p>
       ) : null}
 
       {note.tags.length > 0 ? (
-        <ul className="flex flex-wrap gap-1.5">
+        <ul className="flex min-w-0 flex-wrap gap-1.5">
           {note.tags.map((tag) => (
-            <li key={tag}>
+            <li key={tag} className="min-w-0 [overflow-wrap:anywhere]">
               <Badge>{tag}</Badge>
             </li>
           ))}
