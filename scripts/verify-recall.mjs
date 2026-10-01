@@ -55,12 +55,45 @@ function check(ok, label, detail = '') {
   }
 }
 
+/**
+ * Endpoints allowed to fail in this environment.
+ *
+ * Gate 16 put a notes panel in the workspace Context Panel. The fixture
+ * provides AUTHENTICATION and deliberately no database, so `/api/notes`
+ * correctly answers 503 "could not reach your notes", and the browser logs a
+ * generic resource-load line for it.
+ *
+ * Matched by URL and COUNTED, not by a blanket pattern on the message.
+ *
+ * A blanket ignore for "status of 503" was tried first and broke this
+ * harness's own positive control — the one that deliberately makes a review
+ * submission fail and asserts the 503 really reached the browser. Suppressing
+ * every 503 suppressed that too, which is precisely the failure an ignore
+ * invites: it silenced a test that existed to prove failures are visible.
+ */
+const EXPECTED_FAILURES = [/\/api\/notes/];
+
 function captureConsole(page) {
   const errors = [];
+
+  // One generic console line may be dropped per expected failed response, so
+  // a 503 from anywhere else still surfaces.
+  let allowance = 0;
+  page.on('response', (response) => {
+    if (response.status() < 400) return;
+    if (EXPECTED_FAILURES.some((pattern) => pattern.test(response.url()))) allowance += 1;
+  });
+
   page.on('console', (m) => {
     if (m.type() !== 'error') return;
     const text = m.text();
     if (IGNORED.some((p) => p.test(text))) return;
+
+    if (allowance > 0 && /Failed to load resource: the server responded with a status of 50[0-9]/i.test(text)) {
+      allowance -= 1;
+      return;
+    }
+
     errors.push(text);
   });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));

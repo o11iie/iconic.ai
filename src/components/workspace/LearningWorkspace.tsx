@@ -62,8 +62,18 @@ export function LearningWorkspace({
   aiConfigured,
   tutorStub = false,
   recallConfigured = false,
+  signedIn = false,
 }: {
   readonly diagnostic?: boolean;
+  /**
+   * Whether a learner is signed in, as the server resolved it.
+   *
+   * Notes are private, and /explore is deliberately public, so without this
+   * the notes panel would fire a request guaranteed to answer 401 on every
+   * selection a signed-out visitor makes. A rendering hint only — the route
+   * re-decides on every request.
+   */
+  readonly signedIn?: boolean;
   /**
    * True when a review schedule exists to add content to.
    *
@@ -597,6 +607,7 @@ export function LearningWorkspace({
         onManipulate={handleManipulate}
         // The model actually loaded, so a note records where it was written.
         modelRef={tutorModelRef}
+        signedIn={signedIn}
         manipulation={{
           isolate: capabilities.supportsIsolation,
           hide: sceneReady,

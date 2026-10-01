@@ -1,6 +1,6 @@
 # VEO — Build Status
 
-_Last updated: 2026-09-29_
+_Last updated: 2026-10-01_
 
 ---
 
@@ -10,7 +10,9 @@ _Last updated: 2026-09-29_
 
 ## Current gate
 
-**Gate 15 — Production SaaS Infrastructure & Account Lifecycle → GREEN**
+**Gate 16 — Learner Notes & Knowledge Capture → GREEN**
+
+**Gate 15 — Production SaaS Infrastructure & Account Lifecycle → GREEN (no regression)**
 
 **Gate 14 — Plans, Entitlements & Metered Access → GREEN (no regression)**
 
@@ -66,7 +68,15 @@ was promoted to a catalogue, and `/api/anatomy` still reports
 work landed. An account lifecycle creates and destroys accounts; it does not
 create content.
 
-**Gate 16 was not started.** No collaboration, no import pipeline.
+**Gate 16 did not change Gate 9 either.** No anatomy was written, no fixture
+was promoted to a catalogue, and `/api/anatomy` still reports
+`configured: false, delivery: "none"` with `/api/anatomy/veo.anatomy.heart`
+answering 404 — checked by request after Gate 16's work landed. A note anchors
+to a semantic id, which is a stable vocabulary that exists whether or not
+geometry does; capturing what a learner works out does not create content for
+them to work it out about.
+
+**Gate 17 was not started.**
 
 #### What Gate 13 is
 
@@ -236,6 +246,55 @@ numbers wait for the model.
 ---
 
 ## Completed
+
+### Gate 16 — learner notes and knowledge capture
+
+| # | Requirement | Status | Evidence |
+| --- | --- | --- | --- |
+| 1 | A note persists and survives a refresh | GREEN | browser: written, re-read from the server, rendered |
+| 2 | Identity is server-derived | GREEN | owner id in body, as owner_id, as userId, in query, in header — none echoed or consulted |
+| 3 | Another learner's note is unreachable | GREEN | every verb, on real PostgreSQL; 404 never 403 |
+| 4 | Anonymous access refused | GREEN | GET/POST/PATCH/DELETE and export all 401 |
+| 5 | Malformed input refused, nothing written | GREEN | 10 invalid drafts, structured 400, scanned for leaks |
+| 6 | Search returns only the learner's matches | GREEN | real tsvector query, cross-user checked |
+| 7 | Contextual notes include ancestors, marked | GREEN | pure `contextualNotes`, 31 unit tests |
+| 8 | Export gated by `export.notes` | GREEN | the first code ever to use that entitlement |
+| 9 | UI shows server state, never local | GREEN | re-read after write; empty-result vs empty-account distinguished |
+| 10 | Six viewports | GREEN | 360/390/430/768/1024/1440, measured by displacement |
+| 11 | RLS verified on real PostgreSQL | GREEN | 120 checks, up from 100 |
+| 12 | Mutation testing catches security defects | GREEN | 31 of 31 |
+| 13 | Gates 2–15 regress green, Gate 9 RED | GREEN | 1,178 browser checks |
+| 14 | Typecheck, lint, build clean | GREEN | 45 routes |
+
+**Why this capability.** Six of the nine entitlement keys had zero
+implementation outside their own declaration, and the `notes` table had existed
+since Gate 1 — with `owner_id`, a `spatial_object_id` constrained by
+`is_semantic_id()`, tags, timestamps, two indexes and a full RLS quartet — and
+had never been written to. The Library's Notes tab was an empty state with
+nothing behind it.
+
+That was the one place in VEO where a learner PRODUCES something rather than
+consuming it. VEO answered questions, generated material and scheduled
+reviews; the learner contributed nothing durable and left with nothing.
+
+**Notes rather than uploads.** `material.upload` is equally unimplemented and
+equally real, and is an explicit non-goal: it needs storage, format detection,
+extraction and chunking. A note carries a semantic id, so it joins the graph
+that is VEO's spine — it surfaces when that structure is selected, rolls up
+through `semanticIdAncestors` exactly as mastery does, and can be fed to the
+existing Gate 11 generator as grounding. Uploads must first become text before
+they can do any of that. `material.upload` remains unimplemented and is
+reported as such.
+
+**Inherited notes are labelled, never merged.** A note about the heart is
+relevant when looking at the left ventricle, but it is not a note about the
+left ventricle, and merging the two would credit a learner with something they
+did not write.
+
+**Writing is unmetered; only export is paid.** Charging somebody to record
+their own understanding would be a bad product and a worse principle. A route
+test asserts the absence of a gate on writing, so adding one later requires
+justifying it.
 
 ### Gate 15 — production SaaS infrastructure and account lifecycle
 
@@ -738,8 +797,8 @@ OpenAI, Stripe, OAuth providers.
 | --- | --- |
 | `npm run typecheck` | **PASS** — 0 errors |
 | `npm run lint` | **PASS** — 0 errors, 0 warnings |
-| `npm run test` | **PASS** — 1,249 passed / 1,249 total, 57 files |
-| `npm run build` | **PASS** — 42 routes |
+| `npm run test` | **PASS** — 1,330 passed / 1,330 total, 60 files |
+| `npm run build` | **PASS** — 45 routes |
 | `npm run validate:anatomy` | **PASS** — contract fixture valid |
 | `npm run test:anatomy` | **PASS** — 32 live provider checks |
 | `npm run test:spatial` | **PASS** — 164 live manipulation checks |
@@ -749,7 +808,7 @@ OpenAI, Stripe, OAuth providers.
 | `npm run test:tutor` | **PASS** — 89 live tutor checks |
 | `npm run test:learning` | **PASS** — 94 live content checks |
 | `npm run test:browser` | **PASS** — all seven, 629 checks, 0 failures |
-| `npm run verify:rls` | **PASS** — 100 checks on real PostgreSQL 16 |
+| `npm run verify:rls` | **PASS** — 120 checks on real PostgreSQL 16 |
 | `npm run test:recall` | **PASS** — 118 live recall checks, 6 viewports |
 | `npm run test:analytics` | **PASS** — 87 live analytics checks, 6 viewports |
 | `npm run test:billing` | **PASS** — 113 live entitlement checks, 6 viewports |
@@ -758,12 +817,42 @@ OpenAI, Stripe, OAuth providers.
 | `npm run mutate:billing` | **PASS** — 18 of 18 mutants caught |
 | `npm run mutate:account` | **PASS** — 22 of 22 mutants caught |
 | `npm run mutate:rls` | **PASS** — 8 of 8 database mutants caught |
+| `npm run test:notes` | **PASS** — 190 live note checks, 6 viewports |
+| `npm run mutate:notes` | **PASS** — 31 of 31 mutants caught |
+| `npm run measure:notes` | **PASS** — all within budget at two scales |
 | `npm run measure:analytics` | **PASS** — 213ms worst case against a 250ms budget |
 | `npm run measure:entitlements` | **PASS** — 0.0033ms worst case against a 1ms budget |
 
-Gate 15 added 106 unit tests, 33 database checks, 30 mutants and 168 live
-browser checks. Total live browser coverage is now **1,138 checks** across
-Gates 2, 5, 6, 7, 8, 10, 11, 12, 13, 14 and 15, all re-run green.
+Gate 16 added 81 unit tests, 20 database checks, 31 mutants and 190 live
+browser checks. Total live browser coverage is now **1,328 checks** across
+Gates 2, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15 and 16, all re-run green, with
+**79 of 79 mutants** caught across four suites.
+
+### Gate 16's performance was measured at two scales, and one assertion was wrong
+
+| Measure | Result | Budget |
+| --- | --- | --- |
+| validate a note | 0.0005–0.0034ms | 1ms |
+| contextual resolution over 2,000 notes | 0.0773ms | 10ms |
+| search, 1,000 own notes of 10,000 | 0.4115ms | 50ms |
+| search, 50,000 own notes of 100,000 | 5.1815ms | 50ms |
+
+`measure-notes.mjs` first asserted the GIN search index must be used, and
+failed. The assertion was wrong for the volume, not the schema: at 10,000 rows
+a bitmap scan on `owner_id` plus a filter reads 22 heap blocks, which is
+cheaper than consulting GIN and combining two bitmaps, and the planner is right
+to prefer it.
+
+So the question that actually matters — is the index dead weight, paid for on
+every write? — is now answered where it can be. At 100,000 rows it IS used, in
+5.2ms. Correctly ignored below that scale, earning its place above it.
+
+The fixture was wrong too: every seeded note contained the search term, so
+`fts` selected 100% of the owner's notes. That measured a real query but not a
+real search.
+
+### Gate 15 added 106 unit tests, 33 database checks, 30 mutants and 168 live
+browser checks.
 
 ### Gate 15's mutation testing covers the database, not only the code
 
@@ -942,6 +1031,89 @@ Honesty about coverage matters more here than anywhere else in this file.
 - **Snapshot stability matters.** `SceneController.getSnapshot` returns the
   same object until something changes, and re-selecting the current selection
   does not notify — otherwise every no-op selection would cost a render.
+
+---
+
+## Issues found and fixed during Gate 16
+
+### 1. The anchor was validated trimmed and stored raw
+
+`parseSemanticId` trims internally, so `isSemanticId("veo.anatomy.heart ")` is
+true by design — deliberately tolerant of a pasted value. Storing the raw
+string after a tolerant check is the bug that tolerance invites: the database's
+own `is_semantic_id()` CHECK is anchored and does NOT trim, so the insert would
+have failed and the learner would have been told VEO could not reach their
+notes. Even if it had persisted, it would never have matched a lookup for the
+clean id and the note would have been invisible.
+
+The value checked and the value stored are now the same value, and the RLS
+suite asserts the table refuses an untrimmed anchor — which is what makes the
+trim load-bearing rather than cosmetic.
+
+### 2. A CHECK constraint may not contain a subquery
+
+Bounding each tag's length needs an aggregate over `unnest(tags)`, which
+PostgreSQL refuses inside a CHECK. Migration 0005 failed to apply and took nine
+RLS assertions down with it.
+
+Caught because the RLS harness reports each migration individually rather than
+assuming they applied — a loop that only reported the final state would have
+shown nine mysterious failures with no cause. Fixed with an IMMUTABLE helper,
+which is exactly how Gate 1's `is_semantic_id()` already backs the anchor check
+on this same table.
+
+### 3. A pasted URL broke the layout at every width
+
+A note containing a 400-character unbroken string — a URL, a token, a chemical
+name — produced 2,726px of horizontal overflow at 360px wide.
+
+`whitespace-pre-wrap` keeps a learner's line breaks but will not break an
+unbroken run, and `break-words` breaks only BETWEEN words. Fixed with
+`overflow-wrap: anywhere` plus `min-w-0` down the flex chain, since a flex
+child's default `min-width: auto` keeps it as wide as its content.
+
+### 4. The notes panel fired a request guaranteed to fail
+
+Putting notes in the workspace Context Panel made it fetch on every selection —
+including on `/explore`, which is deliberately public, where a signed-out
+visitor has no notes and the request answers 401 every time. Correct behaviour
+from the API, wasteful and noisy from the product.
+
+Caught by Gate 5's engine regression, which runs the workspace signed out. The
+page now resolves the session server-side and passes a boolean, so the panel
+renders its signed-out state without asking. The boolean crosses, never the
+user, and it remains a rendering hint: the route re-decides on every request.
+
+### 5. A blanket ignore silenced a test that existed to prove failures are visible
+
+Gate 12's harness began reporting the notes panel's 503 as a console error —
+again correct behaviour, since the fixture has authentication and deliberately
+no database. The first fix was to ignore any "status of 503" message.
+
+That broke Gate 12's own positive control: it deliberately makes a review
+submission fail and asserts the 503 really reached the browser. Suppressing
+every 503 suppressed that too — precisely the failure an ignore invites.
+
+Replaced with a URL-correlated allowance: one generic console line may be
+dropped per failed response from `/api/notes`, so a 503 from anywhere else
+still surfaces. The lesson is in the comment in that file.
+
+### 6. Two of my own assertions were wrong, and were corrected rather than loosened
+
+- A test asserted `recorded.length === 0` after a search term sanitised to
+  nothing. That was asserting construction order, not behaviour: the query
+  builder is lazy, so `.from().select()` records an entry while nothing
+  executes. The real evidence — that the substituted database holds a row and
+  the result is empty — already proved the early return.
+- The browser harness asserted 404 for a foreign note id. Unreachable in a
+  fixture with no database, because the query errors before a row can be
+  missing. Split into the security property that holds unconditionally (never
+  403) and the 404 case, proved in `note-service.test.ts` with a client that
+  returns no row.
+
+### 7. The search index assertion was wrong for the volume
+
+See "Gate 16's performance was measured at two scales" above.
 
 ---
 
@@ -1770,6 +1942,16 @@ ventricle schedules one about benzene, a crankshaft or a main-sequence star,
 and the aggregation rolls mastery up through semantic-id ancestry with nothing
 anatomical hard-coded. Unit tests exercise it across anatomy, chemistry,
 physics, engineering and astrophysics ids for exactly that reason.
+
+Gate 16 is unaffected by anatomy entirely, and is the clearest case yet of why
+the semantic-id design was right. A note anchors to `veo.anatomy.heart` whether
+or not any geometry for the heart exists: the id is a stable vocabulary, not a
+pointer to a mesh. A learner can write notes today, and the day a licensed
+model arrives those notes appear against the structures they were always about,
+with no migration and no re-anchoring.
+
+What Gate 16 does NOT do is make Gate 9 any less red. Capturing what somebody
+works out does not create the thing they work it out about.
 
 Gate 15 is unaffected by anatomy entirely. An account lifecycle, RLS, billing
 and abuse control describe a *person's relationship with the service*, not

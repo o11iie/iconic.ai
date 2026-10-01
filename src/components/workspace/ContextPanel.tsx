@@ -102,6 +102,7 @@ export function ContextPanel({
   manipulation,
   actionsEnabled,
   modelRef,
+  signedIn = false,
   className,
 }: {
   readonly selectedId: SemanticId | null;
@@ -119,6 +120,8 @@ export function ContextPanel({
   readonly actionsEnabled: boolean;
   /** Which model is loaded, recorded on a note as context. */
   readonly modelRef?: string | null;
+  /** Whether a learner is signed in. Notes are private. */
+  readonly signedIn?: boolean;
   readonly className?: string;
 }) {
   if (!selectedId) {
@@ -184,7 +187,11 @@ export function ContextPanel({
         * is actually on screen rather than to anything a client chose.
         */}
       <PanelSection label="Your notes">
-        <NotesPanel semanticId={selectedId} modelRef={modelRef ?? null} />
+        <NotesPanel
+          semanticId={selectedId}
+          modelRef={modelRef ?? null}
+          signedIn={signedIn}
+        />
       </PanelSection>
 
       {/*

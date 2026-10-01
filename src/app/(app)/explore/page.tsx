@@ -6,6 +6,7 @@ import { LoadingState } from '@/components/ui/states';
 import { capabilities } from '@/config/env';
 import { serverCapabilities } from '@/config/env.server';
 import { stubEnabled } from '@/ai/providers/verification-stub';
+import { getServerUser } from '@/lib/supabase/server';
 
 export const metadata: Metadata = { title: 'Explore' };
 
@@ -36,6 +37,17 @@ export default async function ExplorePage({
   const usingStub = stubEnabled();
   const aiConfigured = serverCapabilities().openai || usingStub;
 
+  /*
+   * Whether anybody is signed in.
+   *
+   * /explore is deliberately public — Gate 2's product demonstration — so a
+   * visitor here often has no session. Notes are private, so without one
+   * there is nothing to fetch, and asking anyway would fire a request
+   * guaranteed to answer 401 on every selection a visitor makes. The boolean
+   * crosses, never the user.
+   */
+  const signedIn = capabilities.supabase ? Boolean(await getServerUser()) : false;
+
   return (
     <WorkspaceShell>
       <Suspense
@@ -50,6 +62,7 @@ export default async function ExplorePage({
           aiConfigured={aiConfigured}
           tutorStub={usingStub}
           recallConfigured={capabilities.supabase}
+          signedIn={signedIn}
         />
       </Suspense>
     </WorkspaceShell>

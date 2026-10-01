@@ -42,6 +42,19 @@ export interface NotesPanelProps {
   readonly searchable?: boolean;
   /** Whether to offer export. Library only — it is a whole-corpus action. */
   readonly exportable?: boolean;
+  /**
+   * Whether a learner is signed in, as the SERVER resolved it.
+   *
+   * Notes are private, so without a session there is nothing to fetch.
+   * Omitted means "ask and find out", which is right for a route that is
+   * already behind authentication (the Library). /explore is deliberately
+   * public, so it passes the answer in rather than firing a request
+   * guaranteed to 401 on every selection a visitor makes.
+   *
+   * This is a rendering hint and nothing more: the route re-decides on every
+   * request, so a browser claiming to be signed in gets 401 regardless.
+   */
+  readonly signedIn?: boolean;
   readonly className?: string;
 }
 
@@ -50,14 +63,23 @@ export function NotesPanel({
   modelRef = null,
   searchable = false,
   exportable = false,
+  signedIn,
   className,
 }: NotesPanelProps) {
-  const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
+  const [phase, setPhase] = useState<Phase>(
+    signedIn === false ? { kind: 'signed_out' } : { kind: 'loading' },
+  );
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<Note | null>(null);
   const [composing, setComposing] = useState(false);
 
   const load = useCallback(async () => {
+    // Known to be signed out: nothing to ask for.
+    if (signedIn === false) {
+      setPhase({ kind: 'signed_out' });
+      return;
+    }
+
     const params = new URLSearchParams();
     if (semanticId) {
       params.set('semanticId', semanticId);
@@ -77,7 +99,7 @@ export function NotesPanel({
     } catch {
       setPhase({ kind: 'unavailable' });
     }
-  }, [semanticId, query]);
+  }, [semanticId, query, signedIn]);
 
   useEffect(() => {
     void (async () => {
@@ -121,7 +143,7 @@ export function NotesPanel({
           icon={<Icon name="lock" size={22} />}
           action={
             <Link
-              href="/login?next=/library"
+              href={`/login?next=${encodeURIComponent(semanticId ? '/explore' : '/library')}`}
               className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white hover:bg-accent-strong"
             >
               Sign in
