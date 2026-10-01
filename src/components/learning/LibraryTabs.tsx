@@ -7,6 +7,7 @@ import { Tabs, TabPanel } from '@/components/ui/Tabs';
 import { EmptyState } from '@/components/ui/states';
 import { Badge } from '@/components/ui/Badge';
 import { MATERIAL_KINDS } from '@/types/domain/knowledge';
+import { NotesPanel } from '@/components/notes/NotesPanel';
 
 /**
  * Library.
@@ -68,16 +69,13 @@ export function LibraryTabs() {
       </TabPanel>
 
       <TabPanel id="notes" active={tab === 'notes'}>
-        <EmptyState
-          title="No notes yet"
-          description="Notes can be anchored to a structure in a model, so they come back when you are looking at the thing they describe."
-          icon={<Icon name="learn" size={22} />}
-          action={
-            <ButtonLink href="/explore" variant="secondary" size="sm">
-              Explore a model
-            </ButtonLink>
-          }
-        />
+        {/*
+          Real, and the only place the whole collection is shown. The panel
+          owns its own empty state, which is more useful than a static one
+          because it can tell a search that matched nothing apart from a
+          learner who has not written anything yet.
+        */}
+        <NotesPanel searchable exportable />
       </TabPanel>
 
       <TabPanel id="flashcards" active={tab === 'flashcards'}>

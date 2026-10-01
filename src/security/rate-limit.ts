@@ -82,6 +82,25 @@ export const RATE_LIMITS = {
     windowMs: 300_000,
     rationale: 'Irreversible, and confirmation must not be brute-forceable.',
   },
+  /**
+   * Writing a note is free and unmetered — charging somebody to record their
+   * own understanding would be a bad product and a worse principle. This is
+   * purely abuse control: a person types, a script floods.
+   */
+  'notes.write': {
+    limit: 60,
+    windowMs: 60_000,
+    rationale: 'A person writes notes; sixty a minute is a script.',
+  },
+  /**
+   * Export walks every note a learner owns and renders a document, so it is
+   * the most expensive read in the feature and the easiest to abuse.
+   */
+  'notes.export': {
+    limit: 6,
+    windowMs: 300_000,
+    rationale: 'Builds a document from every note owned; nobody needs it often.',
+  },
   'analytics.read': {
     limit: 60,
     windowMs: 60_000,

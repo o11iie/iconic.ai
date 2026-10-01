@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/cn';
 import { semanticIdToLabel, type SemanticId } from '@/lib/semantic-id';
 import type { Relationship, SpatialObject } from '@/types/domain/spatial';
+import { NotesPanel } from '@/components/notes/NotesPanel';
 import { ObjectBreadcrumb, ObjectChildren, type BreadcrumbNode } from './ObjectBreadcrumb';
 import { RelationshipList } from './RelationshipTrail';
 
@@ -100,6 +101,7 @@ export function ContextPanel({
   onManipulate,
   manipulation,
   actionsEnabled,
+  modelRef,
   className,
 }: {
   readonly selectedId: SemanticId | null;
@@ -115,6 +117,8 @@ export function ContextPanel({
   /** Which manipulations the loaded model supports. */
   readonly manipulation: ManipulateAvailability;
   readonly actionsEnabled: boolean;
+  /** Which model is loaded, recorded on a note as context. */
+  readonly modelRef?: string | null;
   readonly className?: string;
 }) {
   if (!selectedId) {
@@ -172,7 +176,19 @@ export function ContextPanel({
       </header>
 
       {/*
-        * Manipulation comes first: a learner who selected a structure is
+        * Notes sit directly under the identity of the thing selected, above
+        * manipulation, because a learner who has just worked something out
+        * reaches for somewhere to put it before they reach for a tool.
+        *
+        * `semanticId` is the live selection, so the note is anchored to what
+        * is actually on screen rather than to anything a client chose.
+        */}
+      <PanelSection label="Your notes">
+        <NotesPanel semanticId={selectedId} modelRef={modelRef ?? null} />
+      </PanelSection>
+
+      {/*
+        * Manipulation comes next: a learner who selected a structure is
         * usually about to look at it, look inside it, or get it out of the
         * way. An unsupported operation is shown disabled with the reason
         * rather than hidden, so the model's limits are legible.

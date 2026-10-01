@@ -717,7 +717,110 @@ check "1" "$(sudo_sql "select count(*) from public.learning_items
   "bob's own row survives alice's deletion"
 
 echo
-echo "=== 20. NEGATIVE CONTROL: THE CHECK CAN FAIL ==="
+echo
+echo "=== 20. NOTES ARE PRIVATE, BOUNDED AND SEARCHABLE (Gate 16) ==="
+# The notes table has carried the right policies since Gate 1 and was never
+# written to. These prove, by execution, that the policies hold now that
+# something does write to it.
+
+NOTE_A='veo.diagnostic.test_scene.system_a.object_1'
+
+# --- a learner's own note round-trips -----------------------------------
+as "$BOB" "insert into public.notes (owner_id, spatial_object_id, title, body, tags)
+            values ('$BOB', '$NOTE_A', 'Bob note', 'the body', array['cardiac']);" >/dev/null
+check "1" "$(as "$BOB" "select count(*) from public.notes where owner_id='$BOB';" | lastline)" \
+  "a learner can write and read their own note"
+
+# --- the owner is the session, not the payload ---------------------------
+forged=$(as "$BOB" "insert into public.notes (owner_id, body) values ('$ALICE', 'written as alice');" 2>&1 | grep -ci "policy\|denied\|violates")
+check "1" "$forged" "a note attributed to another learner is refused by the policy"
+check "0" "$(sudo_sql "select count(*) from public.notes where body='written as alice';" | lastline)" \
+  "and no such row exists when read as the table owner"
+
+# --- cross-user, every verb ----------------------------------------------
+bob_note=$(sudo_sql "select id from public.notes where owner_id='$BOB' limit 1;" | lastline)
+
+check "0" "$(as "$ALICE" "select count(*) from public.notes where id='$bob_note';" | lastline)" \
+  "another learner cannot read it"
+
+as "$ALICE" "update public.notes set body='taken' where id='$bob_note';" >/dev/null 2>&1
+check "the body" "$(sudo_sql "select body from public.notes where id='$bob_note';" | lastline)" \
+  "another learner's update changes nothing"
+
+as "$ALICE" "delete from public.notes where id='$bob_note';" >/dev/null 2>&1
+check "1" "$(sudo_sql "select count(*) from public.notes where id='$bob_note';" | lastline)" \
+  "another learner's delete removes nothing"
+
+# --- the owner CAN delete their own ---------------------------------------
+# Asserted so "delete removes nothing" above is not passing because deletes
+# never work at all.
+as "$BOB" "insert into public.notes (owner_id, body) values ('$BOB', 'disposable');" >/dev/null
+as "$BOB" "delete from public.notes where owner_id='$BOB' and body='disposable';" >/dev/null
+check "0" "$(sudo_sql "select count(*) from public.notes where body='disposable';" | lastline)" \
+  "positive control: a learner CAN delete their own note"
+
+# --- bounds hold at the DATABASE, not only in Zod -------------------------
+long=$(as "$BOB" "insert into public.notes (owner_id, body)
+        values ('$BOB', repeat('x', 20001));" 2>&1 | grep -ci "notes_body_length\|violates check")
+check "1" "$long" "a body past the limit is refused by the table, not only by the API"
+
+many=$(as "$BOB" "insert into public.notes (owner_id, body, tags)
+        values ('$BOB', 'b', array['a','b','c','d','e','f','g','h','i','j','k','l','m']);" 2>&1 \
+        | grep -ci "notes_tags_bounded\|violates check")
+check "1" "$many" "more tags than the limit are refused by the table"
+
+bigtag=$(as "$BOB" "insert into public.notes (owner_id, body, tags)
+          values ('$BOB', 'b', array[repeat('t', 41)]);" 2>&1 | grep -ci "notes_tags_bounded\|violates check")
+check "1" "$bigtag" "an oversized tag is refused by the table"
+
+badanchor=$(as "$BOB" "insert into public.notes (owner_id, body, spatial_object_id)
+             values ('$BOB', 'b', 'not a semantic id');" 2>&1 | grep -ci "violates check")
+check "1" "$badanchor" "an anchor that is not a semantic id is refused by the table"
+
+# A trailing space is exactly what the application now trims before storing.
+# Proving the table refuses it is what makes that trim load-bearing rather
+# than cosmetic.
+spaced=$(as "$BOB" "insert into public.notes (owner_id, body, spatial_object_id)
+          values ('$BOB', 'b', '$NOTE_A ');" 2>&1 | grep -ci "violates check")
+check "1" "$spaced" "an untrimmed anchor is refused, which is why the app trims it"
+
+# --- the timestamp is the server's ---------------------------------------
+as "$BOB" "insert into public.notes (owner_id, body) values ('$BOB', 'timed');" >/dev/null
+before_ts=$(sudo_sql "select updated_at from public.notes where body='timed';" | lastline)
+as "$BOB" "update public.notes set body='timed again', updated_at='2000-01-01'
+            where body='timed';" >/dev/null
+after_ts=$(sudo_sql "select updated_at from public.notes where body='timed again';" | lastline)
+check "1" "$([ "$after_ts" != "2000-01-01 00:00:00+00" ] && echo 1 || echo 0)" \
+  "a client-supplied updated_at is overwritten by the trigger"
+check "1" "$([ "$after_ts" != "$before_ts" ] && echo 1 || echo 0)" \
+  "and the trigger did move it"
+
+# --- the generated search column ------------------------------------------
+check "1" "$(sudo_sql "select count(*) from information_schema.columns
+             where table_name='notes' and column_name='fts'
+               and is_generated='ALWAYS';" | lastline)" \
+  "the search column is GENERATED, so no client can write it"
+
+as "$BOB" "insert into public.notes (owner_id, title, body)
+            values ('$BOB', 'Chordae tendineae', 'they stop the valve inverting');" >/dev/null
+check "1" "$(as "$BOB" "select count(*) from public.notes
+             where fts @@ websearch_to_tsquery('english', 'inverting');" | lastline)" \
+  "search finds a learner's note by a word in its body"
+check "1" "$(as "$BOB" "select count(*) from public.notes
+             where fts @@ websearch_to_tsquery('english', 'chordae');" | lastline)" \
+  "and by a word in its title"
+check "0" "$(as "$ALICE" "select count(*) from public.notes
+             where fts @@ websearch_to_tsquery('english', 'chordae');" | lastline)" \
+  "and another learner's search finds none of it"
+
+# The index must actually be used; a GIN index the planner ignores is a
+# sequential scan with extra steps.
+check "1" "$(sudo_sql "select count(*) from pg_indexes
+             where tablename='notes' and indexname='notes_search_idx';" | lastline)" \
+  "the search index exists"
+
+echo
+echo "=== 21. NEGATIVE CONTROL: THE CHECK CAN FAIL ==="
 # Without this, every assertion above could be passing because the harness is
 # broken rather than because the policies work.
 $PSQL -d "$DB" -c "create table if not exists public.rls_control (user_id uuid, note text);

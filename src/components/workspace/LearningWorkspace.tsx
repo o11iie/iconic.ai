@@ -595,6 +595,8 @@ export function LearningWorkspace({
         onSelectObject={focusObject}
         onAction={handleAction}
         onManipulate={handleManipulate}
+        // The model actually loaded, so a note records where it was written.
+        modelRef={tutorModelRef}
         manipulation={{
           isolate: capabilities.supportsIsolation,
           hide: sceneReady,
